@@ -146,7 +146,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre })
   );
 }
 
-function RecoCard({ reco, onClose }) {
+function RecoCard({ reco, onClose, onGenreClick, activeGenre }) {
   if (!reco) return null;
   const { record, reason, label } = reco;
   return (
@@ -164,7 +164,7 @@ function RecoCard({ reco, onClose }) {
           <div className="text-stone-400 text-sm">{record.artist}</div>
           <div className="flex items-center gap-2 mt-1">
             {(record.year_original||record.year_pressed) && <span className="text-stone-500 text-xs">{record.year_original||record.year_pressed}</span>}
-            <GenreTag genre={record.genre} onClick={setActiveGenre} active={activeGenre === record.genre} />
+            <GenreTag genre={record.genre} onClick={onGenreClick} active={activeGenre === record.genre} />
           </div>
         </div>
       </div>
@@ -402,7 +402,7 @@ export default function VinylCrate() {
             </div>
           )}
           {recoError && <div className="text-red-500/70 text-sm text-center py-3">{recoError}</div>}
-          {reco && !recoLoading && <RecoCard reco={reco} onClose={()=>setReco(null)}/>}
+          {reco && !recoLoading && <RecoCard reco={reco} onClose={()=>setReco(null)} onGenreClick={setActiveGenre} activeGenre={activeGenre}/>}
         </div>
       )}
 
