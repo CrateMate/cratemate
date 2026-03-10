@@ -107,7 +107,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenre }) {
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre }) {
   const year = record.year_original || record.year_pressed;
   const isRepress = record.year_original && record.year_pressed && record.year_original !== record.year_pressed;
   return (
@@ -122,7 +122,7 @@ function DetailSheet({ record, onClose, onSeedNext }) {
             </div>
             <div className="text-stone-300 text-sm mb-2">{record.artist}</div>
             <div className="flex flex-wrap gap-1.5">
-              <GenreTag genre={record.genre} onClick={setActiveGenre} active={activeGenre === record.genre} />
+              <GenreTag genre={record.genre} onClick={onGenreClick} active={activeGenre === record.genre} />
               {record.is_compilation && <span className="text-xs px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">Compilation</span>}
             </div>
           </div>
@@ -407,7 +407,7 @@ export default function VinylCrate() {
       )}
 
       {selected && (
-        <DetailSheet record={selected} onClose={()=>setSelected(null)}
+        <DetailSheet record={selected} onClose={()=>setSelected(null)} onGenreClick={setActiveGenre} activeGenre={activeGenre}
           onSeedNext={rec=>{ setLastPlayed(rec); setTab("reco"); setSelected(null); }}/>
       )}
     </div>
