@@ -66,9 +66,15 @@ function VinylDisc({ record, size = 64 }) {
   );
 }
 
-function GenreTag({ genre }) {
+function GenreTag({ genre, onClick, active }) {
   const cls = GENRE_STYLES[genre] || "bg-stone-800/40 text-stone-400 border-stone-700/40";
-  return <span className={`text-xs px-1.5 py-0.5 rounded-full border ${cls} whitespace-nowrap`}>{genre}</span>;
+  return (
+    <span 
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick(genre); } : undefined}
+      className={`text-xs px-1.5 py-0.5 rounded-full border ${cls} whitespace-nowrap ${onClick ? "cursor-pointer" : ""} ${active ? "ring-1 ring-white/40" : ""}`}>
+      {genre}
+    </span>
+  );
 }
 
 function condenseCondition(c) {
@@ -81,7 +87,7 @@ function condenseCondition(c) {
     .replace("Good (G)","G");
 }
 
-function RecordRow({ record, onClick }) {
+function RecordRow({ record, onClick, onGenreClick, activeGenre }) {
   const year = record.year_original || record.year_pressed;
   return (
     <div onClick={() => onClick(record)}
@@ -95,7 +101,7 @@ function RecordRow({ record, onClick }) {
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0 ml-1">
         {year ? <span className="text-stone-600 text-xs">{year}</span> : null}
-        <GenreTag genre={record.genre} />
+        <GenreTag genre={record.genre} onClick={onGenreClick} active={activeGenre === record.genre} />
       </div>
     </div>
   );
@@ -116,7 +122,7 @@ function DetailSheet({ record, onClose, onSeedNext }) {
             </div>
             <div className="text-stone-300 text-sm mb-2">{record.artist}</div>
             <div className="flex flex-wrap gap-1.5">
-              <GenreTag genre={record.genre} />
+              <GenreTag genre={record.genre} onClick={setActiveGenre} active={activeGenre === record.genre} />
               {record.is_compilation && <span className="text-xs px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">Compilation</span>}
             </div>
           </div>
@@ -158,7 +164,7 @@ function RecoCard({ reco, onClose }) {
           <div className="text-stone-400 text-sm">{record.artist}</div>
           <div className="flex items-center gap-2 mt-1">
             {(record.year_original||record.year_pressed) && <span className="text-stone-500 text-xs">{record.year_original||record.year_pressed}</span>}
-            <GenreTag genre={record.genre} />
+            <GenreTag genre={record.genre} onClick={setActiveGenre} active={activeGenre === record.genre} />
           </div>
         </div>
       </div>
@@ -198,6 +204,7 @@ export default function VinylCrate() {
   const [recoLoading, setRecoLoading] = useState(false);
   const [recoError, setRecoError] = useState("");
   const [mood, setMood] = useState("");
+  const [activeGenre, setActiveGenre] = useState(null);
 
   useEffect(() => {
     const cached = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
@@ -238,12 +245,14 @@ export default function VinylCrate() {
     return a.artist.localeCompare(b.artist);
   });
 
-  const filtered = search
-    ? sorted.filter(r => {
-        const q = search.toLowerCase();
-        return r.title.toLowerCase().includes(q) || r.artist.toLowerCase().includes(q) || (r.genre || "").toLowerCase().includes(q);
-      })
-    : sorted;
+  const filtered = sorted.filter(r => {
+    const matchesSearch = !search || 
+      r.title.toLowerCase().includes(search.toLowerCase()) || 
+      r.artist.toLowerCase().includes(search.toLowerCase()) || 
+      (r.genre || "").toLowerCase().includes(search.toLowerCase());
+    const matchesGenre = !activeGenre || r.genre === activeGenre;
+    return matchesSearch && matchesGenre;
+  });
 
   const getReco = useCallback(async (type) => {
     setRecoLoading(true); setRecoError(""); setReco(null);
@@ -332,11 +341,18 @@ export default function VinylCrate() {
                 {showForSale ? "📋 En Venta" : "En Venta"}
               </button>
             </div>
-            <div className="text-xs text-stone-700">{filtered.length} records</div>
+            <div className="flex items-center gap-2">
+  <div className="text-xs text-stone-700">{filtered.length} records</div>
+  {activeGenre && (
+    <button onClick={() => setActiveGenre(null)} className="text-xs px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 text-amber-400">
+      {activeGenre} ×
+    </button>
+  )}
+</div>
           </div>
           <div className="flex-1 overflow-y-auto px-3 pb-8 space-y-0.5">
             {filtered.map(r => (
-              <RecordRow key={r.id} record={r} onClick={rec=>{ setSelected(rec); if(!rec.for_sale) setLastPlayed(rec); }}/>
+              <RecordRow key={r.id} record={r} onClick={rec=>{ setSelected(rec); if(!rec.for_sale) setLastPlayed(rec); }} onGenreClick={setActiveGenre} activeGenre={activeGenre} />
             ))}
             {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
           </div>
