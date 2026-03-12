@@ -280,7 +280,7 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
       .not("discogs_id", "is", null)
       .order("id", { ascending: true })
       .range(offset, offset + limit - 1);
-    recordsData = fallback || [];
+    recordsData = (fallback || []).map((r) => ({ ...r, thumb: null }));
     if (fallbackError) {
       console.error("Supabase select records fallback error:", JSON.stringify(fallbackError));
       throw new Error("Failed to load records");
