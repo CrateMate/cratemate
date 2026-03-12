@@ -656,8 +656,8 @@ function HoneycombView({ records, playCounts, onSelect }) {
   const [scales, setScales] = useState({});
 
   // Hex grid constants
-  const BASE_SIZE = 80;   // px — base cover size before focus scale
-  const GAP = 10;
+  const BASE_SIZE = 96;   // px — base cover size before focus scale
+  const GAP = 5;
   const CELL = BASE_SIZE + GAP;
   const COL_STEP = CELL * 0.78;
   const ROW_STEP = CELL;
