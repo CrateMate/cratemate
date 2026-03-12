@@ -643,65 +643,239 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
   );
 }
 
-function DriftView({ records, playCounts, onSelect }) {
-  function getCoverSize(record) {
-    const id = record.id.toString();
-    const base = [80, 100, 110, 130][id.charCodeAt(0) % 4];
-    const plays = playCounts[record.id] || 0;
-    return base + (plays >= 5 ? 30 : plays >= 1 ? 15 : 0);
+function HoneycombView({ records, playCounts, onSelect }) {
+  const containerRef = useRef(null);
+  const worldRef = useRef(null);
+  const offsetRef = useRef({ x: 0, y: 0 });
+  const dragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  const velocity = useRef({ x: 0, y: 0 });
+  const moveDistance = useRef(0);
+  const rafRef = useRef(null);
+  const scaleRafRef = useRef(null);
+  const [scales, setScales] = useState({});
+
+  // Hex grid constants
+  const BASE_SIZE = 80;   // px — base cover size before focus scale
+  const GAP = 10;
+  const CELL = BASE_SIZE + GAP;
+  const COL_STEP = CELL * 0.78;
+  const ROW_STEP = CELL;
+  const COLS = 9;
+
+  // Tile records to fill the grid
+  const ROWS = Math.max(6, Math.ceil(records.length / COLS) + 2);
+  const totalCells = COLS * ROWS;
+  const cells = Array.from({ length: totalCells }, (_, i) => ({
+    record: records[i % records.length],
+    col: i % COLS,
+    row: Math.floor(i / COLS),
+    isDupe: i >= records.length,
+  }));
+
+  const gridW = COLS * COL_STEP + BASE_SIZE;
+  const gridH = ROWS * ROW_STEP + BASE_SIZE;
+
+  function getCellPos(col, row) {
+    const x = col * COL_STEP;
+    const y = row * ROW_STEP + (col % 2 === 1 ? ROW_STEP / 2 : 0);
+    return { x, y };
+  }
+
+  // Center grid in viewport on mount
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const vw = el.clientWidth;
+    const vh = el.clientHeight;
+    const initX = (vw - gridW) / 2;
+    const initY = (vh - gridH) / 2;
+    offsetRef.current = { x: initX, y: initY };
+    if (worldRef.current) {
+      worldRef.current.style.transform = `translate(${initX}px, ${initY}px)`;
+    }
+    recalcScales(initX, initY, vw, vh);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [records.length]);
+
+  // Prevent passive touchmove so we can pan without page scroll
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e) => { if (dragging.current) e.preventDefault(); };
+    el.addEventListener("touchmove", handler, { passive: false });
+    return () => el.removeEventListener("touchmove", handler);
+  }, []);
+
+  function recalcScales(ox, oy, vw, vh) {
+    if (!containerRef.current) return;
+    const cw = vw ?? containerRef.current.clientWidth;
+    const ch = vh ?? containerRef.current.clientHeight;
+    const viewCX = cw / 2 - ox;
+    const viewCY = ch / 2 - oy;
+    const MAX_DIST = 180;
+    const MIN_SCALE = 0.5;
+    const MAX_SCALE = 1.4;
+    const next = {};
+    cells.forEach(({ record, col, row }) => {
+      const { x, y } = getCellPos(col, row);
+      const cx = x + BASE_SIZE / 2;
+      const cy = y + BASE_SIZE / 2;
+      const dist = Math.hypot(cx - viewCX, cy - viewCY);
+      const t = Math.max(0, 1 - dist / MAX_DIST);
+      const plays = playCounts[record.id] || 0;
+      const playBoost = plays >= 5 ? 0.08 : plays >= 1 ? 0.04 : 0;
+      next[`${col}-${row}`] = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * (t * t) + playBoost;
+    });
+    setScales(next);
+  }
+
+  function applyTransform(x, y) {
+    if (worldRef.current) {
+      worldRef.current.style.transform = `translate(${x}px, ${y}px)`;
+    }
+  }
+
+  function startMomentum() {
+    cancelAnimationFrame(rafRef.current);
+    const FRICTION = 0.92;
+    function tick() {
+      velocity.current.x *= FRICTION;
+      velocity.current.y *= FRICTION;
+      if (Math.abs(velocity.current.x) < 0.3 && Math.abs(velocity.current.y) < 0.3) {
+        recalcScales(offsetRef.current.x, offsetRef.current.y);
+        return;
+      }
+      offsetRef.current.x += velocity.current.x;
+      offsetRef.current.y += velocity.current.y;
+      applyTransform(offsetRef.current.x, offsetRef.current.y);
+      // Throttled scale recalc during momentum
+      cancelAnimationFrame(scaleRafRef.current);
+      scaleRafRef.current = requestAnimationFrame(() =>
+        recalcScales(offsetRef.current.x, offsetRef.current.y)
+      );
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }
+
+  function onPointerDown(e) {
+    dragging.current = true;
+    moveDistance.current = 0;
+    velocity.current = { x: 0, y: 0 };
+    cancelAnimationFrame(rafRef.current);
+    const pos = e.touches ? e.touches[0] : e;
+    lastPos.current = { x: pos.clientX, y: pos.clientY };
+  }
+
+  function onPointerMove(e) {
+    if (!dragging.current) return;
+    const pos = e.touches ? e.touches[0] : e;
+    const dx = pos.clientX - lastPos.current.x;
+    const dy = pos.clientY - lastPos.current.y;
+    lastPos.current = { x: pos.clientX, y: pos.clientY };
+    moveDistance.current += Math.abs(dx) + Math.abs(dy);
+    velocity.current = { x: dx, y: dy };
+    offsetRef.current.x += dx;
+    offsetRef.current.y += dy;
+    applyTransform(offsetRef.current.x, offsetRef.current.y);
+    cancelAnimationFrame(scaleRafRef.current);
+    scaleRafRef.current = requestAnimationFrame(() =>
+      recalcScales(offsetRef.current.x, offsetRef.current.y)
+    );
+  }
+
+  function onPointerUp(e, record) {
+    if (!dragging.current) return;
+    dragging.current = false;
+    if (moveDistance.current < 6 && record) {
+      onSelect(record);
+    } else {
+      startMomentum();
+    }
   }
 
   if (records.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-stone-700 text-sm">
-        No records to drift.
+        No records to browse.
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-hidden relative">
-      <div className="absolute inset-0 flex items-center justify-center">
-        {records.map((record, i) => {
-          const size = getCoverSize(record);
-          const id = record.id.toString();
-          const h0 = id.charCodeAt(0) % 10;
-          const h1 = (id.charCodeAt(id.length - 1) || 5) % 10;
-          // Each record gets its own slow period — horizontal and vertical are
-          // slightly different so the path traces an oval rather than a line
-          const hPeriod = 100 + h0 * 8; // 100–172s
-          const vPeriod = hPeriod * (0.65 + h1 * 0.04); // different ratio → oval
-          // Stagger start positions so they don't all clump together
-          const hDelay = -((i * 17) % hPeriod);
-          // Offset vertical by ~quarter period → circular/oval feel
-          const vDelay = hDelay - hPeriod * 0.25;
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing select-none"
+      onMouseDown={onPointerDown}
+      onMouseMove={onPointerMove}
+      onMouseUp={(e) => onPointerUp(e, null)}
+      onMouseLeave={(e) => onPointerUp(e, null)}
+      onTouchStart={onPointerDown}
+      onTouchMove={onPointerMove}
+      onTouchEnd={(e) => onPointerUp(e, null)}
+    >
+      <div
+        ref={worldRef}
+        style={{ position: "absolute", width: gridW, height: gridH, willChange: "transform" }}
+      >
+        {cells.map(({ record, col, row, isDupe }, i) => {
+          const { x, y } = getCellPos(col, row);
+          const key = `${col}-${row}`;
+          const scale = scales[key] ?? 0.5;
+          const zIndex = Math.round(scale * 100);
+          const plays = playCounts[record.id] || 0;
+          const isFocused = scale > 1.2;
 
           return (
             <div
-              key={record.id}
-              className="absolute"
+              key={`${key}-${i}`}
               style={{
-                animation: `drift-h ${hPeriod}s ease-in-out infinite`,
-                animationDelay: `${hDelay}s`,
+                position: "absolute",
+                left: x,
+                top: y,
+                width: BASE_SIZE,
+                height: BASE_SIZE,
+                transform: `scale(${scale})`,
+                transformOrigin: "center center",
+                transition: "transform 150ms ease-out",
+                zIndex,
+                opacity: isDupe ? 0.35 : 1,
               }}
+              onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
+              onTouchEnd={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
             >
               <div
                 style={{
-                  animation: `drift-v ${vPeriod}s ease-in-out infinite`,
-                  animationDelay: `${vDelay}s`,
+                  width: "100%",
+                  height: "100%",
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  boxShadow: isFocused
+                    ? "0 0 0 2px rgba(180,120,30,0.5), 0 8px 28px rgba(0,0,0,0.7)"
+                    : "0 3px 12px rgba(0,0,0,0.5)",
+                  transition: "box-shadow 150ms ease-out",
+                  position: "relative",
                 }}
               >
-                <div
-                  onClick={() => onSelect(record)}
-                  className="relative group cursor-pointer rounded-xl overflow-hidden flex-shrink-0"
-                  style={{ width: size, height: size }}
-                >
-                  <CoverArt record={record} size={size} />
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-1.5">
-                    <p className="text-amber-50 text-[10px] font-medium leading-tight truncate">{record.title}</p>
-                    <p className="text-stone-400 text-[9px] truncate">{record.artist}</p>
+                <CoverArt record={record} size={BASE_SIZE} />
+                {isFocused && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "flex-end",
+                      padding: 6,
+                    }}
+                  >
+                    <p style={{ color: "#fef3c7", fontSize: 9, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.title}</p>
+                    <p style={{ color: "#a8a29e", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.artist}</p>
+                    {plays > 0 && <p style={{ color: "#78716c", fontSize: 7, marginTop: 1 }}>▶ {plays}</p>}
                   </div>
-                </div>
+                )}
               </div>
             </div>
           );
@@ -1195,9 +1369,9 @@ export default function VinylCrate() {
                   className={`px-2 py-1 rounded-lg text-xs transition-all ${
                     viewMode === "drift" ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"
                   }`}
-                  title="Drift view"
+                  title="Honeycomb view"
                 >
-                  ⊞
+                  ⬡
                 </button>
               </div>
               <div className="flex-1" />
@@ -1325,7 +1499,7 @@ export default function VinylCrate() {
               </div>
             </div>
           ) : viewMode === "drift" ? (
-            <DriftView
+            <HoneycombView
               records={filtered}
               playCounts={playCounts}
               onSelect={(rec) => {
