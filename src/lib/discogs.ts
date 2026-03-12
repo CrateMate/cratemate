@@ -112,6 +112,15 @@ export function mapCollectionRelease(release: Record<string, unknown>) {
   const descLower = (fmt?.descriptions || []).join(" ").toLowerCase();
   const cover = (info.cover_image as string) || (info.thumb as string) || "";
 
+  // Condition is stored in top-level notes array (not inside basic_information)
+  // field_id 1 = Media condition, field_id 2 = Sleeve/cover condition
+  const notes = Array.isArray(release.notes)
+    ? (release.notes as Array<{ field_id: number; value: string }>)
+    : [];
+  const mediaCondition = notes.find((n) => n.field_id === 1)?.value || "";
+  const sleeveCondition = notes.find((n) => n.field_id === 2)?.value || "";
+  const condition = sleeveCondition ? `${mediaCondition} / ${sleeveCondition}` : mediaCondition;
+
   return {
     artist: artistStr || "Unknown",
     title: (info.title as string) || "",
@@ -120,7 +129,7 @@ export function mapCollectionRelease(release: Record<string, unknown>) {
     // Prefer to set original year via metadata enrichment (master release).
     year_original: null,
     genre: styles[0] || genres[0] || "",
-    condition: "",
+    condition,
     for_sale: false,
     format: fmtStr,
     is_compilation: descLower.includes("comp"),

@@ -48,7 +48,7 @@ export async function POST() {
 
   const { data: existing, error: existingError } = await supabase
     .from("records")
-    .select("id, discogs_id, discogs_instance_id, artist, title, thumb")
+    .select("id, discogs_id, discogs_instance_id, artist, title, thumb, condition")
     .eq("user_id", userId);
   if (existingError) {
     console.error("Supabase select records error:", JSON.stringify(existingError));
@@ -63,22 +63,23 @@ export async function POST() {
   };
 
   // instance_ids already in DB — the source of truth for "already imported this copy"
-  const existingInstanceIds = new Set<number>();
+  // Also track id + condition so we can backfill missing conditions on existing records
+  const existingInstanceMap = new Map<number, { id: number; condition?: string | null }>();
   // discogs_id → list of DB rows without an instance_id yet (migration: link them on next import)
-  const unlinkedByDiscogsId = new Map<number, Array<{ id: number; thumb?: string | null }>>();
+  const unlinkedByDiscogsId = new Map<number, Array<{ id: number; thumb?: string | null; condition?: string | null }>>();
   // manually added records (no discogs_id) — match by artist+title
-  const manualByKey = new Map<string, { id: number; thumb?: string | null }>();
+  const manualByKey = new Map<string, { id: number; thumb?: string | null; condition?: string | null }>();
 
   for (const row of existing || []) {
     if (row.discogs_instance_id) {
-      existingInstanceIds.add(row.discogs_instance_id);
+      existingInstanceMap.set(row.discogs_instance_id, { id: row.id, condition: row.condition as string | null });
     } else if (row.discogs_id) {
       const arr = unlinkedByDiscogsId.get(row.discogs_id) || [];
-      arr.push({ id: row.id, thumb: row.thumb as string | null });
+      arr.push({ id: row.id, thumb: row.thumb as string | null, condition: row.condition as string | null });
       unlinkedByDiscogsId.set(row.discogs_id, arr);
     } else {
       const key = normalizeKey(row.artist, row.title);
-      if (key) manualByKey.set(key, { id: row.id, thumb: row.thumb as string | null });
+      if (key) manualByKey.set(key, { id: row.id, thumb: row.thumb as string | null, condition: row.condition as string | null });
     }
   }
 
@@ -164,10 +165,20 @@ export async function POST() {
 
   const toInsert: Record<string, unknown>[] = [];
   let updatedExisting = 0;
+  // Collect condition backfills for existing records grouped by value (to batch by condition string)
+  const conditionBackfill = new Map<string, number[]>(); // condition value → [db row ids]
 
   for (const record of mapped) {
-    // Already have this exact copy (matched by instance_id) — skip.
-    if (record.discogs_instance_id && existingInstanceIds.has(record.discogs_instance_id)) continue;
+    // Already have this exact copy (matched by instance_id) — backfill condition if missing, then skip.
+    if (record.discogs_instance_id && existingInstanceMap.has(record.discogs_instance_id)) {
+      const existingRow = existingInstanceMap.get(record.discogs_instance_id)!;
+      if (!existingRow.condition && record.condition) {
+        const ids = conditionBackfill.get(record.condition) || [];
+        ids.push(existingRow.id);
+        conditionBackfill.set(record.condition, ids);
+      }
+      continue;
+    }
 
     // Migration: DB row has discogs_id but no instance_id yet — link it.
     if (record.discogs_id) {
@@ -176,6 +187,7 @@ export async function POST() {
         const match = unlinked.shift()!;
         const patch: Record<string, unknown> = { discogs_instance_id: record.discogs_instance_id };
         if (!match.thumb && record.thumb) patch.thumb = record.thumb;
+        if (!match.condition && record.condition) patch.condition = record.condition;
         const { error: updateError } = await supabase
           .from("records")
           .update(patch)
@@ -194,6 +206,7 @@ export async function POST() {
         discogs_instance_id: record.discogs_instance_id,
       };
       if (!manual.thumb && record.thumb) patch.thumb = record.thumb;
+      if (!manual.condition && record.condition) patch.condition = record.condition;
       const { error: updateError } = await supabase
         .from("records")
         .update(patch)
@@ -203,6 +216,16 @@ export async function POST() {
     }
 
     toInsert.push({ ...record, user_id: userId });
+  }
+
+  // Backfill missing conditions on existing records — one update per unique condition value
+  for (const [condition, ids] of conditionBackfill) {
+    const { error: condErr } = await supabase
+      .from("records")
+      .update({ condition })
+      .in("id", ids)
+      .eq("user_id", userId);
+    if (!condErr) updatedExisting += ids.length;
   }
 
   if (toInsert.length === 0 && updatedExisting === 0) {
