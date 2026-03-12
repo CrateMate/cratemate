@@ -328,7 +328,7 @@ function condenseCondition(c) {
     .replace("Good (G)", "G");
 }
 
-function RecordRow({ record, onClick, onGenreClick, activeGenre }) {
+function RecordRow({ record, onClick, onGenreClick, activeGenre, playCount }) {
   const originalYear = record.year_original || record.year_pressed;
   const pressedYear = record.year_pressed || null;
   const showPressed = originalYear && pressedYear && pressedYear !== originalYear;
@@ -358,12 +358,15 @@ function RecordRow({ record, onClick, onGenreClick, activeGenre }) {
           </div>
         ) : null}
         <GenreTag genre={record.genre} onClick={onGenreClick} active={activeGenre === record.genre} />
+        {playCount > 0 && (
+          <div className="text-stone-600 text-[11px]">▶ {playCount}</div>
+        )}
       </div>
     </div>
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, onToggleForSale, onDelete }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, onToggleForSale, onDelete, onLogPlay, playCount }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -583,6 +586,16 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
             </button>
           </div>
 
+          <button
+            onClick={() => onLogPlay?.(record.id)}
+            className="w-full mb-5 py-3 rounded-xl bg-stone-900/40 border border-stone-800/60 text-stone-300 text-sm font-medium hover:border-amber-900/50 hover:text-amber-200 transition-colors flex items-center justify-between px-4"
+          >
+            <span>▶ Log Play</span>
+            {playCount > 0 && (
+              <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
+            )}
+          </button>
+
           <div className="mb-2 text-stone-400 text-xs uppercase tracking-widest">Tracklist</div>
           {trackLoading && <div className="text-stone-600 text-sm py-2">Loading tracklist...</div>}
           {trackError && <div className="text-red-400/70 text-sm py-2">{trackError}</div>}
@@ -615,6 +628,68 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DriftView({ records, playCounts, onSelect }) {
+  const NUM_LANES = 4;
+  const lanes = [[], [], [], []];
+  records.forEach((r, i) => lanes[i % NUM_LANES].push(r));
+
+  const LANE_SPEEDS = [60, 45, 35, 70];
+  const LANE_DIRS = ["drift-left", "drift-right", "drift-left", "drift-right"];
+
+  function getCoverSize(record) {
+    const base = [80, 100, 110, 130][record.id.toString().charCodeAt(0) % 4];
+    const plays = playCounts[record.id] || 0;
+    return base + (plays >= 5 ? 25 : plays >= 1 ? 15 : 0);
+  }
+
+  if (records.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-stone-700 text-sm">
+        No records to drift.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-hidden flex flex-col gap-2 py-4">
+      {lanes.map((lane, li) => {
+        if (lane.length === 0) return null;
+        const items = [...lane, ...lane];
+        return (
+          <div key={li} className="overflow-hidden">
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                animation: `${LANE_DIRS[li]} ${LANE_SPEEDS[li]}s linear infinite`,
+                width: "max-content",
+              }}
+            >
+              {items.map((r, i) => {
+                const size = getCoverSize(r);
+                return (
+                  <div
+                    key={`${r.id}-${i}`}
+                    onClick={() => onSelect(r)}
+                    className="relative group cursor-pointer flex-shrink-0 rounded-lg overflow-hidden"
+                    style={{ width: size, height: size }}
+                  >
+                    <CoverArt record={r} size={size} />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-1.5">
+                      <p className="text-amber-50 text-[10px] font-medium leading-tight truncate">{r.title}</p>
+                      <p className="text-stone-400 text-[9px] truncate">{r.artist}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -750,6 +825,9 @@ export default function VinylCrate() {
   const [mood, setMood] = useState("");
   const [activeGenre, setActiveGenre] = useState(null);
 
+  const [playCounts, setPlayCounts] = useState({});
+  const [viewMode, setViewMode] = useState("list");
+
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -792,8 +870,16 @@ export default function VinylCrate() {
     }
   }, []);
 
+  async function loadPlays() {
+    try {
+      const res = await fetch("/api/plays");
+      if (res.ok) setPlayCounts(await res.json());
+    } catch {}
+  }
+
   useEffect(() => {
     refreshRecords();
+    loadPlays();
   }, [refreshRecords]);
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
@@ -970,6 +1056,15 @@ export default function VinylCrate() {
     }
   }
 
+  async function logPlay(recordId) {
+    await fetch("/api/plays", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ record_id: recordId }),
+    });
+    setPlayCounts((prev) => ({ ...prev, [recordId]: (prev[recordId] || 0) + 1 }));
+  }
+
   if (!Array.isArray(collection)) {
     return (
       <div
@@ -1058,6 +1153,26 @@ export default function VinylCrate() {
                     {l}
                   </button>
                 ))}
+              </div>
+              <div className="flex gap-0.5">
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`px-2 py-1 rounded-lg text-xs transition-all ${
+                    viewMode === "list" ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"
+                  }`}
+                  title="List view"
+                >
+                  ≡
+                </button>
+                <button
+                  onClick={() => setViewMode("drift")}
+                  className={`px-2 py-1 rounded-lg text-xs transition-all ${
+                    viewMode === "drift" ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"
+                  }`}
+                  title="Drift view"
+                >
+                  ⊞
+                </button>
               </div>
               <div className="flex-1" />
               <button
@@ -1183,6 +1298,15 @@ export default function VinylCrate() {
                 </button>
               </div>
             </div>
+          ) : viewMode === "drift" ? (
+            <DriftView
+              records={filtered}
+              playCounts={playCounts}
+              onSelect={(rec) => {
+                setSelected(rec);
+                if (!rec.for_sale) setLastPlayed(rec);
+              }}
+            />
           ) : (
             <div className="flex-1 overflow-y-auto px-3 pb-8 space-y-0.5">
               {filtered.map((r) => (
@@ -1195,6 +1319,7 @@ export default function VinylCrate() {
                   }}
                   onGenreClick={setActiveGenre}
                   activeGenre={activeGenre}
+                  playCount={playCounts[r.id] || 0}
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
@@ -1292,6 +1417,8 @@ export default function VinylCrate() {
           activeGenre={activeGenre}
           onToggleForSale={toggleForSale}
           onDelete={handleDelete}
+          onLogPlay={logPlay}
+          playCount={playCounts[selected.id] || 0}
           onSeedNext={(rec) => {
             setLastPlayed(rec);
             setTab("reco");
