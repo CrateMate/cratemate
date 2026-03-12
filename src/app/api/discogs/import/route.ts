@@ -66,7 +66,6 @@ export async function POST() {
       }
     }
   } catch { /* fall back to defaults */ }
-  console.log("[import] condition field IDs — media:", mediaFieldId, "sleeve:", sleeveFieldId);
 
   const { data: existing, error: existingError } = await supabase
     .from("records")
@@ -162,10 +161,6 @@ export async function POST() {
     page++;
   } while (page <= totalPages && page <= 10);
 
-  if (releases.length > 0) {
-    const sample = releases[0] as Record<string, unknown>;
-    console.log("[import] first release notes:", JSON.stringify(sample.notes ?? "MISSING"));
-  }
   const mapped = releases.map((r) => mapCollectionRelease(r, mediaFieldId, sleeveFieldId));
 
   // Delete records whose instance_id is no longer in the Discogs collection.
