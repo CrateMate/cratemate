@@ -283,7 +283,7 @@ async function fetchITunesArt(artist, title) {
       if (t && rt && (t.includes(rt) || rt.includes(t))) score += 2;
       if (score > bestScore) { bestScore = score; best = r; }
     }
-    if (!best || bestScore < 2) return "";
+    if (!best || bestScore < 4) return ""; // require both artist AND title to match
     return (best.artworkUrl100 || "").replace(/\d+x\d+bb(\.(jpe?g|png|webp))?$/i, "1000x1000bb.jpg");
   } catch {
     return "";
@@ -321,9 +321,9 @@ export function CoverArt({ record, size = 64 }) {
   const isUpload = isUserPhoto(raw);
   // For real Discogs images, apply any free URL upgrades (strip -150, upgrade iTunes resolution)
   const upgraded = isUpload ? "" : upgradeDiscogsThumb(raw);
-  // Low-quality imgproxy thumbnails: show them immediately (no regression) but queue iTunes
-  // to swap in a better image if one is found. User photos: skip straight to iTunes.
-  const needsITunes = isUpload || isLowQualityImgproxy(raw) || !upgraded;
+  // Only use iTunes for confirmed bad images (user photos) or truly missing covers.
+  // Blurry-but-correct Discogs images stay as-is — wrong iTunes art is worse than low-res correct art.
+  const needsITunes = isUpload || !upgraded;
 
   const [fallback, setFallback] = useState(() => _artCache.get(record.id) || null);
 
