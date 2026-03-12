@@ -74,7 +74,7 @@ export default function PublicCrate({ records, username }) {
       </div>
 
       {/* Honeycomb */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 flex flex-col relative overflow-hidden">
         {records.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-stone-700 text-sm py-24">
             This crate is empty.

@@ -1348,26 +1348,7 @@ export default function VinylCrate() {
               {myRecords.length} records · {forSaleRecords.length} for sale
             </div>
           </div>
-          <div className="pt-1 flex items-center gap-2">
-            {discogsConnected && (
-              <button
-                onClick={() => {
-                  if (!discogsUsername) return;
-                  navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}`);
-                  setShareCopied(true);
-                  setTimeout(() => setShareCopied(false), 2000);
-                }}
-                disabled={!discogsUsername}
-                className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
-                  discogsUsername
-                    ? "border-stone-700 text-stone-500 hover:text-amber-300 hover:border-amber-900/50"
-                    : "border-stone-800 text-stone-700 cursor-not-allowed"
-                }`}
-                title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
-              >
-                {shareCopied ? "Copied!" : "Share"}
-              </button>
-            )}
+          <div className="pt-1">
             <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
           </div>
         </div>
@@ -1575,13 +1556,34 @@ export default function VinylCrate() {
                   if (!rec.for_sale) setLastPlayed(rec);
                 }}
               />
-              {/* Top-left: back to list */}
-              <button
-                onClick={() => setViewMode("list")}
-                className="absolute top-4 left-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
-              >
-                ≡ List
-              </button>
+              {/* Top-left: back to list + share */}
+              <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
+                <button
+                  onClick={() => setViewMode("list")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
+                >
+                  ≡ List
+                </button>
+                {discogsConnected && (
+                  <button
+                    onClick={() => {
+                      if (!discogsUsername) return;
+                      navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}`);
+                      setShareCopied(true);
+                      setTimeout(() => setShareCopied(false), 2000);
+                    }}
+                    disabled={!discogsUsername}
+                    className={`px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border text-xs transition-colors ${
+                      discogsUsername
+                        ? "border-white/10 text-stone-400 hover:text-amber-300"
+                        : "border-white/5 text-stone-700 cursor-not-allowed"
+                    }`}
+                    title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
+                  >
+                    {shareCopied ? "Copied!" : "↗ Share"}
+                  </button>
+                )}
+              </div>
               {/* Top-right: sort toggle */}
               <div className="absolute top-4 right-4 z-50 flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                 {[["year", "Year"], ["genre", "Genre"]].map(([val, label], i) => (
