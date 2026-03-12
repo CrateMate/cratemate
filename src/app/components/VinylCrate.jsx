@@ -663,14 +663,12 @@ function HoneycombView({ records, playCounts, onSelect }) {
   const ROW_STEP = CELL;
   const COLS = 9;
 
-  // Tile records to fill the grid
-  const ROWS = Math.max(6, Math.ceil(records.length / COLS) + 2);
-  const totalCells = COLS * ROWS;
-  const cells = Array.from({ length: totalCells }, (_, i) => ({
-    record: records[i % records.length],
+  // One cell per record — no repetition
+  const ROWS = Math.max(1, Math.ceil(records.length / COLS));
+  const cells = records.map((record, i) => ({
+    record,
     col: i % COLS,
     row: Math.floor(i / COLS),
-    isDupe: i >= records.length,
   }));
 
   const gridW = COLS * COL_STEP + BASE_SIZE;
@@ -819,7 +817,7 @@ function HoneycombView({ records, playCounts, onSelect }) {
         ref={worldRef}
         style={{ position: "absolute", width: gridW, height: gridH, willChange: "transform" }}
       >
-        {cells.map(({ record, col, row, isDupe }, i) => {
+        {cells.map(({ record, col, row }, i) => {
           const { x, y } = getCellPos(col, row);
           const key = `${col}-${row}`;
           const scale = scales[key] ?? 0.5;
@@ -840,7 +838,7 @@ function HoneycombView({ records, playCounts, onSelect }) {
                 transformOrigin: "center center",
                 transition: "transform 150ms ease-out",
                 zIndex,
-                opacity: isDupe ? 0.35 : 1,
+                opacity: 1,
               }}
               onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
               onTouchEnd={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
