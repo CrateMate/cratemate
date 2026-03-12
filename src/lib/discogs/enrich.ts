@@ -70,9 +70,11 @@ function isLowResThumb(value: unknown) {
   if (value == null || typeof value !== "string") return false;
   const trimmed = value.trim().toLowerCase();
   if (!trimmed.startsWith("http")) return false;
-  // Low-res Discogs thumbnail pattern.
+  // Old Discogs CDN thumbnail pattern.
   if (/-150\.(jpe?g|png|webp)(\?.*)?$/.test(trimmed)) return true;
-  // Discogs user-uploaded photos (heuristic: contains /userimages/ or /user-image/).
+  // New Discogs imgproxy CDN: HMAC-signed URLs with 150px dimensions or q:40 quality.
+  if (trimmed.includes("i.discogs.com") && (/\/h:150\//.test(trimmed) || /\/w:150\//.test(trimmed) || /\/q:40\//.test(trimmed))) return true;
+  // Discogs user-uploaded photos.
   if (trimmed.includes("/userimages/") || trimmed.includes("/user-image/")) return true;
   return false;
 }

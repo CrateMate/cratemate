@@ -240,9 +240,13 @@ export function VinylDisc({ record, size = 64 }) {
 function upgradeDiscogsThumb(url) {
   if (!url) return "";
   const str = String(url);
-  // Discogs low-res: strip -150 suffix.
+  // Old Discogs CDN: strip -150 suffix to get full-res.
   if (/-150\.(jpe?g|png|webp)(\?.*)?$/i.test(str))
     return str.replace(/-150\.(jpe?g|png|webp)(\?.*)?$/i, (_m, ext, query) => `.${ext}${query || ""}`);
+  // New Discogs imgproxy CDN: URL is HMAC-signed so we can't swap dimensions.
+  // If it's a 150px thumbnail (q:40 or h:150/w:150), return "" to trigger iTunes fallback.
+  if (/i\.discogs\.com/i.test(str) && (/\/h:150\//i.test(str) || /\/w:150\//i.test(str) || /\/q:40\//i.test(str)))
+    return "";
   // iTunes: upgrade to 1000px for the detail hero.
   if (/mzstatic\.com/i.test(str))
     return str.replace(/\d+x\d+bb(\.(jpe?g|png|webp))?$/i, "1000x1000bb.jpg");
