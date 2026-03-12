@@ -1291,24 +1291,26 @@ export default function VinylCrate() {
       className="min-h-screen flex flex-col max-w-md mx-auto"
       style={{ background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)", fontFamily: "'DM Sans',sans-serif", color: "#e8ddd0" }}
     >
-      <div className="px-5 pt-7 pb-2 flex items-start justify-between">
-        <div>
-          {user?.firstName && (
-            <div className="text-xs uppercase tracking-widest text-amber-900 mb-0.5">{user.firstName}&apos;s</div>
-          )}
-          <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, lineHeight: 1 }} className="text-amber-50">
-            CrateMate
-          </h1>
-          <div className="text-stone-600 text-xs mt-1">
-            {myRecords.length} records · {forSaleRecords.length} for sale
+      {viewMode !== "drift" && (
+        <div className="px-5 pt-7 pb-2 flex items-start justify-between">
+          <div>
+            {user?.firstName && (
+              <div className="text-xs uppercase tracking-widest text-amber-900 mb-0.5">{user.firstName}&apos;s</div>
+            )}
+            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, lineHeight: 1 }} className="text-amber-50">
+              CrateMate
+            </h1>
+            <div className="text-stone-600 text-xs mt-1">
+              {myRecords.length} records · {forSaleRecords.length} for sale
+            </div>
+          </div>
+          <div className="pt-1">
+            <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
           </div>
         </div>
-        <div className="pt-1">
-          <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
-        </div>
-      </div>
+      )}
 
-      <div className="flex px-4 gap-1 mt-3 mb-2">
+      {viewMode !== "drift" && <div className="flex px-4 gap-1 mt-3 mb-2">
         {[
           ["crate", "⏺ Crate"],
           ["reco", "✦ Reco"],
@@ -1325,11 +1327,11 @@ export default function VinylCrate() {
             {label}
           </button>
         ))}
-      </div>
+      </div>}
 
       {tab === "crate" && (
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-4 space-y-2 mb-1">
+          {viewMode !== "drift" && <div className="px-4 space-y-2 mb-1">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -1463,7 +1465,7 @@ export default function VinylCrate() {
                 ) : null}
               </div>
             )}
-          </div>
+          </div>}
 
           {collection.length === 0 ? (
             <div className="flex-1 px-6 flex flex-col items-center justify-center text-center">
@@ -1499,14 +1501,22 @@ export default function VinylCrate() {
               </div>
             </div>
           ) : viewMode === "drift" ? (
-            <HoneycombView
-              records={filtered}
-              playCounts={playCounts}
-              onSelect={(rec) => {
-                setSelected(rec);
-                if (!rec.for_sale) setLastPlayed(rec);
-              }}
-            />
+            <div className="flex-1 relative overflow-hidden">
+              <HoneycombView
+                records={filtered}
+                playCounts={playCounts}
+                onSelect={(rec) => {
+                  setSelected(rec);
+                  if (!rec.for_sale) setLastPlayed(rec);
+                }}
+              />
+              <button
+                onClick={() => setViewMode("list")}
+                className="absolute top-4 left-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
+              >
+                ≡ List
+              </button>
+            </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-3 pb-8 space-y-0.5">
               {filtered.map((r) => (
