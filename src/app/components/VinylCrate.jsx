@@ -653,41 +653,51 @@ function HoneycombView({ records, playCounts, onSelect }) {
   const moveDistance = useRef(0);
   const rafRef = useRef(null);
   const scaleRafRef = useRef(null);
+  const cellsRef = useRef([]);
   const [scales, setScales] = useState({});
 
-  // Hex grid constants
-  const BASE_SIZE = 96;   // px — base cover size before focus scale
-  const GAP = 5;
-  const CELL = BASE_SIZE + GAP;
-  const COL_STEP = CELL * 0.78;
-  const ROW_STEP = CELL;
-  const COLS = 9;
+  const BASE_SIZE = 180;
+  const COL_STEP = BASE_SIZE * 0.76;
+  const ROW_STEP = BASE_SIZE * 0.88;
+  const CIRCLE_RADIUS = BASE_SIZE * 4.8; // controls how wide the circular grid is
 
-  // One cell per record — no repetition
-  const ROWS = Math.max(1, Math.ceil(records.length / COLS));
-  const cells = records.map((record, i) => ({
-    record,
-    col: i % COLS,
-    row: Math.floor(i / COLS),
-  }));
-
-  const gridW = COLS * COL_STEP + BASE_SIZE;
-  const gridH = ROWS * ROW_STEP + BASE_SIZE;
-
-  function getCellPos(col, row) {
-    const x = col * COL_STEP;
-    const y = row * ROW_STEP + (col % 2 === 1 ? ROW_STEP / 2 : 0);
-    return { x, y };
+  // Generate all candidate positions in a circular boundary, sorted center-outward
+  const allPositions = [];
+  const RANGE = 9;
+  for (let col = -RANGE; col <= RANGE; col++) {
+    for (let row = -RANGE; row <= RANGE; row++) {
+      const px = col * COL_STEP;
+      const py = row * ROW_STEP + (((col % 2) + 2) % 2 === 1 ? ROW_STEP / 2 : 0);
+      const dist = Math.hypot(px, py);
+      if (dist <= CIRCLE_RADIUS) {
+        allPositions.push({ col, row, px, py, dist });
+      }
+    }
   }
+  allPositions.sort((a, b) => a.dist - b.dist);
 
-  // Center grid in viewport on mount
+  // Assign one record per position — no repetition
+  const cells = allPositions.slice(0, records.length).map((pos, i) => ({
+    ...pos,
+    record: records[i],
+    key: `${pos.col}-${pos.row}`,
+  }));
+  cellsRef.current = cells;
+
+  // World is a square centered on (0,0) — cells use px/py relative to center
+  const worldR = CIRCLE_RADIUS + BASE_SIZE;
+  const gridW = worldR * 2;
+  const gridH = worldR * 2;
+  const cx = worldR; // center of world div
+  const cy = worldR;
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const vw = el.clientWidth;
     const vh = el.clientHeight;
-    const initX = (vw - gridW) / 2;
-    const initY = (vh - gridH) / 2;
+    const initX = vw / 2 - cx;
+    const initY = vh / 2 - cy;
     offsetRef.current = { x: initX, y: initY };
     if (worldRef.current) {
       worldRef.current.style.transform = `translate(${initX}px, ${initY}px)`;
@@ -696,7 +706,6 @@ function HoneycombView({ records, playCounts, onSelect }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [records.length]);
 
-  // Prevent passive touchmove so we can pan without page scroll
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -709,29 +718,25 @@ function HoneycombView({ records, playCounts, onSelect }) {
     if (!containerRef.current) return;
     const cw = vw ?? containerRef.current.clientWidth;
     const ch = vh ?? containerRef.current.clientHeight;
-    const viewCX = cw / 2 - ox;
-    const viewCY = ch / 2 - oy;
-    const MAX_DIST = 180;
-    const MIN_SCALE = 0.5;
-    const MAX_SCALE = 1.4;
+    // Viewport center in world coordinates
+    const viewCX = cw / 2 - ox - cx;
+    const viewCY = ch / 2 - oy - cy;
+    const MAX_DIST = 320;
+    const MIN_SCALE = 0.45;
+    const MAX_SCALE = 1.45;
     const next = {};
-    cells.forEach(({ record, col, row }) => {
-      const { x, y } = getCellPos(col, row);
-      const cx = x + BASE_SIZE / 2;
-      const cy = y + BASE_SIZE / 2;
-      const dist = Math.hypot(cx - viewCX, cy - viewCY);
+    cellsRef.current.forEach(({ record, key, px, py }) => {
+      const dist = Math.hypot(px - viewCX, py - viewCY);
       const t = Math.max(0, 1 - dist / MAX_DIST);
       const plays = playCounts[record.id] || 0;
       const playBoost = plays >= 5 ? 0.08 : plays >= 1 ? 0.04 : 0;
-      next[`${col}-${row}`] = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * (t * t) + playBoost;
+      next[key] = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * (t * t) + playBoost;
     });
     setScales(next);
   }
 
   function applyTransform(x, y) {
-    if (worldRef.current) {
-      worldRef.current.style.transform = `translate(${x}px, ${y}px)`;
-    }
+    if (worldRef.current) worldRef.current.style.transform = `translate(${x}px, ${y}px)`;
   }
 
   function startMomentum() {
@@ -747,7 +752,6 @@ function HoneycombView({ records, playCounts, onSelect }) {
       offsetRef.current.x += velocity.current.x;
       offsetRef.current.y += velocity.current.y;
       applyTransform(offsetRef.current.x, offsetRef.current.y);
-      // Throttled scale recalc during momentum
       cancelAnimationFrame(scaleRafRef.current);
       scaleRafRef.current = requestAnimationFrame(() =>
         recalcScales(offsetRef.current.x, offsetRef.current.y)
@@ -817,28 +821,25 @@ function HoneycombView({ records, playCounts, onSelect }) {
         ref={worldRef}
         style={{ position: "absolute", width: gridW, height: gridH, willChange: "transform" }}
       >
-        {cells.map(({ record, col, row }, i) => {
-          const { x, y } = getCellPos(col, row);
-          const key = `${col}-${row}`;
-          const scale = scales[key] ?? 0.5;
+        {cells.map(({ record, key, px, py }) => {
+          const scale = scales[key] ?? 0.45;
           const zIndex = Math.round(scale * 100);
           const plays = playCounts[record.id] || 0;
           const isFocused = scale > 1.2;
 
           return (
             <div
-              key={`${key}-${i}`}
+              key={key}
               style={{
                 position: "absolute",
-                left: x,
-                top: y,
+                left: cx + px - BASE_SIZE / 2,
+                top: cy + py - BASE_SIZE / 2,
                 width: BASE_SIZE,
                 height: BASE_SIZE,
                 transform: `scale(${scale})`,
                 transformOrigin: "center center",
                 transition: "transform 150ms ease-out",
                 zIndex,
-                opacity: 1,
               }}
               onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
               onTouchEnd={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
