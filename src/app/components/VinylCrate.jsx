@@ -643,7 +643,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
   );
 }
 
-function HoneycombView({ records, playCounts, onSelect }) {
+function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -656,7 +656,7 @@ function HoneycombView({ records, playCounts, onSelect }) {
   const cellsRef = useRef([]);
   const [scales, setScales] = useState({});
 
-  const BASE_SIZE = 180;
+  const BASE_SIZE = Math.round(180 * zoom);
   const COL_STEP = BASE_SIZE * 0.76;
   const ROW_STEP = BASE_SIZE * 0.88;
   const CIRCLE_RADIUS = BASE_SIZE * 4.8; // controls how wide the circular grid is
@@ -704,7 +704,7 @@ function HoneycombView({ records, playCounts, onSelect }) {
     }
     recalcScales(initX, initY, vw, vh);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [records.length]);
+  }, [records.length, zoom]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -1037,6 +1037,8 @@ export default function VinylCrate() {
 
   const [playCounts, setPlayCounts] = useState({});
   const [viewMode, setViewMode] = useState("list");
+  const [honeycombSort, setHoneycombSort] = useState("year");
+  const [honeycombZoom, setHoneycombZoom] = useState(1.0);
 
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
@@ -1113,6 +1115,27 @@ export default function VinylCrate() {
     const matchesGenre = !activeGenre || r.genre === activeGenre;
     return matchesSearch && matchesGenre;
   });
+
+  const honeycombRecords = (() => {
+    if (honeycombSort === "year") {
+      return [...filtered].sort((a, b) =>
+        (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999)
+      );
+    }
+    // Genre mode: biggest genre cluster first, most-played within genre first
+    const genreCounts = {};
+    filtered.forEach((r) => { genreCounts[r.genre || "zzz"] = (genreCounts[r.genre || "zzz"] || 0) + 1; });
+    return [...filtered].sort((a, b) => {
+      const ga = a.genre || "zzz";
+      const gb = b.genre || "zzz";
+      if (ga !== gb) {
+        const countDiff = (genreCounts[gb] || 0) - (genreCounts[ga] || 0);
+        return countDiff !== 0 ? countDiff : ga.localeCompare(gb);
+      }
+      const playDiff = (playCounts[b.id] || 0) - (playCounts[a.id] || 0);
+      return playDiff !== 0 ? playDiff : (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999);
+    });
+  })();
 
   const getReco = useCallback(
     async (type) => {
@@ -1522,19 +1545,50 @@ export default function VinylCrate() {
           ) : viewMode === "drift" ? (
             <div className="flex-1 flex flex-col relative overflow-hidden">
               <HoneycombView
-                records={filtered}
+                key={honeycombSort}
+                records={honeycombRecords}
                 playCounts={playCounts}
+                zoom={honeycombZoom}
                 onSelect={(rec) => {
                   setSelected(rec);
                   if (!rec.for_sale) setLastPlayed(rec);
                 }}
               />
+              {/* Top-left: back to list */}
               <button
                 onClick={() => setViewMode("list")}
                 className="absolute top-4 left-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
               >
                 ≡ List
               </button>
+              {/* Top-right: sort toggle */}
+              <div className="absolute top-4 right-4 z-50 flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                {[["year", "Year"], ["genre", "Genre"]].map(([val, label], i) => (
+                  <button
+                    key={val}
+                    onClick={() => setHoneycombSort(val)}
+                    className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* Bottom-center: zoom */}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                <button
+                  onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
+                  className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
+                >
+                  −
+                </button>
+                <div className="w-px h-3 bg-white/10" />
+                <button
+                  onClick={() => setHoneycombZoom((z) => Math.min(1.8, parseFloat((z + 0.25).toFixed(2))))}
+                  className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
+                >
+                  +
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-3 pb-8 space-y-0.5">
