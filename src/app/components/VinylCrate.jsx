@@ -1349,15 +1349,21 @@ export default function VinylCrate() {
             </div>
           </div>
           <div className="pt-1 flex items-center gap-2">
-            {discogsUsername && (
+            {discogsConnected && (
               <button
                 onClick={() => {
+                  if (!discogsUsername) return;
                   navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}`);
                   setShareCopied(true);
                   setTimeout(() => setShareCopied(false), 2000);
                 }}
-                className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-500 hover:text-amber-300 hover:border-amber-900/50 transition-all"
-                title="Share your crate"
+                disabled={!discogsUsername}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                  discogsUsername
+                    ? "border-stone-700 text-stone-500 hover:text-amber-300 hover:border-amber-900/50"
+                    : "border-stone-800 text-stone-700 cursor-not-allowed"
+                }`}
+                title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
               >
                 {shareCopied ? "Copied!" : "Share"}
               </button>
