@@ -37,3 +37,28 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ played_at });
 }
+
+export async function DELETE(request: Request) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { record_id } = await request.json();
+  if (!record_id) return NextResponse.json({ error: "record_id required" }, { status: 400 });
+
+  // Delete the most recent play session for this record
+  const { data } = await supabase
+    .from("play_sessions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("record_id", record_id)
+    .order("played_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!data) return NextResponse.json({ error: "No play to undo" }, { status: 404 });
+
+  const { error } = await supabase.from("play_sessions").delete().eq("id", data.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}

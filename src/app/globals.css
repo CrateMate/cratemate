@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
-@keyframes drift-left {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
+@keyframes drift-h {
+  0%, 100% { transform: translateX(-30vw); }
+  50%       { transform: translateX(30vw); }
 }
-@keyframes drift-right {
-  from { transform: translateX(-50%); }
-  to   { transform: translateX(0); }
+@keyframes drift-v {
+  0%, 100% { transform: translateY(-28vh); }
+  50%       { transform: translateY(28vh); }
 }

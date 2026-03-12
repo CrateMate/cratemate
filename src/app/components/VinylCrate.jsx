@@ -366,7 +366,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenre, playCount }) {
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, onToggleForSale, onDelete, onLogPlay, playCount }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, playCount }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -586,15 +586,26 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
             </button>
           </div>
 
-          <button
-            onClick={() => onLogPlay?.(record.id)}
-            className="w-full mb-5 py-3 rounded-xl bg-stone-900/40 border border-stone-800/60 text-stone-300 text-sm font-medium hover:border-amber-900/50 hover:text-amber-200 transition-colors flex items-center justify-between px-4"
-          >
-            <span>▶ Log Play</span>
+          <div className="flex gap-2 mb-5">
+            <button
+              onClick={() => onLogPlay?.(record.id)}
+              className="flex-1 py-3 rounded-xl bg-stone-900/40 border border-stone-800/60 text-stone-300 text-sm font-medium hover:border-amber-900/50 hover:text-amber-200 transition-colors flex items-center justify-between px-4"
+            >
+              <span>▶ Log Play</span>
+              {playCount > 0 && (
+                <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
+              )}
+            </button>
             {playCount > 0 && (
-              <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
+              <button
+                onClick={() => onUndoLogPlay?.(record.id)}
+                className="px-3 py-3 rounded-xl border border-stone-800/60 text-stone-600 text-sm hover:border-stone-700 hover:text-stone-400 transition-colors"
+                title="Undo last play"
+              >
+                ↩
+              </button>
             )}
-          </button>
+          </div>
 
           <div className="mb-2 text-stone-400 text-xs uppercase tracking-widest">Tracklist</div>
           {trackLoading && <div className="text-stone-600 text-sm py-2">Loading tracklist...</div>}
@@ -633,17 +644,11 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
 }
 
 function DriftView({ records, playCounts, onSelect }) {
-  const NUM_LANES = 4;
-  const lanes = [[], [], [], []];
-  records.forEach((r, i) => lanes[i % NUM_LANES].push(r));
-
-  const LANE_SPEEDS = [60, 45, 35, 70];
-  const LANE_DIRS = ["drift-left", "drift-right", "drift-left", "drift-right"];
-
   function getCoverSize(record) {
-    const base = [80, 100, 110, 130][record.id.toString().charCodeAt(0) % 4];
+    const id = record.id.toString();
+    const base = [80, 100, 110, 130][id.charCodeAt(0) % 4];
     const plays = playCounts[record.id] || 0;
-    return base + (plays >= 5 ? 25 : plays >= 1 ? 15 : 0);
+    return base + (plays >= 5 ? 30 : plays >= 1 ? 15 : 0);
   }
 
   if (records.length === 0) {
@@ -655,41 +660,53 @@ function DriftView({ records, playCounts, onSelect }) {
   }
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col gap-2 py-4">
-      {lanes.map((lane, li) => {
-        if (lane.length === 0) return null;
-        const items = [...lane, ...lane];
-        return (
-          <div key={li} className="overflow-hidden">
+    <div className="flex-1 overflow-hidden relative">
+      <div className="absolute inset-0 flex items-center justify-center">
+        {records.map((record, i) => {
+          const size = getCoverSize(record);
+          const id = record.id.toString();
+          const h0 = id.charCodeAt(0) % 10;
+          const h1 = (id.charCodeAt(id.length - 1) || 5) % 10;
+          // Each record gets its own slow period — horizontal and vertical are
+          // slightly different so the path traces an oval rather than a line
+          const hPeriod = 100 + h0 * 8; // 100–172s
+          const vPeriod = hPeriod * (0.65 + h1 * 0.04); // different ratio → oval
+          // Stagger start positions so they don't all clump together
+          const hDelay = -((i * 17) % hPeriod);
+          // Offset vertical by ~quarter period → circular/oval feel
+          const vDelay = hDelay - hPeriod * 0.25;
+
+          return (
             <div
+              key={record.id}
+              className="absolute"
               style={{
-                display: "flex",
-                gap: 8,
-                animation: `${LANE_DIRS[li]} ${LANE_SPEEDS[li]}s linear infinite`,
-                width: "max-content",
+                animation: `drift-h ${hPeriod}s ease-in-out infinite`,
+                animationDelay: `${hDelay}s`,
               }}
             >
-              {items.map((r, i) => {
-                const size = getCoverSize(r);
-                return (
-                  <div
-                    key={`${r.id}-${i}`}
-                    onClick={() => onSelect(r)}
-                    className="relative group cursor-pointer flex-shrink-0 rounded-lg overflow-hidden"
-                    style={{ width: size, height: size }}
-                  >
-                    <CoverArt record={r} size={size} />
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-1.5">
-                      <p className="text-amber-50 text-[10px] font-medium leading-tight truncate">{r.title}</p>
-                      <p className="text-stone-400 text-[9px] truncate">{r.artist}</p>
-                    </div>
+              <div
+                style={{
+                  animation: `drift-v ${vPeriod}s ease-in-out infinite`,
+                  animationDelay: `${vDelay}s`,
+                }}
+              >
+                <div
+                  onClick={() => onSelect(record)}
+                  className="relative group cursor-pointer rounded-xl overflow-hidden flex-shrink-0"
+                  style={{ width: size, height: size }}
+                >
+                  <CoverArt record={record} size={size} />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-1.5">
+                    <p className="text-amber-50 text-[10px] font-medium leading-tight truncate">{record.title}</p>
+                    <p className="text-stone-400 text-[9px] truncate">{record.artist}</p>
                   </div>
-                );
-              })}
+                </div>
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1065,6 +1082,15 @@ export default function VinylCrate() {
     setPlayCounts((prev) => ({ ...prev, [recordId]: (prev[recordId] || 0) + 1 }));
   }
 
+  async function undoLogPlay(recordId) {
+    await fetch("/api/plays", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ record_id: recordId }),
+    });
+    setPlayCounts((prev) => ({ ...prev, [recordId]: Math.max((prev[recordId] || 0) - 1, 0) }));
+  }
+
   if (!Array.isArray(collection)) {
     return (
       <div
@@ -1418,6 +1444,7 @@ export default function VinylCrate() {
           onToggleForSale={toggleForSale}
           onDelete={handleDelete}
           onLogPlay={logPlay}
+          onUndoLogPlay={undoLogPlay}
           playCount={playCounts[selected.id] || 0}
           onSeedNext={(rec) => {
             setLastPlayed(rec);
