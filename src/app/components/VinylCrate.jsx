@@ -174,7 +174,7 @@ function discGrad(id) {
   return DISC_GRADIENT_PAIRS[n % DISC_GRADIENT_PAIRS.length];
 }
 
-function VinylDisc({ record, size = 64 }) {
+export function VinylDisc({ record, size = 64 }) {
   const [c1, c2] = discGrad(record.id);
   const labelSize = size * 0.3;
   const year = record.year_original || record.year_pressed || 1975;
@@ -283,7 +283,7 @@ async function fetchITunesArt(artist, title) {
   }
 }
 
-function CoverArt({ record, size = 64 }) {
+export function CoverArt({ record, size = 64 }) {
   if (record.thumb) {
     return (
       <div
@@ -643,7 +643,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
   );
 }
 
-function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -1040,6 +1040,8 @@ export default function VinylCrate() {
   const [honeycombSort, setHoneycombSort] = useState("year");
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
 
+  const [shareCopied, setShareCopied] = useState(false);
+
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -1346,7 +1348,20 @@ export default function VinylCrate() {
               {myRecords.length} records · {forSaleRecords.length} for sale
             </div>
           </div>
-          <div className="pt-1">
+          <div className="pt-1 flex items-center gap-2">
+            {discogsUsername && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}`);
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 2000);
+                }}
+                className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-500 hover:text-amber-300 hover:border-amber-900/50 transition-all"
+                title="Share your crate"
+              >
+                {shareCopied ? "Copied!" : "Share"}
+              </button>
+            )}
             <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
           </div>
         </div>
