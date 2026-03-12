@@ -66,6 +66,7 @@ export async function POST() {
       }
     }
   } catch { /* fall back to defaults */ }
+  console.log("[import] condition field IDs — media:", mediaFieldId, "sleeve:", sleeveFieldId);
 
   const { data: existing, error: existingError } = await supabase
     .from("records")
