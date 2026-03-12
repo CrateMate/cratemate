@@ -243,14 +243,17 @@ function upgradeDiscogsThumb(url) {
   // Old Discogs CDN: strip -150 suffix to get full-res.
   if (/-150\.(jpe?g|png|webp)(\?.*)?$/i.test(str))
     return str.replace(/-150\.(jpe?g|png|webp)(\?.*)?$/i, (_m, ext, query) => `.${ext}${query || ""}`);
-  // New Discogs imgproxy CDN: URL is HMAC-signed so we can't swap dimensions.
-  // If it's a 150px thumbnail (q:40 or h:150/w:150), return "" to trigger iTunes fallback.
-  if (/i\.discogs\.com/i.test(str) && (/\/h:150\//i.test(str) || /\/w:150\//i.test(str) || /\/q:40\//i.test(str)))
-    return "";
   // iTunes: upgrade to 1000px for the detail hero.
   if (/mzstatic\.com/i.test(str))
     return str.replace(/\d+x\d+bb(\.(jpe?g|png|webp))?$/i, "1000x1000bb.jpg");
   return str;
+}
+
+// New Discogs imgproxy CDN thumbnails are HMAC-signed — can't upgrade the URL itself.
+// Detect them so we can show them immediately but also queue iTunes to swap in something better.
+function isLowQualityImgproxy(url) {
+  if (!url) return false;
+  return /i\.discogs\.com/i.test(url) && (/\/h:150\//i.test(url) || /\/w:150\//i.test(url) || /\/q:40\//i.test(url));
 }
 
 function isUserPhoto(url) {
@@ -315,20 +318,23 @@ function _enqueueArt(record, cb) {
 
 export function CoverArt({ record, size = 64 }) {
   const raw = record.thumb || "";
-  // User-uploaded Discogs photos are often blurry scans — skip them entirely and go to iTunes
   const isUpload = isUserPhoto(raw);
-  // For real Discogs images, strip the -150 suffix to get the full-res CDN URL (free, instant)
+  // For real Discogs images, apply any free URL upgrades (strip -150, upgrade iTunes resolution)
   const upgraded = isUpload ? "" : upgradeDiscogsThumb(raw);
+  // Low-quality imgproxy thumbnails: show them immediately (no regression) but queue iTunes
+  // to swap in a better image if one is found. User photos: skip straight to iTunes.
+  const needsITunes = isUpload || isLowQualityImgproxy(raw) || !upgraded;
 
   const [fallback, setFallback] = useState(() => _artCache.get(record.id) || null);
 
   useEffect(() => {
-    if (upgraded) return; // already have a good URL, no iTunes needed
+    if (!needsITunes) return;
     return _enqueueArt(record, (url) => { if (url) setFallback(url); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record.id]);
 
-  const src = upgraded || fallback;
+  // Prefer iTunes art (higher quality); fall back to the Discogs URL so nothing goes blank
+  const src = fallback || upgraded;
 
   if (src) {
     return (
