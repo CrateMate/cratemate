@@ -155,7 +155,7 @@ async function iTunesArtworkFallback(record: DbRecord): Promise<string> {
       const s = scoreSearch(record, fakeRecord);
       if (s > bestScore) { bestScore = s; best = r; }
     }
-    if (!best || bestScore < 2) return "";
+    if (!best || bestScore < 4) return "";
 
     // Upgrade artwork URL from 100px to 600px.
     const raw = (best as { artworkUrl100?: string }).artworkUrl100 || "";
@@ -375,10 +375,12 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
 
     // Check cache first — avoids API calls for already-fetched releases.
     const cached = await getReleaseCache(releaseId);
+    // A cached cover is only "good" if it's not itself a low-res thumbnail.
+    const cachedCoverOk = !!(cached?.cover_image && !isLowResThumb(cached.cover_image));
 
     let release: DiscogsRelease | null = null;
     const needsReleaseCall = (needsYearFix || (needsThumb && !thumb)) &&
-      !(cached?.year_pressed && cached?.year_original && (!needsThumb || cached?.cover_image));
+      !(cached?.year_pressed && cached?.year_original && (!needsThumb || cachedCoverOk));
 
     if (needsReleaseCall) {
       await new Promise((r) => setTimeout(r, RATE_DELAY_MS));
@@ -399,7 +401,7 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
     }
 
     if (release && !thumb) {
-      thumb = cached?.cover_image || releaseThumb(release);
+      thumb = (cachedCoverOk ? cached!.cover_image! : null) || releaseThumb(release);
     }
 
     const patch: Record<string, unknown> = {};
@@ -436,16 +438,17 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
       if (compilation != null) patch.is_compilation = compilation;
     }
 
+    // iTunes / Discogs search fallback — only for truly missing covers, never for low-res ones.
+    // Low-res Discogs thumbs are blurry but correct for the specific pressing; iTunes may return
+    // artwork for a different edition, so we never use it to replace an existing Discogs image.
     if (thumbSupported && !thumb && isMissingThumb(r.thumb)) {
-      if (cached?.cover_image) {
-        thumb = cached.cover_image;
+      if (cachedCoverOk) {
+        thumb = cached!.cover_image!;
       } else {
-        // 1. Try iTunes — no rate limit, high quality official art.
         try {
           thumb = await iTunesArtworkFallback(r);
         } catch { /* ignore */ }
 
-        // 2. Fall back to Discogs search if iTunes found nothing.
         if (!thumb) {
           try {
             await new Promise((delay) => setTimeout(delay, RATE_DELAY_MS));

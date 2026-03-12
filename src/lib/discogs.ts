@@ -91,7 +91,7 @@ export async function discogsRequest(
 }
 
 // Maps a collection release to our DB schema
-export function mapCollectionRelease(release: Record<string, unknown>) {
+export function mapCollectionRelease(release: Record<string, unknown>, mediaFieldId = 1, sleeveFieldId = 2) {
   const info = (release.basic_information || {}) as Record<string, unknown>;
   const artists = (info.artists as Array<{ name: string; join?: string }>) || [];
   const labels = (info.labels as Array<{ name: string }>) || [];
@@ -117,8 +117,8 @@ export function mapCollectionRelease(release: Record<string, unknown>) {
   const notes = Array.isArray(release.notes)
     ? (release.notes as Array<{ field_id: number; value: string }>)
     : [];
-  const mediaCondition = notes.find((n) => n.field_id === 1)?.value || "";
-  const sleeveCondition = notes.find((n) => n.field_id === 2)?.value || "";
+  const mediaCondition = notes.find((n) => Number(n.field_id) === mediaFieldId)?.value || "";
+  const sleeveCondition = notes.find((n) => Number(n.field_id) === sleeveFieldId)?.value || "";
   const condition = sleeveCondition ? `${mediaCondition} / ${sleeveCondition}` : mediaCondition;
 
   return {

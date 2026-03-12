@@ -46,6 +46,27 @@ export async function POST() {
     await supabase.from("discogs_tokens").update({ discogs_username }).eq("user_id", userId);
   }
 
+  // Look up the user's actual collection field IDs for Media/Sleeve Condition.
+  // Discogs field IDs are not universally 1 and 2 — they depend on the order
+  // the user created their custom collection fields.
+  let mediaFieldId = 1;
+  let sleeveFieldId = 2;
+  try {
+    const fieldsRes = await discogsRequest("GET", `${DISCOGS_API}/users/${encodeURIComponent(discogs_username)}/collection/fields`, {
+      tokenKey: access_token,
+      tokenSecret: access_token_secret,
+    });
+    if (fieldsRes.ok) {
+      const fieldsData = await fieldsRes.json();
+      const fields = Array.isArray(fieldsData?.fields) ? fieldsData.fields : [];
+      for (const f of fields) {
+        const name = (f.name || "").toLowerCase();
+        if (name.includes("media")) mediaFieldId = Number(f.id) || mediaFieldId;
+        else if (name.includes("sleeve") || name.includes("cover")) sleeveFieldId = Number(f.id) || sleeveFieldId;
+      }
+    }
+  } catch { /* fall back to defaults */ }
+
   const { data: existing, error: existingError } = await supabase
     .from("records")
     .select("id, discogs_id, discogs_instance_id, artist, title, thumb, condition")
@@ -140,7 +161,7 @@ export async function POST() {
     page++;
   } while (page <= totalPages && page <= 10);
 
-  const mapped = releases.map((r) => mapCollectionRelease(r));
+  const mapped = releases.map((r) => mapCollectionRelease(r, mediaFieldId, sleeveFieldId));
 
   // Delete records whose instance_id is no longer in the Discogs collection.
   // Only touches records that have an instance_id — manually added records are never deleted.
