@@ -1068,7 +1068,9 @@ async function readJsonOrText(res) {
   try {
     return JSON.parse(text);
   } catch {
-    return { error: text || `Request failed (${res.status})` };
+    // Don't dump raw HTML (Next.js error pages etc.) into the UI
+    const isHtml = text.trimStart().startsWith("<!") || text.trimStart().startsWith("<html");
+    return { error: isHtml ? `Server error (${res.status}) — please try again` : text || `Request failed (${res.status})` };
   }
 }
 
@@ -1255,10 +1257,16 @@ export default function VinylCrate() {
       setImportResult({ ...data, syncing_meta: true });
       await refreshRecords();
 
-      // After a sync, always run metadata enrich (years + covers) across all records.
+      // After a sync, run metadata enrich — failures here don't undo the import success.
       setEnrichLoading(true);
-      const meta = await runEnrichAll("full");
-      setImportResult({ ...data, meta });
+      try {
+        const meta = await runEnrichAll("full");
+        setImportResult({ ...data, meta });
+      } catch (enrichErr) {
+        // Import succeeded; enrichment failed. Show import counts without meta stats.
+        console.error("Post-import enrich failed:", enrichErr);
+        setImportResult({ ...data });
+      }
       await refreshRecords();
     } catch (e) {
       setImportResult({ error: e instanceof Error ? e.message : "Discogs import failed." });
