@@ -1499,7 +1499,7 @@ export default function VinylCrate() {
               </div>
             </div>
           ) : viewMode === "drift" ? (
-            <div className="flex-1 relative overflow-hidden">
+            <div className="flex-1 flex flex-col relative overflow-hidden">
               <HoneycombView
                 records={filtered}
                 playCounts={playCounts}
