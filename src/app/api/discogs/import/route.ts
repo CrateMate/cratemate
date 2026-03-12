@@ -162,6 +162,10 @@ export async function POST() {
     page++;
   } while (page <= totalPages && page <= 10);
 
+  if (releases.length > 0) {
+    const sample = releases[0] as Record<string, unknown>;
+    console.log("[import] first release notes:", JSON.stringify(sample.notes ?? "MISSING"));
+  }
   const mapped = releases.map((r) => mapCollectionRelease(r, mediaFieldId, sleeveFieldId));
 
   // Delete records whose instance_id is no longer in the Discogs collection.
