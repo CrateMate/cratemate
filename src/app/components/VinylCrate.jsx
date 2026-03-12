@@ -283,14 +283,61 @@ async function fetchITunesArt(artist, title) {
   }
 }
 
+// --- Module-level iTunes art queue (deduped, max 4 concurrent) ---
+const _artCache = new Map(); // record.id → url string or ""
+const _artQ = []; // { record, cbs: [fn] }
+let _artActive = 0;
+
+function _flushArtQ() {
+  while (_artActive < 4 && _artQ.length > 0) {
+    const item = _artQ.shift();
+    _artActive++;
+    fetchITunesArt(item.record.artist, item.record.title)
+      .then((url) => { _artCache.set(item.record.id, url || ""); item.cbs.forEach((cb) => cb(url || "")); })
+      .catch(() => { _artCache.set(item.record.id, ""); item.cbs.forEach((cb) => cb("")); })
+      .finally(() => { _artActive--; _flushArtQ(); });
+  }
+}
+
+function _enqueueArt(record, cb) {
+  if (_artCache.has(record.id)) { cb(_artCache.get(record.id)); return () => {}; }
+  const existing = _artQ.find((q) => q.record.id === record.id);
+  if (existing) { existing.cbs.push(cb); return () => { const i = existing.cbs.indexOf(cb); if (i > -1) existing.cbs.splice(i, 1); }; }
+  const item = { record, cbs: [cb] };
+  _artQ.push(item);
+  _flushArtQ();
+  return () => { const i = item.cbs.indexOf(cb); if (i > -1) item.cbs.splice(i, 1); };
+}
+
 export function CoverArt({ record, size = 64 }) {
-  if (record.thumb) {
+  const raw = record.thumb || "";
+  // User-uploaded Discogs photos are often blurry scans — skip them entirely and go to iTunes
+  const isUpload = isUserPhoto(raw);
+  // For real Discogs images, strip the -150 suffix to get the full-res CDN URL (free, instant)
+  const upgraded = isUpload ? "" : upgradeDiscogsThumb(raw);
+
+  const [fallback, setFallback] = useState(() => _artCache.get(record.id) || null);
+
+  useEffect(() => {
+    if (upgraded) return; // already have a good URL, no iTunes needed
+    return _enqueueArt(record, (url) => { if (url) setFallback(url); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record.id]);
+
+  const src = upgraded || fallback;
+
+  if (src) {
     return (
       <div
         className="flex-shrink-0 rounded-xl overflow-hidden border border-white/[0.08]"
         style={{ width: size, height: size, boxShadow: "0 3px 16px rgba(0,0,0,0.55)" }}
       >
-        <img src={record.thumb} alt="" className="w-full h-full object-cover opacity-90" />
+        <img
+          src={src}
+          alt=""
+          className="w-full h-full object-cover opacity-90"
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+        />
       </div>
     );
   }

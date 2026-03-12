@@ -96,9 +96,9 @@ function releaseThumb(release: DiscogsRelease) {
 
   const images = Array.isArray(release?.images) ? (release.images as DiscogsImage[]) : [];
   const first = images[0];
-  const uri150 = typeof first?.uri150 === "string" ? first.uri150 : "";
   const uri = typeof first?.uri === "string" ? first.uri : "";
-  return uri150 || uri || "";
+  const uri150 = typeof first?.uri150 === "string" ? first.uri150 : "";
+  return uri || uri150 || ""; // prefer full-res uri over thumbnail uri150
 }
 
 function scoreSearch(record: DbRecord, result: { title?: string; cover_image?: string; thumb?: string }) {
@@ -157,7 +157,7 @@ async function iTunesArtworkFallback(record: DbRecord): Promise<string> {
 
     // Upgrade artwork URL from 100px to 600px.
     const raw = (best as { artworkUrl100?: string }).artworkUrl100 || "";
-    return raw.replace(/\d+x\d+bb(\.(jpg|png|webp))?$/i, "600x600bb.jpg");
+    return raw.replace(/\d+x\d+bb(\.(jpg|png|webp))?$/i, "1000x1000bb.jpg");
   } catch {
     return "";
   }
