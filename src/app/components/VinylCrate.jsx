@@ -735,6 +735,23 @@ function HoneycombView({ records, playCounts, onSelect }) {
     setScales(next);
   }
 
+  function clampOffset(x, y, vw, vh) {
+    const cw = vw ?? containerRef.current?.clientWidth ?? 400;
+    const ch = vh ?? containerRef.current?.clientHeight ?? 700;
+    // How far the viewport center is from the grid center
+    const viewCX = cw / 2 - x - cx;
+    const viewCY = ch / 2 - y - cy;
+    const dist = Math.hypot(viewCX, viewCY);
+    const maxPan = CIRCLE_RADIUS + BASE_SIZE * 0.3;
+    if (dist <= maxPan) return { x, y };
+    // Project back onto the boundary circle
+    const scale = maxPan / dist;
+    return {
+      x: cw / 2 - viewCX * scale - cx,
+      y: ch / 2 - viewCY * scale - cy,
+    };
+  }
+
   function applyTransform(x, y) {
     if (worldRef.current) worldRef.current.style.transform = `translate(${x}px, ${y}px)`;
   }
@@ -749,9 +766,12 @@ function HoneycombView({ records, playCounts, onSelect }) {
         recalcScales(offsetRef.current.x, offsetRef.current.y);
         return;
       }
-      offsetRef.current.x += velocity.current.x;
-      offsetRef.current.y += velocity.current.y;
-      applyTransform(offsetRef.current.x, offsetRef.current.y);
+      const clamped = clampOffset(offsetRef.current.x + velocity.current.x, offsetRef.current.y + velocity.current.y);
+      if (clamped.x === offsetRef.current.x && clamped.y === offsetRef.current.y) {
+        velocity.current = { x: 0, y: 0 }; // hit boundary, kill momentum
+      }
+      offsetRef.current = clamped;
+      applyTransform(clamped.x, clamped.y);
       cancelAnimationFrame(scaleRafRef.current);
       scaleRafRef.current = requestAnimationFrame(() =>
         recalcScales(offsetRef.current.x, offsetRef.current.y)
@@ -778,9 +798,9 @@ function HoneycombView({ records, playCounts, onSelect }) {
     lastPos.current = { x: pos.clientX, y: pos.clientY };
     moveDistance.current += Math.abs(dx) + Math.abs(dy);
     velocity.current = { x: dx, y: dy };
-    offsetRef.current.x += dx;
-    offsetRef.current.y += dy;
-    applyTransform(offsetRef.current.x, offsetRef.current.y);
+    const clamped = clampOffset(offsetRef.current.x + dx, offsetRef.current.y + dy);
+    offsetRef.current = clamped;
+    applyTransform(clamped.x, clamped.y);
     cancelAnimationFrame(scaleRafRef.current);
     scaleRafRef.current = requestAnimationFrame(() =>
       recalcScales(offsetRef.current.x, offsetRef.current.y)
