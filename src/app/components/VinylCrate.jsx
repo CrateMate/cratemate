@@ -709,9 +709,14 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const handler = (e) => { if (dragging.current) e.preventDefault(); };
-    el.addEventListener("touchmove", handler, { passive: false });
-    return () => el.removeEventListener("touchmove", handler);
+    // Prevent pull-to-refresh and browser scroll interference on all touch events
+    const prevent = (e) => e.preventDefault();
+    el.addEventListener("touchstart", prevent, { passive: false });
+    el.addEventListener("touchmove", prevent, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", prevent);
+      el.removeEventListener("touchmove", prevent);
+    };
   }, []);
 
   function recalcScales(ox, oy, vw, vh) {
@@ -829,6 +834,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
     <div
       ref={containerRef}
       className="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing select-none"
+      style={{ touchAction: "none", overscrollBehavior: "none" }}
       onMouseDown={onPointerDown}
       onMouseMove={onPointerMove}
       onMouseUp={(e) => onPointerUp(e, null)}
