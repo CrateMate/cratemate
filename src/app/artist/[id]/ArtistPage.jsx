@@ -12,13 +12,24 @@ function categorize(releases) {
     if (r.type !== "master") continue;
     // Skip anything where the artist isn't the main act
     if (r.role && r.role !== "Main") continue;
+
     const fmt = (r.format || "").toLowerCase();
+    const title = r.title || "";
+
+    // Format-based exclusions (only present on type:"release", rarely on masters)
     if (/acetate|unofficial|video|karaoke|tribute/i.test(fmt)) continue;
     if (/live/i.test(fmt)) { live.push(r); continue; }
     if (/ep|single/i.test(fmt)) { epsSingles.push(r); continue; }
     if (/compilation|dj.?mix|box.?set|soundtrack|score|interview|spoken/i.test(fmt)) continue;
-    // Only count explicit Album format (or no format) — skips misc releases
     if (fmt && !/album/i.test(fmt)) continue;
+
+    // Title-based heuristics — Discogs masters rarely carry a format field,
+    // so these catch singles and compilations that slip through above.
+    // "X / Y" = A-side / B-side single
+    if (/\//.test(title)) { epsSingles.push(r); continue; }
+    // Compilation / anthology patterns
+    if (/best of|greatest hits|\bcollection\b|history of|vintage years|golden era|blues jam|originals|radio spot/i.test(title)) continue;
+
     studioAlbums.push(r);
   }
 
