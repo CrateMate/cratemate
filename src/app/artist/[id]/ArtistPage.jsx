@@ -10,11 +10,15 @@ function categorize(releases) {
 
   for (const r of releases) {
     if (r.type !== "master") continue;
-    const fmt = (r.format || "") + " " + (r.role || "");
-    if (/acetate|unofficial|video/i.test(fmt)) continue;
+    // Skip anything where the artist isn't the main act
+    if (r.role && r.role !== "Main") continue;
+    const fmt = (r.format || "").toLowerCase();
+    if (/acetate|unofficial|video|karaoke|tribute/i.test(fmt)) continue;
     if (/live/i.test(fmt)) { live.push(r); continue; }
     if (/ep|single/i.test(fmt)) { epsSingles.push(r); continue; }
-    if (/compilation|dj.?mix/i.test(fmt)) continue;
+    if (/compilation|dj.?mix|box.?set|soundtrack|score|interview|spoken/i.test(fmt)) continue;
+    // Only count explicit Album format (or no format) — skips misc releases
+    if (fmt && !/album/i.test(fmt)) continue;
     studioAlbums.push(r);
   }
 
