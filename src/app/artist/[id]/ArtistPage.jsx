@@ -3,40 +3,147 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  return `${days}d ago`;
+function categorize(releases) {
+  const studioAlbums = [];
+  const epsSingles = [];
+  const live = [];
+
+  for (const r of releases) {
+    if (r.type !== "master") continue;
+    const fmt = (r.format || "") + " " + (r.role || "");
+    if (/acetate|unofficial|video/i.test(fmt)) continue;
+    if (/live/i.test(fmt)) { live.push(r); continue; }
+    if (/ep|single/i.test(fmt)) { epsSingles.push(r); continue; }
+    if (/compilation|dj.?mix/i.test(fmt)) continue;
+    studioAlbums.push(r);
+  }
+
+  return { studioAlbums, epsSingles, live };
 }
 
-export default function ArtistPage({ artist, studioAlbums, epsSingles, live }) {
-  const router = useRouter();
-  const [myRecords, setMyRecords] = useState([]);
-  const [fanRank, setFanRank] = useState(null);
-  const [showEps, setShowEps] = useState(false);
-  const [showLive, setShowLive] = useState(false);
+function ProgressBar({ pct }) {
+  return (
+    <div className="w-full bg-stone-800 rounded-full h-1.5">
+      <div
+        className="bg-amber-600 h-1.5 rounded-full transition-all"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
 
+function ReleaseRow({ album, owned }) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  return (
+    <div className={`flex items-center gap-3 py-1.5 ${owned ? "" : "opacity-40"}`}>
+      <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-stone-800 flex items-center justify-center">
+        {album.thumb ? (
+          <img
+            src={album.thumb}
+            alt={album.title}
+            loading="lazy"
+            onLoad={() => setImgLoaded(true)}
+            className={`w-full h-full object-cover transition-opacity duration-300 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+          />
+        ) : (
+          <span className="text-stone-600 text-xs">♪</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-xs ${owned ? "text-amber-400" : "text-stone-500"}`}>
+            {owned ? "✓" : "○"}
+          </span>
+          <span className="text-stone-200 text-sm truncate">{album.title}</span>
+          {album.year && <span className="text-stone-600 text-xs flex-shrink-0">{album.year}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CollapsibleSection({ label, count, items, ownedIds }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((s) => !s)}
+        className="flex items-center justify-between w-full text-stone-400 text-sm py-1"
+      >
+        <span>{label} <span className="text-stone-600">({count})</span></span>
+        <span>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-1 space-y-0.5">
+          {items.map((r) => (
+            <ReleaseRow key={r.id} album={r} owned={ownedIds.has(String(r.id))} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ArtistPage({ releaseId }) {
+  const router = useRouter();
+
+  // Phase 1 state — from local DB
+  const [myRecords, setMyRecords] = useState(null); // null = loading
+
+  // Phase 2 state — from Discogs cache
+  const [artistData, setArtistData] = useState(null);
+  const [discogsLoading, setDiscogsLoading] = useState(true);
+
+  // Fan ranking
+  const [fanRank, setFanRank] = useState(null);
+
+  // Phase 1: fetch owned records immediately
   useEffect(() => {
-    if (!artist?.name) return;
     fetch("/api/records")
       .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          const name = artist.name.toLowerCase();
-          setMyRecords(data.filter((r) => (r.artist || "").toLowerCase().includes(name)));
-        }
-      })
-      .catch(() => {});
+      .then((data) => setMyRecords(Array.isArray(data) ? data : []))
+      .catch(() => setMyRecords([]));
+  }, []);
 
-    fetch(`/api/artist-fans?artist=${encodeURIComponent(artist.name)}`)
+  // Phase 2: fetch artist + discography (cached route)
+  useEffect(() => {
+    if (!releaseId) return;
+    fetch(`/api/discogs/artist/${releaseId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.artist) setArtistData(data);
+      })
+      .catch(() => {})
+      .finally(() => setDiscogsLoading(false));
+  }, [releaseId]);
+
+  // Fetch fan ranking once we know the artist name
+  useEffect(() => {
+    const name = artistData?.artist?.name;
+    if (!name) return;
+    fetch(`/api/artist-fans?artist=${encodeURIComponent(name)}`)
       .then((r) => r.json())
       .then((data) => setFanRank(data))
       .catch(() => {});
-  }, [artist?.name]);
+  }, [artistData?.artist?.name]);
 
-  const ownedMasterIds = new Set(myRecords.map((r) => String(r.discogs_id)).filter(Boolean));
+  // Derive display values
+  const artistName = artistData?.artist?.name
+    ?? (myRecords?.length > 0 ? myRecords[0].artist : "Artist");
+  const profileImage = artistData?.artist?.profile_image || "";
+
+  // Filter owned records by artist name (works in phase 1 with guessed name)
+  const ownedRecords = myRecords
+    ? myRecords.filter((r) => (r.artist || "").toLowerCase().includes(artistName.toLowerCase()))
+    : [];
+  const ownedMasterIds = new Set(ownedRecords.map((r) => String(r.discogs_id)).filter(Boolean));
+
+  // Discography (phase 2)
+  const { studioAlbums, epsSingles, live } = artistData
+    ? categorize(artistData.releases || [])
+    : { studioAlbums: [], epsSingles: [], live: [] };
+
   const ownedCount = studioAlbums.filter((a) => ownedMasterIds.has(String(a.id))).length;
   const totalCount = studioAlbums.length;
   const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
@@ -47,9 +154,6 @@ export default function ArtistPage({ artist, studioAlbums, epsSingles, live }) {
   const myPlaysRank = fanRank?.byPlays
     ? fanRank.byPlays.findIndex((u) => u.user_id === fanRank.currentUserId) + 1
     : null;
-
-  const profileImage = artist?.images?.[0]?.uri || artist?.images?.[0]?.uri150 || "";
-  const artistName = artist?.name || "Artist";
 
   return (
     <div
@@ -99,117 +203,71 @@ export default function ArtistPage({ artist, studioAlbums, epsSingles, live }) {
           </div>
         )}
 
-        {/* Studio albums progress */}
-        {totalCount > 0 && (
+        {/* Phase 1: owned records (shown immediately) */}
+        {myRecords !== null && ownedRecords.length > 0 && !artistData && (
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="text-stone-400 text-sm font-medium mb-2">Your records</div>
+            <div className="space-y-1">
+              {ownedRecords.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 py-1">
+                  {r.thumb ? (
+                    <img src={r.thumb} alt={r.title} className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded bg-stone-800 flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-stone-200 text-sm truncate">{r.title}</div>
+                    {r.year_original && <div className="text-stone-500 text-xs">{r.year_original}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Phase 2: full discography (text list, immediate; images lazy-load) */}
+        {artistData && totalCount > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
               <div className="text-stone-300 text-sm font-medium">Studio Albums</div>
               <div className="text-stone-500 text-xs">{ownedCount} / {totalCount} ({pct}%)</div>
             </div>
-            <div className="w-full bg-stone-800 rounded-full h-1.5 mb-3">
-              <div
-                className="bg-amber-600 h-1.5 rounded-full transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {studioAlbums.map((album) => {
-                const owned = ownedMasterIds.has(String(album.id));
-                const thumbUrl = album.thumb || "";
-                return (
-                  <div
-                    key={album.id}
-                    className={`relative aspect-square rounded-lg overflow-hidden border transition-all ${
-                      owned ? "border-amber-700/60" : "border-transparent opacity-40"
-                    }`}
-                    title={`${album.title} (${album.year || "?"})`}
-                  >
-                    {thumbUrl ? (
-                      <img src={thumbUrl} alt={album.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-stone-800 flex items-center justify-center">
-                        <span className="text-stone-600 text-xs">♪</span>
-                      </div>
-                    )}
-                    {owned && (
-                      <div className="absolute bottom-0 right-0 w-4 h-4 bg-amber-600 rounded-tl-md flex items-center justify-center">
-                        <span style={{ fontSize: 8, color: "white" }}>✓</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <ProgressBar pct={pct} />
+            <div className="mt-3 space-y-0.5">
+              {studioAlbums.map((album) => (
+                <ReleaseRow key={album.id} album={album} owned={ownedMasterIds.has(String(album.id))} />
+              ))}
             </div>
           </div>
         )}
 
-        {/* EPs/Singles collapsible */}
-        {epsSingles.length > 0 && (
-          <div>
-            <button
-              onClick={() => setShowEps((s) => !s)}
-              className="flex items-center justify-between w-full text-stone-400 text-sm py-1"
-            >
-              <span>EPs & Singles <span className="text-stone-600">({epsSingles.length})</span></span>
-              <span>{showEps ? "▲" : "▼"}</span>
-            </button>
-            {showEps && (
-              <div className="grid grid-cols-4 gap-2 mt-2">
-                {epsSingles.map((r) => {
-                  const owned = ownedMasterIds.has(String(r.id));
-                  return (
-                    <div
-                      key={r.id}
-                      className={`aspect-square rounded-lg overflow-hidden border ${owned ? "border-amber-700/60" : "border-transparent opacity-40"}`}
-                      title={r.title}
-                    >
-                      {r.thumb ? (
-                        <img src={r.thumb} alt={r.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-stone-800" />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {/* EPs & Singles */}
+        {artistData && epsSingles.length > 0 && (
+          <CollapsibleSection
+            label="EPs & Singles"
+            count={epsSingles.length}
+            items={epsSingles}
+            ownedIds={ownedMasterIds}
+          />
         )}
 
-        {/* Live collapsible */}
-        {live.length > 0 && (
-          <div>
-            <button
-              onClick={() => setShowLive((s) => !s)}
-              className="flex items-center justify-between w-full text-stone-400 text-sm py-1"
-            >
-              <span>Live <span className="text-stone-600">({live.length})</span></span>
-              <span>{showLive ? "▲" : "▼"}</span>
-            </button>
-            {showLive && (
-              <div className="grid grid-cols-4 gap-2 mt-2">
-                {live.map((r) => {
-                  const owned = ownedMasterIds.has(String(r.id));
-                  return (
-                    <div
-                      key={r.id}
-                      className={`aspect-square rounded-lg overflow-hidden border ${owned ? "border-amber-700/60" : "border-transparent opacity-40"}`}
-                      title={r.title}
-                    >
-                      {r.thumb ? (
-                        <img src={r.thumb} alt={r.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-stone-800" />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {/* Live */}
+        {artistData && live.length > 0 && (
+          <CollapsibleSection
+            label="Live"
+            count={live.length}
+            items={live}
+            ownedIds={ownedMasterIds}
+          />
         )}
 
-        {totalCount === 0 && epsSingles.length === 0 && live.length === 0 && (
+        {/* Loading state for discography */}
+        {discogsLoading && (
+          <div className="text-stone-600 text-sm text-center py-4">Loading discography…</div>
+        )}
+
+        {/* Empty state */}
+        {!discogsLoading && artistData && totalCount === 0 && epsSingles.length === 0 && live.length === 0 && (
           <div className="text-stone-600 text-sm text-center py-8">No releases found for this artist.</div>
         )}
       </div>
