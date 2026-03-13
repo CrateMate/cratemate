@@ -14,7 +14,7 @@ function mapSearchResult(r) {
     label: r.label?.[0] || "",
     year_pressed: year,
     year_original: year,
-    genre: r.style?.[0] || r.genre?.[0] || "",
+    genre: ((r.style || []).length > 0 ? (r.style || []).slice(0, 3) : (r.genre || []).slice(0, 2)).join(", "),
     condition: "",
     for_sale: false,
     format: (r.format || []).join(", "),
@@ -354,6 +354,10 @@ export function CoverArt({ record, size = 64 }) {
   return <VinylDisc record={record} size={size} />;
 }
 
+function getGenres(record) {
+  return (record.genre || "").split(",").map((g) => g.trim()).filter(Boolean);
+}
+
 function GenreTag({ genre, onClick, active }) {
   const cls = GENRE_STYLES[genre] || "bg-stone-800/40 text-stone-400 border-stone-700/40";
   return (
@@ -385,7 +389,7 @@ function condenseCondition(c) {
     .replace("Good (G)", "G");
 }
 
-function RecordRow({ record, onClick, onGenreClick, activeGenre, playCount }) {
+function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount }) {
   const originalYear = record.year_original || record.year_pressed;
   const pressedYear = record.year_pressed || null;
   const showPressed = originalYear && pressedYear && pressedYear !== originalYear;
@@ -414,7 +418,11 @@ function RecordRow({ record, onClick, onGenreClick, activeGenre, playCount }) {
             {showPressed && <div className="text-stone-700 text-[11px]">press {pressedYear}</div>}
           </div>
         ) : null}
-        <GenreTag genre={record.genre} onClick={onGenreClick} active={activeGenre === record.genre} />
+        <div className="flex flex-wrap justify-end gap-0.5">
+          {getGenres(record).map((g) => (
+            <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+          ))}
+        </div>
         {playCount > 0 && (
           <div className="text-stone-600 text-[11px]">▶ {playCount}</div>
         )}
@@ -423,7 +431,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenre, playCount }) {
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, playCount, lastPlayedDate }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, playCount, lastPlayedDate }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -596,7 +604,9 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
         >
           <div className="w-8 h-1 bg-white/15 rounded-full mx-auto mb-4" />
           <div className="flex flex-wrap gap-1.5 mb-4">
-            <GenreTag genre={record.genre} onClick={onGenreClick} active={activeGenre === record.genre} />
+            {getGenres(record).map((g) => (
+              <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+            ))}
             {record.is_compilation && (
               <span className="text-xs px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">
                 Compilation
@@ -993,7 +1003,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
   );
 }
 
-function RecoCard({ reco, onClose, onGenreClick, activeGenre }) {
+function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
   if (!reco) return null;
   const { record, reason, label } = reco;
   return (
@@ -1018,7 +1028,9 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenre }) {
             {(record.year_original || record.year_pressed) && (
               <span className="text-stone-500 text-xs">{record.year_original || record.year_pressed}</span>
             )}
-            <GenreTag genre={record.genre} onClick={onGenreClick} active={activeGenre === record.genre} />
+            {getGenres(record).map((g) => (
+              <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+            ))}
           </div>
         </div>
       </div>
@@ -1124,7 +1136,9 @@ export default function VinylCrate() {
   const [recoLoading, setRecoLoading] = useState(false);
   const [recoError, setRecoError] = useState("");
   const [mood, setMood] = useState("");
-  const [activeGenre, setActiveGenre] = useState(null);
+  const [activeGenres, setActiveGenres] = useState(new Set());
+  const toggleGenre = (g) =>
+    setActiveGenres((prev) => { const s = new Set(prev); s.has(g) ? s.delete(g) : s.add(g); return s; });
 
   const [playCounts, setPlayCounts] = useState({});
   const [lastPlayedDates, setLastPlayedDates] = useState({});
@@ -1212,7 +1226,7 @@ export default function VinylCrate() {
       (r.artist || "").toLowerCase().includes(q) ||
       (r.genre || "").toLowerCase().includes(q) ||
       (r.tracks || []).some((t) => (t.title || "").toLowerCase().includes(q));
-    const matchesGenre = !activeGenre || r.genre === activeGenre;
+    const matchesGenre = !activeGenres.size || getGenres(r).some((g) => activeGenres.has(g));
     return matchesSearch && matchesGenre;
   });
 
@@ -1226,11 +1240,12 @@ export default function VinylCrate() {
       return [...filtered].sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
     }
     // Genre mode: biggest genre cluster first, most-played within genre first
+    const primaryGenre = (r) => getGenres(r)[0] || "zzz";
     const genreCounts = {};
-    filtered.forEach((r) => { genreCounts[r.genre || "zzz"] = (genreCounts[r.genre || "zzz"] || 0) + 1; });
+    filtered.forEach((r) => { genreCounts[primaryGenre(r)] = (genreCounts[primaryGenre(r)] || 0) + 1; });
     return [...filtered].sort((a, b) => {
-      const ga = a.genre || "zzz";
-      const gb = b.genre || "zzz";
+      const ga = primaryGenre(a);
+      const gb = primaryGenre(b);
       if (ga !== gb) {
         const countDiff = (genreCounts[gb] || 0) - (genreCounts[ga] || 0);
         return countDiff !== 0 ? countDiff : ga.localeCompare(gb);
@@ -1561,12 +1576,12 @@ export default function VinylCrate() {
 
             <div className="flex items-center gap-2">
               <div className="text-xs text-stone-700">{filtered.length} records</div>
-              {activeGenre && (
+              {activeGenres.size > 0 && (
                 <button
-                  onClick={() => setActiveGenre(null)}
+                  onClick={() => setActiveGenres(new Set())}
                   className="text-xs px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 text-amber-400"
                 >
-                  {activeGenre} ×
+                  {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
                 </button>
               )}
               <div className="flex-1" />
@@ -1724,7 +1739,7 @@ export default function VinylCrate() {
               </div>
               {/* Genre filter strip */}
               {(() => {
-                const genres = [...new Set((pool).map((r) => r.genre).filter(Boolean))].sort();
+                const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
                 if (genres.length === 0) return null;
                 return (
                   <div className="absolute bottom-24 left-0 right-0 z-50 flex justify-center pointer-events-none">
@@ -1736,8 +1751,8 @@ export default function VinylCrate() {
                         <GenreTag
                           key={g}
                           genre={g}
-                          onClick={() => setActiveGenre(g === activeGenre ? null : g)}
-                          active={activeGenre === g}
+                          onClick={() => toggleGenre(g)}
+                          active={activeGenres.has(g)}
                         />
                       ))}
                     </div>
@@ -1771,8 +1786,8 @@ export default function VinylCrate() {
                     setSelected(rec);
                     if (!rec.for_sale) setLastPlayed(rec);
                   }}
-                  onGenreClick={setActiveGenre}
-                  activeGenre={activeGenre}
+                  onGenreClick={toggleGenre}
+                  activeGenres={activeGenres}
                   playCount={playCounts[r.id] || 0}
                 />
               ))}
@@ -1858,7 +1873,7 @@ export default function VinylCrate() {
           )}
           {recoError && <div className="text-red-500/70 text-sm text-center py-3">{recoError}</div>}
           {reco && !recoLoading && (
-            <RecoCard reco={reco} onClose={() => setReco(null)} onGenreClick={setActiveGenre} activeGenre={activeGenre} />
+            <RecoCard reco={reco} onClose={() => setReco(null)} onGenreClick={toggleGenre} activeGenres={activeGenres} />
           )}
         </div>
       )}
@@ -1949,8 +1964,8 @@ export default function VinylCrate() {
         <DetailSheet
           record={selected}
           onClose={() => setSelected(null)}
-          onGenreClick={setActiveGenre}
-          activeGenre={activeGenre}
+          onGenreClick={toggleGenre}
+          activeGenres={activeGenres}
           onToggleForSale={toggleForSale}
           onDelete={handleDelete}
           onLogPlay={logPlay}

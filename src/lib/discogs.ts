@@ -128,7 +128,7 @@ export function mapCollectionRelease(release: Record<string, unknown>, mediaFiel
     year_pressed: (info.year as number) || null,
     // Prefer to set original year via metadata enrichment (master release).
     year_original: null,
-    genre: styles[0] || genres[0] || "",
+    genre: (styles.length > 0 ? styles.slice(0, 3) : genres.slice(0, 2)).join(", "),
     condition,
     for_sale: false,
     format: fmtStr,
@@ -158,7 +158,7 @@ export function mapSearchResult(result: Record<string, unknown>) {
     label: labels[0] || "",
     year_pressed: year,
     year_original: year,
-    genre: styles[0] || genres[0] || "",
+    genre: (styles.length > 0 ? styles.slice(0, 3) : genres.slice(0, 2)).join(", "),
     condition: "",
     for_sale: false,
     format: formats.join(", "),
