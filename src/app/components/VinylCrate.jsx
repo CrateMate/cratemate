@@ -457,17 +457,18 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, playCount, lastPlayedDate }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
   const [favTracks, setFavTracks] = useState(record.favorite_tracks || []);
 
-  async function toggleFav(key) {
+  function toggleFav(key) {
     const next = favTracks.includes(key)
       ? favTracks.filter((k) => k !== key)
       : [...favTracks, key];
     setFavTracks(next);
+    onRecordUpdate?.({ favorite_tracks: next });
     fetch(`/api/records/${record.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -2031,6 +2032,11 @@ export default function VinylCrate() {
           onDelete={handleDelete}
           onLogPlay={logPlay}
           onUndoLogPlay={undoLogPlay}
+          onRecordUpdate={(patch) => {
+            const updated = { ...selected, ...patch };
+            setSelected(updated);
+            setCollection((prev) => Array.isArray(prev) ? prev.map((r) => r.id === updated.id ? updated : r) : prev);
+          }}
           playCount={playCounts[selected.id] || 0}
           lastPlayedDate={lastPlayedDates[selected.id] || null}
           onSeedNext={(rec) => {
