@@ -172,6 +172,7 @@ export async function GET(request: Request) {
   const flat: Array<{ type: string; position: string; title: string; duration: string }> = [];
   flattenTracklist((data.tracklist || []) as DiscogsTrack[], flat);
   const cover_image = data.cover_image || data.thumb || "";
+  const artists = Array.isArray(data.artists) ? data.artists.map((a: { id?: number; name?: string }) => ({ id: a.id, name: a.name })) : [];
 
   await upsertReleaseCache(releaseId, {
     cover_image,
@@ -181,5 +182,5 @@ export async function GET(request: Request) {
     year_pressed: typeof data.year === "number" ? data.year : null,
   });
 
-  return NextResponse.json({ release_id: releaseId, tracklist: flat, cover_image });
+  return NextResponse.json({ release_id: releaseId, tracklist: flat, cover_image, artists });
 }

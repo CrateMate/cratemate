@@ -423,7 +423,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenre, playCount }) {
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, playCount }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, playCount, lastPlayedDate }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -576,7 +576,17 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
             >
               {record.title}
             </div>
-            <div className="text-stone-200 text-sm mt-1">{record.artist}</div>
+            <div className="text-stone-200 text-sm mt-1">
+              {record.discogs_id ? (
+                <a
+                  href={`/artist/${record.discogs_id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="hover:text-amber-300 transition-colors underline-offset-2 hover:underline cursor-pointer"
+                >
+                  {record.artist}
+                </a>
+              ) : record.artist}
+            </div>
           </div>
         </div>
 
@@ -663,6 +673,22 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenre, o
               </button>
             )}
           </div>
+
+          {lastPlayedDate && (
+            <div className="text-stone-600 text-xs text-center mb-4">
+              Last played: {(() => {
+                const diff = Date.now() - new Date(lastPlayedDate).getTime();
+                const mins = Math.floor(diff / 60000);
+                if (mins < 1) return "just now";
+                if (mins < 60) return `${mins} min ago`;
+                const hrs = Math.floor(mins / 60);
+                if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
+                const days = Math.floor(hrs / 24);
+                if (days === 1) return "yesterday";
+                return `${days} days ago`;
+              })()}
+            </div>
+          )}
 
           <div className="mb-2 text-stone-400 text-xs uppercase tracking-widest">Tracklist</div>
           {trackLoading && <div className="text-stone-600 text-sm py-2">Loading tracklist...</div>}
@@ -1101,6 +1127,8 @@ export default function VinylCrate() {
   const [activeGenre, setActiveGenre] = useState(null);
 
   const [playCounts, setPlayCounts] = useState({});
+  const [lastPlayedDates, setLastPlayedDates] = useState({});
+  const [playSessions, setPlaySessions] = useState([]);
   const [viewMode, setViewMode] = useState("list");
   const [honeycombSort, setHoneycombSort] = useState("year");
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
@@ -1152,7 +1180,12 @@ export default function VinylCrate() {
   async function loadPlays() {
     try {
       const res = await fetch("/api/plays");
-      if (res.ok) setPlayCounts(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setPlayCounts(data.counts || data);
+        setLastPlayedDates(data.lastPlayed || {});
+        setPlaySessions(data.sessions || []);
+      }
     } catch {}
   }
 
@@ -1188,6 +1221,9 @@ export default function VinylCrate() {
       return [...filtered].sort((a, b) =>
         (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999)
       );
+    }
+    if (honeycombSort === "az") {
+      return [...filtered].sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
     }
     // Genre mode: biggest genre cluster first, most-played within genre first
     const genreCounts = {};
@@ -1363,12 +1399,16 @@ export default function VinylCrate() {
   }
 
   async function logPlay(recordId) {
-    await fetch("/api/plays", {
+    const res = await fetch("/api/plays", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ record_id: recordId }),
     });
+    const data = await res.json();
+    const playedAt = data.played_at || new Date().toISOString();
     setPlayCounts((prev) => ({ ...prev, [recordId]: (prev[recordId] || 0) + 1 }));
+    setLastPlayedDates((prev) => ({ ...prev, [recordId]: playedAt }));
+    setPlaySessions((prev) => [{ id: data.id || crypto.randomUUID(), record_id: recordId, played_at: playedAt }, ...prev]);
   }
 
   async function undoLogPlay(recordId) {
@@ -1378,6 +1418,20 @@ export default function VinylCrate() {
       body: JSON.stringify({ record_id: recordId }),
     });
     setPlayCounts((prev) => ({ ...prev, [recordId]: Math.max((prev[recordId] || 0) - 1, 0) }));
+    // Remove most recent session for this record, update lastPlayedDates
+    setPlaySessions((prev) => {
+      const idx = prev.findIndex((s) => s.record_id === recordId);
+      if (idx === -1) return prev;
+      const next = [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      const nextForRecord = next.find((s) => s.record_id === recordId);
+      setLastPlayedDates((d) => {
+        const nd = { ...d };
+        if (nextForRecord) nd[recordId] = nextForRecord.played_at;
+        else delete nd[recordId];
+        return nd;
+      });
+      return next;
+    });
   }
 
   if (!Array.isArray(collection)) {
@@ -1428,6 +1482,7 @@ export default function VinylCrate() {
       {viewMode !== "drift" && <div className="flex px-4 gap-1 mt-3 mb-2">
         {[
           ["crate", "⏺ Crate"],
+          ["history", "▷ History"],
           ["reco", "✦ Reco"],
         ].map(([id, label]) => (
           <button
@@ -1657,7 +1712,7 @@ export default function VinylCrate() {
               </div>
               {/* Top-right: sort toggle */}
               <div className="absolute top-4 right-4 z-50 flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
-                {[["year", "Year"], ["genre", "Genre"]].map(([val, label], i) => (
+                {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
                   <button
                     key={val}
                     onClick={() => setHoneycombSort(val)}
@@ -1667,6 +1722,28 @@ export default function VinylCrate() {
                   </button>
                 ))}
               </div>
+              {/* Genre filter strip */}
+              {(() => {
+                const genres = [...new Set((pool).map((r) => r.genre).filter(Boolean))].sort();
+                if (genres.length === 0) return null;
+                return (
+                  <div className="absolute bottom-20 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                    <div
+                      className="flex gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
+                      style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
+                    >
+                      {genres.map((g) => (
+                        <GenreTag
+                          key={g}
+                          genre={g}
+                          onClick={() => setActiveGenre(g === activeGenre ? null : g)}
+                          active={activeGenre === g}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Bottom-center: zoom */}
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                 <button
@@ -1786,6 +1863,88 @@ export default function VinylCrate() {
         </div>
       )}
 
+      {tab === "history" && (
+        <div className="flex-1 px-4 overflow-y-auto pb-8">
+          {(() => {
+            const totalPlays = playSessions.length;
+            const uniqueRecords = new Set(playSessions.map((s) => s.record_id)).size;
+            const mostPlayedId = Object.entries(playCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+            const mostPlayed = mostPlayedId ? collection?.find((r) => String(r.id) === String(mostPlayedId)) : null;
+            return (
+              <>
+                {totalPlays > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-4 mt-1">
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Total Plays</div>
+                      <div className="text-stone-200 text-sm font-medium">{totalPlays}</div>
+                    </div>
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Unique Records</div>
+                      <div className="text-stone-200 text-sm font-medium">{uniqueRecords}</div>
+                    </div>
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Most Played</div>
+                      <div className="text-stone-200 text-xs font-medium truncate">{mostPlayed?.title || "—"}</div>
+                    </div>
+                  </div>
+                )}
+                {playSessions.length === 0 ? (
+                  <div className="text-stone-600 text-sm text-center py-16">No plays logged yet.</div>
+                ) : (
+                  <div className="space-y-1">
+                    {playSessions.map((session) => {
+                      const rec = collection?.find((r) => String(r.id) === String(session.record_id));
+                      if (!rec) return null;
+                      const relDate = (() => {
+                        const diff = Date.now() - new Date(session.played_at).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 1) return "just now";
+                        if (mins < 60) return `${mins}m ago`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs}h ago`;
+                        const days = Math.floor(hrs / 24);
+                        if (days === 1) return "Yesterday";
+                        if (days < 7) return `${days}d ago`;
+                        return new Date(session.played_at).toLocaleDateString();
+                      })();
+                      return (
+                        <div key={session.id} className="flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all">
+                          <CoverArt record={rec} size={40} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
+                            <div className="text-stone-500 text-xs truncate">{rec.artist}</div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-stone-600 text-xs">{relDate}</div>
+                            <button
+                              onClick={async () => {
+                                await fetch(`/api/plays/${session.id}`, { method: "DELETE" });
+                                setPlaySessions((prev) => prev.filter((s) => s.id !== session.id));
+                                setPlayCounts((prev) => ({ ...prev, [session.record_id]: Math.max((prev[session.record_id] || 0) - 1, 0) }));
+                                setLastPlayedDates((prev) => {
+                                  const remaining = playSessions.filter((s) => s.id !== session.id && s.record_id === session.record_id);
+                                  const nd = { ...prev };
+                                  if (remaining.length > 0) nd[session.record_id] = remaining[0].played_at;
+                                  else delete nd[session.record_id];
+                                  return nd;
+                                });
+                              }}
+                              className="text-stone-700 hover:text-stone-400 transition-colors text-base w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/[0.06]"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
       {selected && (
         <DetailSheet
           record={selected}
@@ -1797,6 +1956,7 @@ export default function VinylCrate() {
           onLogPlay={logPlay}
           onUndoLogPlay={undoLogPlay}
           playCount={playCounts[selected.id] || 0}
+          lastPlayedDate={lastPlayedDates[selected.id] || null}
           onSeedNext={(rec) => {
             setLastPlayed(rec);
             setTab("reco");

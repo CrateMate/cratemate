@@ -8,17 +8,20 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("play_sessions")
-    .select("record_id")
-    .eq("user_id", userId);
+    .select("id, record_id, played_at")
+    .eq("user_id", userId)
+    .order("played_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const counts: Record<string, number> = {};
+  const lastPlayed: Record<string, string> = {};
   for (const row of data || []) {
     counts[row.record_id] = (counts[row.record_id] || 0) + 1;
+    if (!lastPlayed[row.record_id]) lastPlayed[row.record_id] = row.played_at;
   }
 
-  return NextResponse.json(counts);
+  return NextResponse.json({ counts, lastPlayed, sessions: data || [] });
 }
 
 export async function POST(request: Request) {
@@ -29,13 +32,15 @@ export async function POST(request: Request) {
   if (!record_id) return NextResponse.json({ error: "record_id required" }, { status: 400 });
 
   const played_at = new Date().toISOString();
-  const { error } = await supabase
+  const { data: inserted, error } = await supabase
     .from("play_sessions")
-    .insert({ user_id: userId, record_id, played_at });
+    .insert({ user_id: userId, record_id, played_at })
+    .select("id, played_at")
+    .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ played_at });
+  return NextResponse.json({ id: inserted?.id, played_at: inserted?.played_at || played_at });
 }
 
 export async function DELETE(request: Request) {
