@@ -227,13 +227,17 @@ export default function ArtistPage({ releaseId }) {
           </div>
         )}
 
-        {/* Your records — always visible */}
+        {/* Your records — always visible, tappable */}
         {myRecords !== null && ownedRecords.length > 0 && (
           <div>
             <div className="text-stone-400 text-sm font-medium mb-2">Your records</div>
             <div className="space-y-1">
               {ownedRecords.map((r) => (
-                <div key={r.id} className="flex items-center gap-3 py-1">
+                <a
+                  key={r.id}
+                  href={`/?record=${r.id}`}
+                  className="flex items-center gap-3 py-1 rounded-lg hover:bg-white/[0.04] transition-colors"
+                >
                   {r.thumb ? (
                     <img src={r.thumb} alt={r.title} className="w-8 h-8 rounded object-cover flex-shrink-0" />
                   ) : (
@@ -243,7 +247,8 @@ export default function ArtistPage({ releaseId }) {
                     <div className="text-stone-200 text-sm truncate">{r.title}</div>
                     {r.year_original && <div className="text-stone-500 text-xs">{r.year_original}</div>}
                   </div>
-                </div>
+                  <span className="text-stone-600 text-xs pr-1">→</span>
+                </a>
               ))}
             </div>
           </div>

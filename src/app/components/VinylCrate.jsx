@@ -461,6 +461,19 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
+  const [favTracks, setFavTracks] = useState(record.favorite_tracks || []);
+
+  async function toggleFav(key) {
+    const next = favTracks.includes(key)
+      ? favTracks.filter((k) => k !== key)
+      : [...favTracks, key];
+    setFavTracks(next);
+    fetch(`/api/records/${record.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite_tracks: next }),
+    }).catch(() => {});
+  }
   const [heroUrl, setHeroUrl] = useState("");
   const [itunesUrl, setItunesUrl] = useState("");
   const preferThumb = !!record?.thumb;
@@ -733,17 +746,32 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
             <div className="text-stone-600 text-sm py-2">No tracklist found.</div>
           )}
           <div className="space-y-2">
-            {tracks.map((t, i) => (
-              <div key={`${t.position || "h"}-${i}`} className="flex items-start gap-3">
-                <div className="text-stone-600 text-xs w-10 shrink-0 pt-0.5">{t.position || "—"}</div>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm ${t.type === "heading" ? "text-stone-300 uppercase tracking-widest text-xs" : "text-amber-50"}`}>
-                    {t.title}
+            {tracks.map((t, i) => {
+              const key = t.position || String(i);
+              const faved = favTracks.includes(key);
+              const isHeading = t.type === "heading";
+              return (
+                <div key={`${t.position || "h"}-${i}`} className="flex items-start gap-3">
+                  <div className="text-stone-600 text-xs w-10 shrink-0 pt-0.5">{t.position || "—"}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm ${isHeading ? "text-stone-300 uppercase tracking-widest text-xs" : "text-amber-50"}`}>
+                      {t.title}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <span className="text-stone-600 text-xs">{t.duration || ""}</span>
+                    {!isHeading && (
+                      <button
+                        onClick={() => toggleFav(key)}
+                        className={`text-sm transition-colors ${faved ? "text-rose-400" : "text-stone-700 hover:text-stone-400"}`}
+                      >
+                        ♥
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="text-stone-600 text-xs shrink-0 pt-0.5">{t.duration || ""}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {!record.discogs_instance_id && (
@@ -1188,7 +1216,14 @@ export default function VinylCrate() {
     try {
       const res = await fetch("/api/records");
       const data = await res.json();
-      setCollection(Array.isArray(data) ? data : []);
+      const records = Array.isArray(data) ? data : [];
+      setCollection(records);
+      // Auto-open a record if ?record=[id] is in the URL (e.g. navigating from artist page)
+      const openId = new URLSearchParams(window.location.search).get("record");
+      if (openId) {
+        const match = records.find((r) => String(r.id) === openId);
+        if (match) { setSelected(match); window.history.replaceState({}, "", "/"); }
+      }
     } catch {
       setCollectionError("Couldn't load your records.");
       setCollection([]);
