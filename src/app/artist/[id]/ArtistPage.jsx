@@ -145,7 +145,8 @@ export default function ArtistPage({ releaseId }) {
 
   // Derive display values
   const artistName = artistData?.artist?.name
-    ?? (myRecords?.length > 0 ? myRecords[0].artist : "Artist");
+    ?? myRecords?.find((r) => String(r.discogs_id) === String(releaseId))?.artist
+    ?? "Artist";
   const profileImage = artistData?.artist?.profile_image || "";
 
   // Filter owned records by artist name (works in phase 1 with guessed name)
