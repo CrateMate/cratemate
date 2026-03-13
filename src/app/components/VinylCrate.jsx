@@ -134,24 +134,30 @@ function AddRecordModal({ onClose, onAdd }) {
   );
 }
 
-const GENRE_STYLES = {
-  "Classic Rock": "bg-orange-900/40 text-orange-300 border-orange-800/40",
-  "Hard Rock": "bg-red-900/40 text-red-300 border-red-800/40",
-  "Pop Rock": "bg-sky-900/40 text-sky-300 border-sky-800/40",
-  "Soft Rock": "bg-teal-900/40 text-teal-300 border-teal-800/40",
-  "Rock & Roll": "bg-yellow-900/40 text-yellow-300 border-yellow-800/40",
-  "Funk/Soul": "bg-purple-900/40 text-purple-300 border-purple-800/40",
-  Jazz: "bg-indigo-900/40 text-indigo-300 border-indigo-800/40",
-  Latin: "bg-rose-900/40 text-rose-300 border-rose-800/40",
-  "Punk Rock": "bg-lime-900/40 text-lime-300 border-lime-800/40",
-  Electronic: "bg-cyan-900/40 text-cyan-300 border-cyan-800/40",
-  Blues: "bg-blue-900/40 text-blue-300 border-blue-800/40",
-  Pop: "bg-pink-900/40 text-pink-300 border-pink-800/40",
-  "Rock en Espanol": "bg-amber-900/40 text-amber-300 border-amber-800/40",
-  Country: "bg-green-900/40 text-green-300 border-green-800/40",
-  Reggae: "bg-emerald-900/40 text-emerald-300 border-emerald-800/40",
-  Classical: "bg-violet-900/40 text-violet-300 border-violet-800/40",
-};
+const GENRE_COLORS = [
+  "bg-orange-900/40 text-orange-300 border-orange-800/40",
+  "bg-red-900/40 text-red-300 border-red-800/40",
+  "bg-sky-900/40 text-sky-300 border-sky-800/40",
+  "bg-teal-900/40 text-teal-300 border-teal-800/40",
+  "bg-yellow-900/40 text-yellow-300 border-yellow-800/40",
+  "bg-purple-900/40 text-purple-300 border-purple-800/40",
+  "bg-indigo-900/40 text-indigo-300 border-indigo-800/40",
+  "bg-rose-900/40 text-rose-300 border-rose-800/40",
+  "bg-lime-900/40 text-lime-300 border-lime-800/40",
+  "bg-cyan-900/40 text-cyan-300 border-cyan-800/40",
+  "bg-blue-900/40 text-blue-300 border-blue-800/40",
+  "bg-pink-900/40 text-pink-300 border-pink-800/40",
+  "bg-amber-900/40 text-amber-300 border-amber-800/40",
+  "bg-green-900/40 text-green-300 border-green-800/40",
+  "bg-emerald-900/40 text-emerald-300 border-emerald-800/40",
+  "bg-violet-900/40 text-violet-300 border-violet-800/40",
+];
+
+function genreColor(genre) {
+  let hash = 0;
+  for (let i = 0; i < genre.length; i++) hash = (hash * 31 + genre.charCodeAt(i)) >>> 0;
+  return GENRE_COLORS[hash % GENRE_COLORS.length];
+}
 
 const DISC_GRADIENT_PAIRS = [
   ["#1f0a0a", "#3a0d0d"],
@@ -359,7 +365,7 @@ function getGenres(record) {
 }
 
 function GenreTag({ genre, onClick, active }) {
-  const cls = GENRE_STYLES[genre] || "bg-stone-800/40 text-stone-400 border-stone-700/40";
+  const cls = genreColor(genre || "");
   return (
     <span
       onClick={
