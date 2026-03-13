@@ -395,6 +395,26 @@ function condenseCondition(c) {
     .replace("Good (G)", "G");
 }
 
+function ArtistTag({ artist, discogsId }) {
+  const cls = "bg-stone-800/60 text-stone-300 border-stone-700/50";
+  if (discogsId) {
+    return (
+      <a
+        href={`/artist/${discogsId}`}
+        onClick={(e) => e.stopPropagation()}
+        className={`text-xs px-1.5 py-0.5 rounded-full border ${cls} whitespace-nowrap hover:text-amber-300 hover:border-amber-800/50 transition-colors`}
+      >
+        {artist}
+      </a>
+    );
+  }
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded-full border ${cls} whitespace-nowrap`}>
+      {artist}
+    </span>
+  );
+}
+
 function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount }) {
   const originalYear = record.year_original || record.year_pressed;
   const pressedYear = record.year_pressed || null;
@@ -412,9 +432,9 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
         >
           {record.title}
         </div>
-        <div className="text-stone-400 text-xs truncate mt-0.5">
-          {record.artist}
-          {record.for_sale && <span className="ml-2 text-rose-400/80">FOR SALE</span>}
+        <div className="flex items-center gap-1 flex-wrap mt-0.5">
+          <ArtistTag artist={record.artist} discogsId={record.discogs_id} />
+          {record.for_sale && <span className="text-xs text-rose-400/80">FOR SALE</span>}
         </div>
       </div>
       <div className="flex flex-col items-end gap-1 shrink-0 ml-1">

@@ -78,7 +78,7 @@ function ReleaseRow({ album, owned }) {
   );
 }
 
-function CollapsibleSection({ label, count, items, ownedIds }) {
+function CollapsibleSection({ label, count, items, isOwned }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -92,7 +92,7 @@ function CollapsibleSection({ label, count, items, ownedIds }) {
       {open && (
         <div className="mt-1 space-y-0.5">
           {items.map((r) => (
-            <ReleaseRow key={r.id} album={r} owned={ownedIds.has(String(r.id))} />
+            <ReleaseRow key={r.id} album={r} owned={isOwned(r)} />
           ))}
         </div>
       )}
@@ -149,20 +149,28 @@ export default function ArtistPage({ releaseId }) {
     ?? "Artist";
   const profileImage = artistData?.artist?.profile_image || "";
 
-  // Filter owned records by artist name (works in phase 1 with guessed name)
+  // Filter owned records by artist name
   const ownedRecords = myRecords
     ? myRecords.filter((r) => (r.artist || "").toLowerCase().includes(artistName.toLowerCase()))
     : [];
-  const ownedMasterIds = new Set(ownedRecords.map((r) => String(r.discogs_id)).filter(Boolean));
+
+  // Title-based ownership — user records have release IDs, Discogs masters have master IDs.
+  // They are different ID spaces and will never match numerically.
+  const ownedTitles = new Set(
+    ownedRecords.map((r) => (r.title || "").toLowerCase().trim()).filter(Boolean)
+  );
+  const isOwned = (album) => ownedTitles.has((album.title || "").toLowerCase().trim());
 
   // Discography (phase 2)
   const { studioAlbums, epsSingles, live } = artistData
     ? categorize(artistData.releases || [])
     : { studioAlbums: [], epsSingles: [], live: [] };
 
-  const ownedCount = studioAlbums.filter((a) => ownedMasterIds.has(String(a.id))).length;
+  const ownedCount = studioAlbums.filter(isOwned).length;
   const totalCount = studioAlbums.length;
-  const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0;
+  // Only show progress if discography loaded; if user has records but none matched
+  // the discography (e.g. live albums, non-standard releases) show what we know.
+  const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : null;
 
   const myOwnedRank = fanRank?.byOwned
     ? fanRank.byOwned.findIndex((u) => u.user_id === fanRank.currentUserId) + 1
@@ -219,8 +227,8 @@ export default function ArtistPage({ releaseId }) {
           </div>
         )}
 
-        {/* Phase 1: owned records (shown immediately) */}
-        {myRecords !== null && ownedRecords.length > 0 && !artistData && (
+        {/* Your records — always visible */}
+        {myRecords !== null && ownedRecords.length > 0 && (
           <div>
             <div className="text-stone-400 text-sm font-medium mb-2">Your records</div>
             <div className="space-y-1">
@@ -246,12 +254,14 @@ export default function ArtistPage({ releaseId }) {
           <div>
             <div className="flex items-center justify-between mb-1">
               <div className="text-stone-300 text-sm font-medium">Studio Albums</div>
-              <div className="text-stone-500 text-xs">{ownedCount} / {totalCount} ({pct}%)</div>
+              <div className="text-stone-500 text-xs">
+                {pct !== null ? `${ownedCount} / ${totalCount} (${pct}%)` : `${totalCount} albums`}
+              </div>
             </div>
-            <ProgressBar pct={pct} />
+            {pct !== null && <ProgressBar pct={pct} />}
             <div className="mt-3 space-y-0.5">
               {studioAlbums.map((album) => (
-                <ReleaseRow key={album.id} album={album} owned={ownedMasterIds.has(String(album.id))} />
+                <ReleaseRow key={album.id} album={album} owned={isOwned(album)} />
               ))}
             </div>
           </div>
@@ -263,7 +273,7 @@ export default function ArtistPage({ releaseId }) {
             label="EPs & Singles"
             count={epsSingles.length}
             items={epsSingles}
-            ownedIds={ownedMasterIds}
+            isOwned={isOwned}
           />
         )}
 
@@ -273,7 +283,7 @@ export default function ArtistPage({ releaseId }) {
             label="Live"
             count={live.length}
             items={live}
-            ownedIds={ownedMasterIds}
+            isOwned={isOwned}
           />
         )}
 
