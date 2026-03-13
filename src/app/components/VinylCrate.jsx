@@ -1742,7 +1742,7 @@ export default function VinylCrate() {
                 const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
                 if (genres.length === 0) return null;
                 return (
-                  <div className="absolute bottom-24 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                  <div className="absolute bottom-16 left-0 right-0 z-50 flex justify-center pointer-events-none">
                     <div
                       className="flex gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
                       style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
@@ -1760,7 +1760,7 @@ export default function VinylCrate() {
                 );
               })()}
               {/* Bottom-center: zoom */}
-              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+              <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                 <button
                   onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
                   className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
