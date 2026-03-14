@@ -4,13 +4,14 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export async function POST(request) {
   try {
-    const { messages, max_tokens = 400, model = "claude-haiku-4-5-20251001" } =
+    const { messages, max_tokens = 400, model = "claude-haiku-4-5-20251001", system } =
       await request.json();
 
     const response = await client.messages.create({
       model,
       max_tokens,
       messages,
+      ...(system ? { system } : {}),
     });
 
     return Response.json({ content: response.content });

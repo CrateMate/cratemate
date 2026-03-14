@@ -763,7 +763,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
           </div>
 
           <div className="mb-2">
-            <SpotifyButton artist={record.artist} title={record.title} />
+            <StreamingButtons artist={record.artist} title={record.title} />
           </div>
 
           <div className="flex gap-2 mb-5">
@@ -1218,8 +1218,8 @@ function CrateSyncAnimation() {
   );
 }
 
-async function callClaude(messages, maxTokens = 400, system = null) {
-  const body = { messages, max_tokens: maxTokens };
+async function callClaude(messages, maxTokens = 400, system = null, model = "claude-haiku-4-5-20251001") {
+  const body = { messages, max_tokens: maxTokens, model };
   if (system) body.system = system;
   const res = await fetch("/api/claude", {
     method: "POST",
@@ -1250,20 +1250,64 @@ async function readJsonOrText(res) {
   }
 }
 
-function SpotifyButton({ artist, title }) {
-  const url = `https://open.spotify.com/search/${encodeURIComponent(`${artist} ${title}`)}`;
+function StreamingButtons({ artist, title }) {
+  const query = encodeURIComponent(`${artist} ${title}`);
+  const platforms = [
+    {
+      name: "Spotify",
+      url: `https://open.spotify.com/search/${query}`,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+        </svg>
+      ),
+    },
+    {
+      name: "Apple",
+      url: `https://music.apple.com/search?term=${query}`,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+        </svg>
+      ),
+    },
+    {
+      name: "YT Music",
+      url: `https://music.youtube.com/search?q=${query}`,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm0 19.104c-3.924 0-7.104-3.18-7.104-7.104S8.076 4.896 12 4.896s7.104 3.18 7.104 7.104-3.18 7.104-7.104 7.104zm0-13.332c-3.432 0-6.228 2.796-6.228 6.228S8.568 18.228 12 18.228s6.228-2.796 6.228-6.228S15.432 5.772 12 5.772zM9.684 15.54V8.46L15.816 12l-6.132 3.54z"/>
+        </svg>
+      ),
+    },
+    {
+      name: "Tidal",
+      url: `https://listen.tidal.com/search?q=${query}`,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12.012 3.992L8.008 7.996 4.004 3.992 0 7.996l4.004 4.004 4.004-4.004 4.004 4.004 4.004-4.004zM8.008 16.004l4.004-4.004 4.004 4.004 4.004-4.004-4.004-4.004-4.004 4.004-4.004-4.004-4.004 4.004z"/>
+        </svg>
+      ),
+    },
+  ];
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-[#1DB954]/30 text-[#1DB954] text-sm font-medium hover:bg-[#1DB954]/10 transition-colors"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-      </svg>
-      Play on Spotify
-    </a>
+    <div>
+      <div className="text-xs text-stone-500 mb-1.5">Play on</div>
+      <div className="grid grid-cols-4 gap-2">
+        {platforms.map(({ name, url, icon }) => (
+          <a
+            key={name}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-1 py-2.5 rounded-xl border border-stone-700/60 text-stone-400 hover:bg-white hover:text-stone-900 hover:border-white/80 transition-colors"
+          >
+            {icon}
+            <span className="text-[10px]">{name}</span>
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1297,8 +1341,9 @@ export default function VinylCrate() {
 
   const [shareCopied, setShareCopied] = useState(false);
   const [favTitles, setFavTitles] = useState({});
-  const [page, setPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(25);
   const PAGE_SIZE = 25;
+  const sentinelRef = useRef(null);
 
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
@@ -1385,7 +1430,15 @@ export default function VinylCrate() {
     }
   }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
 
-  useEffect(() => { setPage(1); }, [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setVisibleCount(c => c + PAGE_SIZE);
+    }, { threshold: 0.1 });
+    if (sentinelRef.current) observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [visibleCount]);
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
@@ -1411,8 +1464,8 @@ export default function VinylCrate() {
     return matchesSearch && matchesGenre && matchesDecade && matchesFormat;
   });
 
-  const totalPages = search ? 1 : Math.ceil(filtered.length / PAGE_SIZE);
-  const pagedRecords = search ? filtered : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pagedRecords = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   const honeycombRecords = (() => {
     if (honeycombSort === "year") {
@@ -1439,6 +1492,14 @@ export default function VinylCrate() {
     });
   })();
 
+  const decades = useMemo(() => {
+    const ds = new Set(pool.map(r => {
+      const y = r.year_original || r.year_pressed;
+      return y ? Math.floor(y / 10) * 10 : null;
+    }).filter(Boolean));
+    return [...ds].sort();
+  }, [pool]);
+
   const getReco = useCallback(
     async (type) => {
       setRecoLoading(true);
@@ -1457,23 +1518,25 @@ export default function VinylCrate() {
         let ctx = "";
         if (type === "random") ctx = "Pick one completely random record. Surprise me.";
         else if (type === "daily")
-          ctx = `Today is ${month} ${day}. Pick the most fitting record for this date — consider season, holidays, and time-of-year energy. Be creative and specific.`;
+          ctx = `Today is ${month} ${day}. Pick a record that feels right to spin today — let the season be a light backdrop, not the main filter. Trust the music itself.`;
         else if (type === "mood") ctx = `Pick the single best record for this mood: "${mood}"`;
         else
           ctx = `I just listened to "${lastPlayed?.title}" by ${lastPlayed?.artist} (${lastPlayed?.year_original || lastPlayed?.year_pressed}, ${
             lastPlayed?.genre
           }). Pick the ideal next record.`;
 
-        const SYSTEM = "You are a vinyl curator with encyclopedic knowledge of music. You recommend records from the user's personal collection. Always return valid JSON only — no markdown, no prose outside the JSON object.";
+        const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Speak like a knowledgeable friend, not a curator. Return valid JSON only — no markdown, no prose outside the JSON.";
+        const model = (type === "daily" || type === "mood") ? "claude-sonnet-4-6" : undefined;
         const text = await callClaude(
           [
             {
               role: "user",
-              content: `${ctx}\n\nCollection:\n${list}\n\nRespond ONLY with JSON: {"id":<number>,"reason":"<one vivid specific sentence>"}`,
+              content: `${ctx}\n\nCollection:\n${list}\n\nRespond ONLY with JSON: {"id":<number>,"reason":"<1-2 casual conversational sentences — why this record, why now>"}`,
             },
           ],
           500,
-          SYSTEM
+          SYSTEM,
+          model
         );
         const parsed = extractJson(text);
         const found = myRecords.find((r) => r.id === parsed.id);
@@ -1779,7 +1842,7 @@ export default function VinylCrate() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="text-xs text-stone-700">{filtered.length} records{!search && totalPages > 1 ? ` · p${page}/${totalPages}` : ""}</div>
+              <div className="text-xs text-stone-700">{filtered.length} records</div>
               {activeGenres.size > 0 && (
                 <button
                   onClick={() => setActiveGenres(new Set())}
@@ -1953,6 +2016,25 @@ export default function VinylCrate() {
                   </button>
                 </div>
               )}
+              {/* Decade picker strip */}
+              {decades.length > 0 && (
+                <div className="absolute bottom-48 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                  <div
+                    className="flex gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
+                    style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
+                  >
+                    <button
+                      onClick={() => setActiveDecade(null)}
+                      className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${!activeDecade ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                    >All</button>
+                    {decades.map(d => (
+                      <button key={d} onClick={() => setActiveDecade(activeDecade === d ? null : d)}
+                        className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${activeDecade === d ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                      >{d}s</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* Genre filter strip */}
               {(() => {
                 const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
@@ -2008,18 +2090,8 @@ export default function VinylCrate() {
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
-              {!search && totalPages > 1 && (
-                <div className="flex items-center justify-center gap-3 py-4">
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                    className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
-                    ← Prev
-                  </button>
-                  <span className="text-stone-600 text-xs">{page} / {totalPages}</span>
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                    className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
-                    Next →
-                  </button>
-                </div>
+              {hasMore && (
+                <div ref={sentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>
               )}
             </div>
           )}
