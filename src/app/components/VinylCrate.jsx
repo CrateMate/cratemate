@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UserButton, useUser } from "@clerk/nextjs";
 
 function mapSearchResult(r) {
@@ -364,6 +364,63 @@ function getGenres(record) {
   return (record.genre || "").split(",").map((g) => g.trim()).filter(Boolean);
 }
 
+function getDecade(record) {
+  const y = record.year_original || record.year_pressed;
+  if (!y) return null;
+  return `${Math.floor(y / 10) * 10}s`;
+}
+
+function getFormat(record) {
+  const fmt = (record.format || "").toLowerCase();
+  if (fmt.includes("ep")) return "EP";
+  if (fmt.includes("single") || /7["\-]/.test(fmt)) return "Single";
+  if (fmt.includes("lp") || fmt.includes("12\"") || fmt.includes("album") || fmt.includes("vinyl") || fmt.includes("33")) return "LP";
+  if (!fmt) return null;
+  return "Other";
+}
+
+function normFav(f) {
+  return typeof f === "object" && f !== null ? f : { key: f, title: f };
+}
+
+function buildCollectionStats(records) {
+  const decades = {}, genres = {}, formats = {};
+  for (const r of records) {
+    const d = getDecade(r);
+    if (d) decades[d] = (decades[d] || 0) + 1;
+    getGenres(r).forEach((g) => { genres[g] = (genres[g] || 0) + 1; });
+    const f = getFormat(r);
+    if (f) formats[f] = (formats[f] || 0) + 1;
+  }
+  return { decades, genres, formats };
+}
+
+function buildTimeStats(sessions, records) {
+  const byHour = Array(24).fill(0);
+  const byDow = Array(7).fill(0);
+  const midnightCounts = {}, sunMorningCounts = {};
+  for (const s of sessions) {
+    const d = new Date(s.played_at);
+    const h = d.getHours();
+    const dow = d.getDay();
+    byHour[h]++;
+    byDow[dow]++;
+    if (h >= 0 && h < 4) midnightCounts[s.record_id] = (midnightCounts[s.record_id] || 0) + 1;
+    if (dow === 0 && h >= 8 && h < 12) sunMorningCounts[s.record_id] = (sunMorningCounts[s.record_id] || 0) + 1;
+  }
+  const nightPlays = [18,19,20,21,22,23,0,1,2,3].reduce((a,h) => a + byHour[h], 0);
+  const dayPlays = [6,7,8,9,10,11,12,13,14,15,16,17].reduce((a,h) => a + byHour[h], 0);
+  const weekendPlays = byDow[0] + byDow[6];
+  const midId = Object.entries(midnightCounts).sort((a,b) => b[1]-a[1])[0]?.[0];
+  const sunId = Object.entries(sunMorningCounts).sort((a,b) => b[1]-a[1])[0]?.[0];
+  return {
+    byHour, byDow, nightPlays, dayPlays, weekendPlays,
+    weekdayPlays: byDow.slice(1,6).reduce((a,b)=>a+b,0),
+    midnightRecord: midId ? records?.find((r) => String(r.id) === midId) : null,
+    sunMorningRecord: sunId ? records?.find((r) => String(r.id) === sunId) : null,
+  };
+}
+
 function GenreTag({ genre, onClick, active }) {
   const cls = genreColor(genre || "");
   return (
@@ -463,10 +520,12 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   const [trackError, setTrackError] = useState("");
   const [favTracks, setFavTracks] = useState(record.favorite_tracks || []);
 
-  function toggleFav(key) {
-    const next = favTracks.includes(key)
-      ? favTracks.filter((k) => k !== key)
-      : [...favTracks, key];
+  function toggleFav(key, title) {
+    const getFavKey = (f) => (typeof f === "object" ? f.key : f);
+    const alreadyFaved = favTracks.some((f) => getFavKey(f) === key);
+    const next = alreadyFaved
+      ? favTracks.filter((f) => getFavKey(f) !== key)
+      : [...favTracks, { key, title }];
     setFavTracks(next);
     onRecordUpdate?.({ favorite_tracks: next });
     fetch(`/api/records/${record.id}`, {
@@ -749,7 +808,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
           <div className="space-y-2">
             {tracks.map((t, i) => {
               const key = t.position || String(i);
-              const faved = favTracks.includes(key);
+              const faved = favTracks.some((f) => (typeof f === "object" ? f.key : f) === key);
               const isHeading = t.type === "heading";
               return (
                 <div key={`${t.position || "h"}-${i}`} className="flex items-start gap-3">
@@ -763,7 +822,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
                     <span className="text-stone-600 text-xs">{t.duration || ""}</span>
                     {!isHeading && (
                       <button
-                        onClick={() => toggleFav(key)}
+                        onClick={() => toggleFav(key, t.title)}
                         className={`text-sm transition-colors ${faved ? "text-rose-400" : "text-stone-700 hover:text-stone-400"}`}
                       >
                         ♥
@@ -1201,6 +1260,9 @@ export default function VinylCrate() {
   const [viewMode, setViewMode] = useState("list");
   const [honeycombSort, setHoneycombSort] = useState("year");
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
+  const [activeDecade, setActiveDecade] = useState(null);
+  const [activeFormat, setActiveFormat] = useState(null);
+  const [statFilterLabel, setStatFilterLabel] = useState(null);
 
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -1289,7 +1351,9 @@ export default function VinylCrate() {
       (r.genre || "").toLowerCase().includes(q) ||
       (r.tracks || []).some((t) => (t.title || "").toLowerCase().includes(q));
     const matchesGenre = !activeGenres.size || getGenres(r).some((g) => activeGenres.has(g));
-    return matchesSearch && matchesGenre;
+    const matchesDecade = !activeDecade || getDecade(r) === activeDecade;
+    const matchesFormat = !activeFormat || getFormat(r) === activeFormat;
+    return matchesSearch && matchesGenre && matchesDecade && matchesFormat;
   });
 
   const honeycombRecords = (() => {
@@ -1447,6 +1511,22 @@ export default function VinylCrate() {
     }
   }
 
+  function drillByDecade(decade) {
+    setActiveDecade(decade); setActiveFormat(null); setActiveGenres(new Set());
+    setStatFilterLabel(decade); setViewMode("drift"); setTab("crate");
+  }
+  function drillByGenre(genre) {
+    setActiveGenres(new Set([genre])); setActiveDecade(null); setActiveFormat(null);
+    setStatFilterLabel(genre); setViewMode("drift"); setTab("crate");
+  }
+  function drillByFormat(fmt) {
+    setActiveFormat(fmt); setActiveDecade(null); setActiveGenres(new Set());
+    setStatFilterLabel(fmt); setViewMode("drift"); setTab("crate");
+  }
+  function clearStatFilter() {
+    setActiveDecade(null); setActiveFormat(null); setActiveGenres(new Set()); setStatFilterLabel(null);
+  }
+
   async function handleDelete(record) {
     try {
       const res = await fetch(`/api/records/${record.id}`, { method: "DELETE" });
@@ -1556,16 +1636,18 @@ export default function VinylCrate() {
         </div>
       )}
 
-      {viewMode !== "drift" && <div className="flex px-4 gap-1 mt-3 mb-2">
+      {viewMode !== "drift" && <div className="flex px-4 gap-0.5 mt-3 mb-2">
         {[
           ["crate", "⏺ Crate"],
+          ["hearts", "♥ Hearts"],
           ["history", "▷ History"],
           ["reco", "✦ Reco"],
+          ["stats", "◎ Stats"],
         ].map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-all ${
               tab === id
                 ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
                 : "text-stone-500 hover:text-stone-300"
@@ -1799,6 +1881,18 @@ export default function VinylCrate() {
                   </button>
                 ))}
               </div>
+              {/* Stat filter badge */}
+              {statFilterLabel && (
+                <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50">
+                  <button
+                    onClick={clearStatFilter}
+                    className="px-3 py-1.5 rounded-full bg-amber-900/70 backdrop-blur-sm border border-amber-700/50 text-amber-200 text-xs flex items-center gap-2"
+                  >
+                    <span>Filtered: {statFilterLabel}</span>
+                    <span className="text-amber-400 font-bold">×</span>
+                  </button>
+                </div>
+              )}
               {/* Genre filter strip */}
               {(() => {
                 const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
@@ -1856,6 +1950,67 @@ export default function VinylCrate() {
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === "hearts" && (
+        <div className="flex-1 px-4 overflow-y-auto pb-8">
+          {(() => {
+            const favRecords = myRecords
+              .filter((r) => (r.favorite_tracks || []).length > 0)
+              .sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
+            if (favRecords.length === 0) {
+              return (
+                <div className="text-center py-16">
+                  <div className="text-3xl mb-3 text-stone-700">♥</div>
+                  <div className="text-stone-600 text-sm">No favorite tracks yet.</div>
+                  <div className="text-stone-700 text-xs mt-1">Tap ♥ on a track in any record&apos;s tracklist.</div>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-5 mt-2">
+                {favRecords.map((r) => (
+                  <div key={r.id}>
+                    <button
+                      onClick={() => { setSelected(r); if (!r.for_sale) setLastPlayed(r); }}
+                      className="flex items-center gap-3 w-full mb-2 text-left hover:opacity-80 transition-opacity"
+                    >
+                      <CoverArt record={r} size={40} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
+                        <div className="text-stone-500 text-xs truncate">{r.artist}</div>
+                      </div>
+                      <span className="text-stone-600 text-xs pr-1">→</span>
+                    </button>
+                    <div className="space-y-0.5 pl-[52px]">
+                      {(r.favorite_tracks || []).map((f) => {
+                        const { key, title } = normFav(f);
+                        return (
+                          <div key={key} className="flex items-center gap-2 py-0.5">
+                            <span className="text-stone-600 text-xs w-8 shrink-0">{key}</span>
+                            <span className="text-stone-300 text-sm flex-1 truncate">{title}</span>
+                            <button
+                              onClick={() => {
+                                const next = (r.favorite_tracks || []).filter((ff) => (typeof ff === "object" ? ff.key : ff) !== key);
+                                setCollection((prev) => Array.isArray(prev) ? prev.map((rec) => rec.id === r.id ? { ...rec, favorite_tracks: next } : rec) : prev);
+                                fetch(`/api/records/${r.id}`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ favorite_tracks: next }),
+                                }).catch(() => {});
+                              }}
+                              className="text-rose-400 hover:text-rose-300 transition-colors text-sm shrink-0"
+                            >♥</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2017,6 +2172,197 @@ export default function VinylCrate() {
                   </div>
                 )}
               </>
+            );
+          })()}
+        </div>
+      )}
+
+      {tab === "stats" && (
+        <div className="flex-1 px-4 overflow-y-auto pb-8">
+          {(() => {
+            const { decades, genres, formats } = buildCollectionStats(myRecords);
+            const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
+            const totalPlays = playSessions.length;
+
+            const sortedDecades = Object.entries(decades).sort((a, b) => a[0].localeCompare(b[0]));
+            const maxDecadeCount = Math.max(...Object.values(decades), 1);
+            const topGenres = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 7);
+            const maxGenreCount = Math.max(...topGenres.map(([,v]) => v), 1);
+            const formatEntries = Object.entries(formats).sort((a, b) => b[1] - a[1]);
+            const maxFmtCount = Math.max(...Object.values(formats), 1);
+            const dowLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+            const maxDow = Math.max(...byDow, 1);
+            const timeSlots = [
+              { label: "Morning", hours: [6,7,8,9,10,11], icon: "☀" },
+              { label: "Afternoon", hours: [12,13,14,15,16,17], icon: "⛅" },
+              { label: "Evening", hours: [18,19,20,21], icon: "🌆" },
+              { label: "Night", hours: [22,23,0,1,2,3], icon: "🌙" },
+            ];
+            const slotCounts = timeSlots.map(({ hours }) => hours.reduce((sum, h) => sum + byHour[h], 0));
+            const maxSlot = Math.max(...slotCounts, 1);
+
+            return (
+              <div className="space-y-6 pt-2">
+                {/* Identity labels */}
+                {totalPlays >= 5 && (
+                  <div className="flex gap-2">
+                    <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
+                      <div className="text-xl">{nightPlays > dayPlays ? "🌙" : "☀"}</div>
+                      <div className="text-amber-300 text-xs font-medium mt-1">{nightPlays > dayPlays ? "Night Owl" : "Early Bird"}</div>
+                    </div>
+                    <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
+                      <div className="text-xl">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "🎉" : "📅"}</div>
+                      <div className="text-amber-300 text-xs font-medium mt-1">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "Weekend Warrior" : "Daily Listener"}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* By Decade */}
+                {sortedDecades.length > 0 && (
+                  <div>
+                    <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">By Decade</div>
+                    <div className="space-y-2">
+                      {sortedDecades.map(([decade, count]) => (
+                        <button key={decade} onClick={() => drillByDecade(decade)} className="w-full flex items-center gap-3 group">
+                          <div className="text-stone-500 text-xs w-10 text-right shrink-0">{decade}</div>
+                          <div className="flex-1 bg-stone-800/50 rounded-full h-5 overflow-hidden">
+                            <div
+                              className="h-full bg-amber-800/60 group-hover:bg-amber-700/80 rounded-full transition-all flex items-center justify-end pr-2"
+                              style={{ width: `${Math.max(8, (count / maxDecadeCount) * 100)}%` }}
+                            >
+                              <span className="text-amber-200 text-xs">{count}</span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Genres */}
+                {topGenres.length > 0 && (
+                  <div>
+                    <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">Top Genres</div>
+                    <div className="space-y-2">
+                      {topGenres.map(([genre, count]) => (
+                        <button key={genre} onClick={() => drillByGenre(genre)} className="w-full flex items-center gap-3 group">
+                          <div className="text-stone-500 text-xs w-20 text-right shrink-0 truncate">{genre}</div>
+                          <div className="flex-1 bg-stone-800/50 rounded-full h-5 overflow-hidden">
+                            <div
+                              className="h-full bg-stone-600/70 group-hover:bg-stone-500/80 rounded-full transition-all flex items-center justify-end pr-2"
+                              style={{ width: `${Math.max(8, (count / maxGenreCount) * 100)}%` }}
+                            >
+                              <span className="text-stone-300 text-xs">{count}</span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* By Format */}
+                {formatEntries.length > 0 && (
+                  <div>
+                    <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">By Format</div>
+                    <div className="space-y-2">
+                      {formatEntries.map(([fmt, count]) => (
+                        <button key={fmt} onClick={() => drillByFormat(fmt)} className="w-full flex items-center gap-3 group">
+                          <div className="text-stone-500 text-xs w-10 text-right shrink-0">{fmt}</div>
+                          <div className="flex-1 bg-stone-800/50 rounded-full h-5 overflow-hidden">
+                            <div
+                              className="h-full bg-stone-700/70 group-hover:bg-stone-600/80 rounded-full transition-all flex items-center justify-end pr-2"
+                              style={{ width: `${Math.max(8, (count / maxFmtCount) * 100)}%` }}
+                            >
+                              <span className="text-stone-300 text-xs">{count}</span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* When You Listen */}
+                {totalPlays > 0 && (
+                  <>
+                    <div>
+                      <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">When You Listen</div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {timeSlots.map(({ label, icon }, idx) => (
+                          <div key={label} className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                            <div className="text-lg">{icon}</div>
+                            <div className="mt-1 h-8 flex items-end justify-center">
+                              <div
+                                className="w-4 bg-amber-800/60 rounded-sm"
+                                style={{ height: `${Math.max(4, (slotCounts[idx] / maxSlot) * 32)}px` }}
+                              />
+                            </div>
+                            <div className="text-stone-500 text-[10px] mt-1">{label}</div>
+                            <div className="text-stone-400 text-xs">{slotCounts[idx]}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">Day of Week</div>
+                      <div className="flex items-end gap-1 h-16">
+                        {byDow.map((count, i) => (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                            <div
+                              className="w-full rounded-sm"
+                              style={{
+                                height: `${Math.max(4, (count / maxDow) * 48)}px`,
+                                background: i === 0 || i === 6 ? "rgba(180,100,30,0.6)" : "rgba(100,100,100,0.4)",
+                              }}
+                            />
+                            <div className="text-stone-600 text-[10px]">{dowLabels[i].slice(0,1)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {(midnightRecord || sunMorningRecord) && (
+                      <div>
+                        <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">Special Records</div>
+                        <div className="space-y-2">
+                          {midnightRecord && (
+                            <button
+                              onClick={() => { setSelected(midnightRecord); setLastPlayed(midnightRecord); }}
+                              className="w-full flex items-center gap-3 bg-white/[0.04] rounded-xl p-3 hover:bg-white/[0.06] transition-colors text-left"
+                            >
+                              <span className="text-lg shrink-0">🌙</span>
+                              <CoverArt record={midnightRecord} size={36} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{midnightRecord.title}</div>
+                                <div className="text-stone-600 text-xs">Midnight record</div>
+                              </div>
+                            </button>
+                          )}
+                          {sunMorningRecord && (
+                            <button
+                              onClick={() => { setSelected(sunMorningRecord); setLastPlayed(sunMorningRecord); }}
+                              className="w-full flex items-center gap-3 bg-white/[0.04] rounded-xl p-3 hover:bg-white/[0.06] transition-colors text-left"
+                            >
+                              <span className="text-lg shrink-0">☕</span>
+                              <CoverArt record={sunMorningRecord} size={36} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{sunMorningRecord.title}</div>
+                                <div className="text-stone-600 text-xs">Sunday morning album</div>
+                              </div>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {myRecords.length === 0 && (
+                  <div className="text-stone-600 text-sm text-center py-16">Add records to see stats.</div>
+                )}
+              </div>
             );
           })()}
         </div>
