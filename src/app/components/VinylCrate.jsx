@@ -2140,7 +2140,7 @@ export default function VinylCrate() {
                         return new Date(session.played_at).toLocaleDateString();
                       })();
                       return (
-                        <div key={session.id} className="flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all">
+                        <div key={session.id} onClick={() => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }} className="flex items-center gap-3 px-2.5 py-2 rounded-xl cursor-pointer hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all">
                           <CoverArt record={rec} size={40} />
                           <div className="flex-1 min-w-0">
                             <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
@@ -2149,7 +2149,8 @@ export default function VinylCrate() {
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="text-stone-600 text-xs">{relDate}</div>
                             <button
-                              onClick={async () => {
+                              onClick={async (e) => {
+                                e.stopPropagation();
                                 await fetch(`/api/plays/${session.id}`, { method: "DELETE" });
                                 setPlaySessions((prev) => prev.filter((s) => s.id !== session.id));
                                 setPlayCounts((prev) => ({ ...prev, [session.record_id]: Math.max((prev[session.record_id] || 0) - 1, 0) }));
