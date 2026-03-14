@@ -762,6 +762,10 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
             </button>
           </div>
 
+          <div className="mb-2">
+            <SpotifyButton artist={record.artist} title={record.title} />
+          </div>
+
           <div className="flex gap-2 mb-5">
             <button
               onClick={() => onLogPlay?.(record.id)}
@@ -1214,15 +1218,25 @@ function CrateSyncAnimation() {
   );
 }
 
-async function callClaude(messages, maxTokens = 400) {
+async function callClaude(messages, maxTokens = 400, system = null) {
+  const body = { messages, max_tokens: maxTokens };
+  if (system) body.system = system;
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, max_tokens: maxTokens }),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
+}
+
+function extractJson(text) {
+  const match = text.match(/\{[\s\S]*?\}/);
+  if (!match) throw new Error("no-json");
+  const parsed = JSON.parse(match[0]);
+  if (typeof parsed.id !== "number" || typeof parsed.reason !== "string") throw new Error("bad-schema");
+  return parsed;
 }
 
 async function readJsonOrText(res) {
@@ -1234,6 +1248,23 @@ async function readJsonOrText(res) {
     const isHtml = text.trimStart().startsWith("<!") || text.trimStart().startsWith("<html");
     return { error: isHtml ? `Server error (${res.status}) — please try again` : text || `Request failed (${res.status})` };
   }
+}
+
+function SpotifyButton({ artist, title }) {
+  const url = `https://open.spotify.com/search/${encodeURIComponent(`${artist} ${title}`)}`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-[#1DB954]/30 text-[#1DB954] text-sm font-medium hover:bg-[#1DB954]/10 transition-colors"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+      </svg>
+      Play on Spotify
+    </a>
+  );
 }
 
 export default function VinylCrate() {
@@ -1417,9 +1448,7 @@ export default function VinylCrate() {
         const list = myRecords
           .map(
             (r) =>
-              `id:${r.id}|"${r.title}"|${r.artist}|${r.year_original || r.year_pressed || "?"}|${r.genre}${
-                r.is_compilation ? " (comp)" : ""
-              }`
+              `id:${r.id}|"${r.title}"|${r.artist}|${r.year_original || r.year_pressed || "?"}|${r.genre}${r.is_compilation ? " (comp)" : ""}|plays:${playCounts[r.id] || 0}|${r.format || "Vinyl"}`
           )
           .join("\n");
         const today = new Date();
@@ -1428,23 +1457,25 @@ export default function VinylCrate() {
         let ctx = "";
         if (type === "random") ctx = "Pick one completely random record. Surprise me.";
         else if (type === "daily")
-          ctx = `Today is ${month} ${day}. Pick the most fitting record for this specific date — consider season in Mexico, holidays (e.g. July 4 = American vibes, Dec = festive, Dia de Muertos, etc.), time-of-year energy. Be creative and specific.`;
+          ctx = `Today is ${month} ${day}. Pick the most fitting record for this date — consider season, holidays, and time-of-year energy. Be creative and specific.`;
         else if (type === "mood") ctx = `Pick the single best record for this mood: "${mood}"`;
         else
           ctx = `I just listened to "${lastPlayed?.title}" by ${lastPlayed?.artist} (${lastPlayed?.year_original || lastPlayed?.year_pressed}, ${
             lastPlayed?.genre
           }). Pick the ideal next record.`;
 
+        const SYSTEM = "You are a vinyl curator with encyclopedic knowledge of music. You recommend records from the user's personal collection. Always return valid JSON only — no markdown, no prose outside the JSON object.";
         const text = await callClaude(
           [
             {
               role: "user",
-              content: `Vinyl curator. ${ctx}\n\nCollection:\n${list}\n\nRespond ONLY with JSON: {"id":<number>,"reason":"<one vivid specific sentence>"}\nNo markdown.`,
+              content: `${ctx}\n\nCollection:\n${list}\n\nRespond ONLY with JSON: {"id":<number>,"reason":"<one vivid specific sentence>"}`,
             },
           ],
-          300
+          500,
+          SYSTEM
         );
-        const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+        const parsed = extractJson(text);
         const found = myRecords.find((r) => r.id === parsed.id);
         if (!found) throw new Error("not-found");
         setReco({
@@ -1452,8 +1483,10 @@ export default function VinylCrate() {
           reason: parsed.reason,
           label: { random: "Random Pick", daily: "Today's Pick", mood: "Mood Match", next: "Play Next" }[type],
         });
-      } catch {
-        setRecoError("Couldn't get a recommendation — try again.");
+      } catch (err) {
+        if (err.message === "not-found") setRecoError("Claude picked a record that isn't in your crate — try again.");
+        else if (err.message === "no-json" || err.message === "bad-schema") setRecoError("Got an unexpected response — try again.");
+        else setRecoError("Couldn't reach the AI — check your connection and try again.");
       } finally {
         setRecoLoading(false);
       }
