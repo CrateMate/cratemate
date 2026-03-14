@@ -1265,6 +1265,9 @@ export default function VinylCrate() {
   const [statFilterLabel, setStatFilterLabel] = useState(null);
 
   const [shareCopied, setShareCopied] = useState(false);
+  const [favTitles, setFavTitles] = useState({});
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
@@ -1332,6 +1335,27 @@ export default function VinylCrate() {
     loadPlays();
   }, [refreshRecords]);
 
+  useEffect(() => {
+    if (tab !== "hearts") return;
+    const favRecords = myRecords.filter(r => (r.favorite_tracks || []).length > 0 && r.discogs_id);
+    for (const r of favRecords) {
+      if (favTitles[r.id]) continue;
+      const needsResolve = (r.favorite_tracks || []).some(f => typeof f !== "object");
+      if (!needsResolve) continue;
+      fetch(`/api/discogs/release/${r.discogs_id}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (!data?.tracklist) return;
+          const map = {};
+          data.tracklist.forEach((t, i) => { map[t.position || String(i)] = t.title; });
+          setFavTitles(prev => ({ ...prev, [r.id]: map }));
+        })
+        .catch(() => {});
+    }
+  }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
+
+  useEffect(() => { setPage(1); }, [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
+
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
   const pool = showForSale ? forSaleRecords : myRecords;
@@ -1355,6 +1379,9 @@ export default function VinylCrate() {
     const matchesFormat = !activeFormat || getFormat(r) === activeFormat;
     return matchesSearch && matchesGenre && matchesDecade && matchesFormat;
   });
+
+  const totalPages = search ? 1 : Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedRecords = search ? filtered : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const honeycombRecords = (() => {
     if (honeycombSort === "year") {
@@ -1719,7 +1746,7 @@ export default function VinylCrate() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="text-xs text-stone-700">{filtered.length} records</div>
+              <div className="text-xs text-stone-700">{filtered.length} records{!search && totalPages > 1 ? ` · p${page}/${totalPages}` : ""}</div>
               {activeGenres.size > 0 && (
                 <button
                   onClick={() => setActiveGenres(new Set())}
@@ -1934,7 +1961,7 @@ export default function VinylCrate() {
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-3 pb-8 space-y-0.5">
-              {filtered.map((r) => (
+              {pagedRecords.map((r) => (
                 <RecordRow
                   key={r.id}
                   record={r}
@@ -1948,6 +1975,19 @@ export default function VinylCrate() {
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
+              {!search && totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 py-4">
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                    className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                    ← Prev
+                  </button>
+                  <span className="text-stone-600 text-xs">{page} / {totalPages}</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                    className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                    Next →
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1986,10 +2026,11 @@ export default function VinylCrate() {
                     <div className="space-y-0.5 pl-[52px]">
                       {(r.favorite_tracks || []).map((f) => {
                         const { key, title } = normFav(f);
+                        const displayTitle = (title && title !== key) ? title : (favTitles[r.id]?.[key] || key);
                         return (
                           <div key={key} className="flex items-center gap-2 py-0.5">
                             <span className="text-stone-600 text-xs w-8 shrink-0">{key}</span>
-                            <span className="text-stone-300 text-sm flex-1 truncate">{title}</span>
+                            <span className="text-stone-300 text-sm flex-1 truncate">{displayTitle}</span>
                             <button
                               onClick={() => {
                                 const next = (r.favorite_tracks || []).filter((ff) => (typeof ff === "object" ? ff.key : ff) !== key);
