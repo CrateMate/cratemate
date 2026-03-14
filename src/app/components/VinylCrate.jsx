@@ -1232,10 +1232,20 @@ async function callClaude(messages, maxTokens = 400, system = null, model = "cla
 }
 
 function extractJson(text) {
-  const match = text.match(/\{[\s\S]*?\}/);
-  if (!match) throw new Error("no-json");
-  const parsed = JSON.parse(match[0]);
-  if (typeof parsed.id !== "number" || typeof parsed.reason !== "string") throw new Error("bad-schema");
+  // Strip markdown code fences that some models add despite instructions
+  const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch {
+    // Fall back to greedy regex — finds first { to last } in the text
+    const match = stripped.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("no-json");
+    try { parsed = JSON.parse(match[0]); } catch { throw new Error("no-json"); }
+  }
+  // Normalize id to number in case model returns it as a string
+  if (typeof parsed.id === "string") parsed.id = parseInt(parsed.id, 10);
+  if (typeof parsed.id !== "number" || isNaN(parsed.id) || typeof parsed.reason !== "string") throw new Error("bad-schema");
   return parsed;
 }
 
@@ -1341,9 +1351,7 @@ export default function VinylCrate() {
 
   const [shareCopied, setShareCopied] = useState(false);
   const [favTitles, setFavTitles] = useState({});
-  const [page, setPage] = useState(1);
   const [visibleCount, setVisibleCount] = useState(25);
-  const [infiniteScroll, setInfiniteScroll] = useState(false);
   const PAGE_SIZE = 25;
   const sentinelRef = useRef(null);
 
@@ -1432,16 +1440,15 @@ export default function VinylCrate() {
     }
   }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
 
-  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
+  useEffect(() => setVisibleCount(PAGE_SIZE), [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
 
   useEffect(() => {
-    if (!infiniteScroll) return;
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) setVisibleCount(c => c + PAGE_SIZE);
     }, { threshold: 0.1 });
     if (sentinelRef.current) observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [infiniteScroll, visibleCount]);
+  }, [visibleCount]);
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
@@ -1467,11 +1474,8 @@ export default function VinylCrate() {
     return matchesSearch && matchesGenre && matchesDecade && matchesFormat;
   });
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const pagedRecords = infiniteScroll
-    ? filtered.slice(0, visibleCount)
-    : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const hasMore = infiniteScroll && visibleCount < filtered.length;
+  const pagedRecords = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   const honeycombRecords = (() => {
     if (honeycombSort === "year") {
@@ -1846,7 +1850,7 @@ export default function VinylCrate() {
 
             <div className="flex items-center gap-2">
               <div className="text-xs text-stone-700">
-                {filtered.length} records{!infiniteScroll && totalPages > 1 ? ` · p${page}/${totalPages}` : ""}
+                {filtered.length} records
               </div>
               {activeGenres.size > 0 && (
                 <button
@@ -1856,13 +1860,6 @@ export default function VinylCrate() {
                   {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
                 </button>
               )}
-              <button
-                onClick={() => { setInfiniteScroll(s => !s); setPage(1); setVisibleCount(PAGE_SIZE); }}
-                className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${infiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-600 hover:text-stone-400"}`}
-                title={infiniteScroll ? "Switch to pages" : "Switch to infinite scroll"}
-              >
-                {infiniteScroll ? "∞ scroll" : "pages"}
-              </button>
               <div className="flex-1" />
 
               {discogsConnected ? (
@@ -2106,22 +2103,8 @@ export default function VinylCrate() {
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
-              {infiniteScroll ? (
-                hasMore && <div ref={sentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>
-              ) : (
-                totalPages > 1 && (
-                  <div className="flex items-center justify-center gap-3 py-4">
-                    <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                      className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
-                      ← Prev
-                    </button>
-                    <span className="text-stone-600 text-xs">{page} / {totalPages}</span>
-                    <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                      className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
-                      Next →
-                    </button>
-                  </div>
-                )
+              {hasMore && (
+                <div ref={sentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>
               )}
             </div>
           )}
