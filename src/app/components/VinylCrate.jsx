@@ -1335,13 +1335,15 @@ export default function VinylCrate() {
   const [viewMode, setViewMode] = useState("list");
   const [honeycombSort, setHoneycombSort] = useState("year");
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
-  const [activeDecade, setActiveDecade] = useState(null);
+  const [activeDecade, setActiveDecade] = useState(new Set());
   const [activeFormat, setActiveFormat] = useState(null);
   const [statFilterLabel, setStatFilterLabel] = useState(null);
 
   const [shareCopied, setShareCopied] = useState(false);
   const [favTitles, setFavTitles] = useState({});
+  const [page, setPage] = useState(1);
   const [visibleCount, setVisibleCount] = useState(25);
+  const [infiniteScroll, setInfiniteScroll] = useState(false);
   const PAGE_SIZE = 25;
   const sentinelRef = useRef(null);
 
@@ -1430,15 +1432,16 @@ export default function VinylCrate() {
     }
   }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
+  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
 
   useEffect(() => {
+    if (!infiniteScroll) return;
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) setVisibleCount(c => c + PAGE_SIZE);
     }, { threshold: 0.1 });
     if (sentinelRef.current) observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [visibleCount]);
+  }, [infiniteScroll, visibleCount]);
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
@@ -1459,13 +1462,16 @@ export default function VinylCrate() {
       (r.genre || "").toLowerCase().includes(q) ||
       (r.tracks || []).some((t) => (t.title || "").toLowerCase().includes(q));
     const matchesGenre = !activeGenres.size || getGenres(r).some((g) => activeGenres.has(g));
-    const matchesDecade = !activeDecade || getDecade(r) === activeDecade;
+    const matchesDecade = !activeDecade.size || activeDecade.has(getDecade(r));
     const matchesFormat = !activeFormat || getFormat(r) === activeFormat;
     return matchesSearch && matchesGenre && matchesDecade && matchesFormat;
   });
 
-  const pagedRecords = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedRecords = infiniteScroll
+    ? filtered.slice(0, visibleCount)
+    : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const hasMore = infiniteScroll && visibleCount < filtered.length;
 
   const honeycombRecords = (() => {
     if (honeycombSort === "year") {
@@ -1493,10 +1499,7 @@ export default function VinylCrate() {
   })();
 
   const decades = useMemo(() => {
-    const ds = new Set(pool.map(r => {
-      const y = r.year_original || r.year_pressed;
-      return y ? Math.floor(y / 10) * 10 : null;
-    }).filter(Boolean));
+    const ds = new Set(pool.map(r => getDecade(r)).filter(Boolean));
     return [...ds].sort();
   }, [pool]);
 
@@ -1635,19 +1638,19 @@ export default function VinylCrate() {
   }
 
   function drillByDecade(decade) {
-    setActiveDecade(decade); setActiveFormat(null); setActiveGenres(new Set());
+    setActiveDecade(new Set([decade])); setActiveFormat(null); setActiveGenres(new Set());
     setStatFilterLabel(decade); setViewMode("drift"); setTab("crate");
   }
   function drillByGenre(genre) {
-    setActiveGenres(new Set([genre])); setActiveDecade(null); setActiveFormat(null);
+    setActiveGenres(new Set([genre])); setActiveDecade(new Set()); setActiveFormat(null);
     setStatFilterLabel(genre); setViewMode("drift"); setTab("crate");
   }
   function drillByFormat(fmt) {
-    setActiveFormat(fmt); setActiveDecade(null); setActiveGenres(new Set());
+    setActiveFormat(fmt); setActiveDecade(new Set()); setActiveGenres(new Set());
     setStatFilterLabel(fmt); setViewMode("drift"); setTab("crate");
   }
   function clearStatFilter() {
-    setActiveDecade(null); setActiveFormat(null); setActiveGenres(new Set()); setStatFilterLabel(null);
+    setActiveDecade(new Set()); setActiveFormat(null); setActiveGenres(new Set()); setStatFilterLabel(null);
   }
 
   async function handleDelete(record) {
@@ -1842,7 +1845,9 @@ export default function VinylCrate() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="text-xs text-stone-700">{filtered.length} records</div>
+              <div className="text-xs text-stone-700">
+                {filtered.length} records{!infiniteScroll && totalPages > 1 ? ` · p${page}/${totalPages}` : ""}
+              </div>
               {activeGenres.size > 0 && (
                 <button
                   onClick={() => setActiveGenres(new Set())}
@@ -1851,6 +1856,13 @@ export default function VinylCrate() {
                   {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
                 </button>
               )}
+              <button
+                onClick={() => { setInfiniteScroll(s => !s); setPage(1); setVisibleCount(PAGE_SIZE); }}
+                className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${infiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-600 hover:text-stone-400"}`}
+                title={infiniteScroll ? "Switch to pages" : "Switch to infinite scroll"}
+              >
+                {infiniteScroll ? "∞ scroll" : "pages"}
+              </button>
               <div className="flex-1" />
 
               {discogsConnected ? (
@@ -2016,26 +2028,7 @@ export default function VinylCrate() {
                   </button>
                 </div>
               )}
-              {/* Decade picker strip */}
-              {decades.length > 0 && (
-                <div className="absolute bottom-48 left-0 right-0 z-50 flex justify-center pointer-events-none">
-                  <div
-                    className="flex gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
-                    style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
-                  >
-                    <button
-                      onClick={() => setActiveDecade(null)}
-                      className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${!activeDecade ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-                    >All</button>
-                    {decades.map(d => (
-                      <button key={d} onClick={() => setActiveDecade(activeDecade === d ? null : d)}
-                        className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${activeDecade === d ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-                      >{d}s</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Genre filter strip */}
+              {/* Genre filter strip — bottom */}
               {(() => {
                 const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
                 if (genres.length === 0) return null;
@@ -2057,8 +2050,31 @@ export default function VinylCrate() {
                   </div>
                 );
               })()}
-              {/* Bottom-center: zoom */}
-              <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+              {/* Decade picker strip — above genre */}
+              {decades.length > 0 && (
+                <div className="absolute bottom-32 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                  <div
+                    className="flex gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
+                    style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
+                  >
+                    <button
+                      onClick={() => setActiveDecade(new Set())}
+                      className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${!activeDecade.size ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                    >All</button>
+                    {decades.map(d => (
+                      <button key={d} onClick={() => setActiveDecade(prev => {
+                        const s = new Set(prev);
+                        s.has(d) ? s.delete(d) : s.add(d);
+                        return s;
+                      })}
+                        className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${activeDecade.has(d) ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                      >{d}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Bottom-center: zoom — above decade */}
+              <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                 <button
                   onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
                   className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
@@ -2090,8 +2106,22 @@ export default function VinylCrate() {
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
-              {hasMore && (
-                <div ref={sentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>
+              {infiniteScroll ? (
+                hasMore && <div ref={sentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>
+              ) : (
+                totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-3 py-4">
+                    <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                      className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                      ← Prev
+                    </button>
+                    <span className="text-stone-600 text-xs">{page} / {totalPages}</span>
+                    <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                      className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                      Next →
+                    </button>
+                  </div>
+                )
               )}
             </div>
           )}
