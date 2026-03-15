@@ -1859,8 +1859,18 @@ export default function VinylCrate() {
       throw new Error(latest.error || "Metadata job failed");
     }
 
+    // Chain artist date enrichment (birthday/death hooks) after release metadata
+    let artistUpdated = 0;
+    try {
+      const artistRes = await fetch("/api/discogs/enrich/artist", { method: "POST" });
+      if (artistRes.ok) {
+        const artistData = await artistRes.json();
+        artistUpdated = artistData.updated || 0;
+      }
+    } catch { /* non-fatal — release metadata already saved */ }
+
     return {
-      updated: latest.updated || 0,
+      updated: (latest.updated || 0) + artistUpdated,
       considered: latest.considered || 0,
       warning: latest.warning || "",
     };
