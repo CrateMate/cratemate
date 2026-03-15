@@ -1348,7 +1348,37 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts) {
     };
   }
 
-  // Priority 2: Artist birthdays — Phase 2 placeholder
+  // Priority 2a: Artist born today
+  const birthdayCandidates = myRecords.filter(
+    (r) => !r.is_compilation && r.artist_birth_month === todayMonth && r.artist_birth_day === todayDay
+  );
+  if (birthdayCandidates.length > 0) {
+    const pick = birthdayCandidates[Math.floor(Math.random() * birthdayCandidates.length)];
+    const years = pick.artist_birth_year ? today.getFullYear() - pick.artist_birth_year : null;
+    return {
+      type: "birthday",
+      record: pick,
+      fact: years
+        ? `${pick.artist} was born ${years} years ago today in ${pick.artist_birth_year}.`
+        : `${pick.artist} was born on this day.`,
+    };
+  }
+
+  // Priority 2b: Artist died today
+  const deathCandidates = myRecords.filter(
+    (r) => !r.is_compilation && r.artist_death_month === todayMonth && r.artist_death_day === todayDay
+  );
+  if (deathCandidates.length > 0) {
+    const pick = deathCandidates[Math.floor(Math.random() * deathCandidates.length)];
+    const years = pick.artist_death_year ? today.getFullYear() - pick.artist_death_year : null;
+    return {
+      type: "death",
+      record: pick,
+      fact: years
+        ? `${pick.artist} passed away ${years} years ago today in ${pick.artist_death_year}.`
+        : `${pick.artist} passed away on this day.`,
+    };
+  }
 
   // Priority 3: Beloved-but-forgotten
   // Only records played before — ranked by play count so high-love records surface first.

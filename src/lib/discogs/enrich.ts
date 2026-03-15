@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { DISCOGS_API, USER_AGENT, discogsRequest } from "@/lib/discogs";
 import { getReleaseCache, upsertReleaseCache } from "@/lib/discogs/cache";
+import { fetchArtistDates } from "@/lib/musicbrainz";
 
 // Discogs allows 60 authenticated requests/min. We pace at ~40/min to stay safe.
 const RATE_DELAY_MS = 1500;
@@ -18,6 +19,9 @@ type DbRecord = {
   title?: string | null;
   release_month?: number | null;
   release_day?: number | null;
+  artist_birth_month?: number | null;
+  artist_birth_year?: number | null;
+  artist_death_month?: number | null;
 };
 
 type EnrichParams = {
@@ -518,4 +522,91 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
     warning,
     mode,
   };
+}
+
+export async function enrichArtistDates({ userId }: { userId: string }) {
+  // Fetch user's non-compilation records missing artist birth month
+  const { data: records, error } = await supabase
+    .from("records")
+    .select("id, artist, artist_birth_month")
+    .eq("user_id", userId)
+    .not("is_compilation", "is", true)
+    .is("artist_birth_month", null)
+    .not("artist", "is", null);
+
+  if (error) throw new Error("Failed to load records for artist enrichment");
+
+  // Deduplicate by artist name
+  const artistToIds = new Map<string, number[]>();
+  for (const r of records || []) {
+    const name = (r as { artist?: string }).artist?.trim();
+    if (!name) continue;
+    const existing = artistToIds.get(name) || [];
+    existing.push((r as { id: number }).id);
+    artistToIds.set(name, existing);
+  }
+
+  let processed = 0;
+  let updated = 0;
+  let cacheHits = 0;
+
+  for (const [artistName, recordIds] of artistToIds) {
+    processed++;
+
+    // Check shared cache first
+    const { data: cached } = await supabase
+      .from("artist_metadata")
+      .select("birth_year, birth_month, birth_day, death_year, death_month, death_day")
+      .eq("artist_name", artistName)
+      .single();
+
+    let dates;
+    if (cached) {
+      cacheHits++;
+      dates = {
+        birthYear:  cached.birth_year,
+        birthMonth: cached.birth_month,
+        birthDay:   cached.birth_day,
+        deathYear:  cached.death_year,
+        deathMonth: cached.death_month,
+        deathDay:   cached.death_day,
+      };
+    } else {
+      // Cache miss — call MusicBrainz (includes 1.1s rate-limit delay)
+      dates = await fetchArtistDates(artistName);
+
+      // Write to shared cache regardless of whether we found anything
+      // (null values mean "looked up, not found" — avoids re-querying on next run)
+      await supabase.from("artist_metadata").upsert({
+        artist_name:  artistName,
+        birth_year:   dates.birthYear,
+        birth_month:  dates.birthMonth,
+        birth_day:    dates.birthDay,
+        death_year:   dates.deathYear,
+        death_month:  dates.deathMonth,
+        death_day:    dates.deathDay,
+        cached_at:    new Date().toISOString(),
+      });
+    }
+
+    // Copy result to all of this user's records with that artist name
+    const patch: Record<string, unknown> = {
+      artist_birth_year:  dates.birthYear,
+      artist_birth_month: dates.birthMonth ?? 0, // 0 = "looked up, not found" — prevents re-querying
+      artist_birth_day:   dates.birthDay,
+      artist_death_year:  dates.deathYear,
+      artist_death_month: dates.deathMonth,
+      artist_death_day:   dates.deathDay,
+    };
+
+    const { error: updateError } = await supabase
+      .from("records")
+      .update(patch)
+      .in("id", recordIds)
+      .eq("user_id", userId);
+
+    if (!updateError) updated += recordIds.length;
+  }
+
+  return { processed, updated, cacheHits };
 }
