@@ -1432,6 +1432,19 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts) {
     };
   }
 
+  // Priority 4: Never-played records — something in the crate that hasn't had a spin yet.
+  // Shuffle so it doesn't always surface the same record.
+  const neverPlayed = myRecords.filter((r) => !lastPlayedDates[r.id]);
+  if (neverPlayed.length > 0) {
+    const shuffled = [...neverPlayed].sort(() => Math.random() - 0.5);
+    const pick = shuffled[0];
+    return {
+      type: "unplayed",
+      record: pick,
+      fact: `"${pick.title}" by ${pick.artist} is sitting in your crate and you've never played it.`,
+    };
+  }
+
   return null; // → smart fallback
 }
 
@@ -1706,7 +1719,7 @@ export default function VinylCrate() {
         if (type === "daily") {
           const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts);
           if (hook) {
-            const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Speak like a knowledgeable friend, not a curator. Return valid JSON only — no markdown, no prose outside the JSON.";
+            const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like "dude", "man", or "bro". Return valid JSON only — no markdown, no prose outside the JSON.";
             const text = await callClaude(
               [{
                 role: "user",
@@ -1735,7 +1748,7 @@ export default function VinylCrate() {
               .map(([id]) => parseInt(id))
           );
           fallbackPool = myRecords.filter((r) => !recentIds.has(r.id));
-          ctx = `Today is ${month} ${day}. Pick a record that feels right to spin today — let the season be a light backdrop, not the main filter. Trust the music itself.`;
+          ctx = `Pick the record from this collection that most deserves a spin right now. Reason from the music itself — the artist, era, sound — not from the time of year.`;
         } else if (type === "random") {
           ctx = "Pick one completely random record. Surprise me.";
         } else if (type === "mood") {
@@ -1763,7 +1776,7 @@ export default function VinylCrate() {
           })
           .join("\n");
 
-        const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Speak like a knowledgeable friend, not a curator. Return valid JSON only — no markdown, no prose outside the JSON.";
+        const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like "dude", "man", or "bro". Return valid JSON only — no markdown, no prose outside the JSON.";
         const text = await callClaude(
           [
             {
