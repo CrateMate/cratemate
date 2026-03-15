@@ -69,7 +69,7 @@ export async function POST() {
 
   const { data: existing, error: existingError } = await supabase
     .from("records")
-    .select("id, discogs_id, discogs_instance_id, artist, title, thumb, condition")
+    .select("id, discogs_id, discogs_instance_id, artist, title, thumb, condition, genres, styles")
     .eq("user_id", userId);
   if (existingError) {
     console.error("Supabase select records error:", JSON.stringify(existingError));
@@ -84,8 +84,8 @@ export async function POST() {
   };
 
   // instance_ids already in DB — the source of truth for "already imported this copy"
-  // Also track id + condition so we can backfill missing conditions on existing records
-  const existingInstanceMap = new Map<number, { id: number; condition?: string | null }>();
+  // Also track id + condition + genres/styles so we can backfill missing fields on existing records
+  const existingInstanceMap = new Map<number, { id: number; condition?: string | null; genres?: string | null; styles?: string | null }>();
   // discogs_id → list of DB rows without an instance_id yet (migration: link them on next import)
   const unlinkedByDiscogsId = new Map<number, Array<{ id: number; thumb?: string | null; condition?: string | null }>>();
   // manually added records (no discogs_id) — match by artist+title
@@ -93,7 +93,7 @@ export async function POST() {
 
   for (const row of existing || []) {
     if (row.discogs_instance_id) {
-      existingInstanceMap.set(row.discogs_instance_id, { id: row.id, condition: row.condition as string | null });
+      existingInstanceMap.set(row.discogs_instance_id, { id: row.id, condition: row.condition as string | null, genres: row.genres as string | null, styles: row.styles as string | null });
     } else if (row.discogs_id) {
       const arr = unlinkedByDiscogsId.get(row.discogs_id) || [];
       arr.push({ id: row.id, thumb: row.thumb as string | null, condition: row.condition as string | null });
@@ -186,17 +186,21 @@ export async function POST() {
 
   const toInsert: Record<string, unknown>[] = [];
   let updatedExisting = 0;
-  // Collect condition backfills for existing records grouped by value (to batch by condition string)
+  // Collect condition/genres/styles backfills for existing records
   const conditionBackfill = new Map<string, number[]>(); // condition value → [db row ids]
+  const genresStylesBackfill: Array<{ id: number; genres: string; styles: string }> = [];
 
   for (const record of mapped) {
-    // Already have this exact copy (matched by instance_id) — backfill condition if missing, then skip.
+    // Already have this exact copy (matched by instance_id) — backfill missing fields, then skip.
     if (record.discogs_instance_id && existingInstanceMap.has(record.discogs_instance_id)) {
       const existingRow = existingInstanceMap.get(record.discogs_instance_id)!;
       if (!existingRow.condition && record.condition) {
         const ids = conditionBackfill.get(record.condition) || [];
         ids.push(existingRow.id);
         conditionBackfill.set(record.condition, ids);
+      }
+      if ((!existingRow.genres || !existingRow.styles) && (record.genres || record.styles)) {
+        genresStylesBackfill.push({ id: existingRow.id, genres: record.genres || "", styles: record.styles || "" });
       }
       continue;
     }
@@ -247,6 +251,16 @@ export async function POST() {
       .in("id", ids)
       .eq("user_id", userId);
     if (!condErr) updatedExisting += ids.length;
+  }
+
+  // Backfill missing genres/styles on existing records
+  for (const { id, genres, styles } of genresStylesBackfill) {
+    const { error: gsErr } = await supabase
+      .from("records")
+      .update({ genres, styles })
+      .eq("id", id)
+      .eq("user_id", userId);
+    if (!gsErr) updatedExisting++;
   }
 
   if (toInsert.length === 0 && updatedExisting === 0) {

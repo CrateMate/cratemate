@@ -159,6 +159,25 @@ function genreColor(genre) {
   return GENRE_COLORS[hash % GENRE_COLORS.length];
 }
 
+const GENRE_SVG_PALETTE = [
+  { fill: "#78350f44", stroke: "#d97706", text: "#fcd34d" },
+  { fill: "#1e3a5f44", stroke: "#60a5fa", text: "#93c5fd" },
+  { fill: "#14532d44", stroke: "#4ade80", text: "#86efac" },
+  { fill: "#4c1d9544", stroke: "#a78bfa", text: "#c4b5fd" },
+  { fill: "#7f1d1d44", stroke: "#f87171", text: "#fca5a5" },
+  { fill: "#164e6344", stroke: "#22d3ee", text: "#67e8f9" },
+  { fill: "#71350044", stroke: "#fb923c", text: "#fdba74" },
+  { fill: "#1e1b4b44", stroke: "#818cf8", text: "#a5b4fc" },
+  { fill: "#4a194244", stroke: "#e879f9", text: "#f0abfc" },
+  { fill: "#134e4a44", stroke: "#2dd4bf", text: "#5eead4" },
+];
+
+function genreSvgColor(genre) {
+  let hash = 0;
+  for (let i = 0; i < genre.length; i++) hash = (hash * 31 + genre.charCodeAt(i)) >>> 0;
+  return GENRE_SVG_PALETTE[hash % GENRE_SVG_PALETTE.length];
+}
+
 const DISC_GRADIENT_PAIRS = [
   ["#1f0a0a", "#3a0d0d"],
   ["#0a0a1f", "#0d0d3a"],
@@ -361,7 +380,12 @@ export function CoverArt({ record, size = 64 }) {
 }
 
 function getGenres(record) {
-  return (record.genre || "").split(",").map((g) => g.trim()).filter(Boolean);
+  const source = record.genres || record.genre || "";
+  return source.split(",").map((g) => g.trim()).filter(Boolean);
+}
+
+function getStyles(record) {
+  return (record.styles || "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 function getDecade(record) {
@@ -384,15 +408,16 @@ function normFav(f) {
 }
 
 function buildCollectionStats(records) {
-  const decades = {}, genres = {}, formats = {};
+  const decades = {}, genres = {}, formats = {}, styles = {};
   for (const r of records) {
     const d = getDecade(r);
     if (d) decades[d] = (decades[d] || 0) + 1;
     getGenres(r).forEach((g) => { genres[g] = (genres[g] || 0) + 1; });
+    getStyles(r).forEach((s) => { styles[s] = (styles[s] || 0) + 1; });
     const f = getFormat(r);
     if (f) formats[f] = (formats[f] || 0) + 1;
   }
-  return { decades, genres, formats };
+  return { decades, genres, formats, styles };
 }
 
 function buildTimeStats(sessions, records) {
@@ -1410,6 +1435,64 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts) {
   return null; // → smart fallback
 }
 
+function GenreBubbleMap({ items, onBubbleClick }) {
+  const [width, setWidth] = useState(320);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) setWidth(ref.current.clientWidth);
+  }, []);
+
+  const maxCount = Math.max(...items.map(i => i.count), 1);
+  const GAP = 6;
+  const MAX_R = Math.min(width * 0.22, 72);
+  const MIN_R = 18;
+
+  const bubbles = [...items]
+    .sort((a, b) => b.count - a.count)
+    .map(item => ({ ...item, r: MIN_R + (MAX_R - MIN_R) * Math.sqrt(item.count / maxCount) }));
+
+  let x = 0, y = 0, rowH = 0;
+  const placed = bubbles.map(b => {
+    if (x > 0 && x + b.r * 2 > width) { y += rowH + GAP; x = 0; rowH = 0; }
+    const cx = x + b.r, cy = y + b.r;
+    x += b.r * 2 + GAP;
+    rowH = Math.max(rowH, b.r * 2);
+    return { ...b, cx, cy };
+  });
+  const totalH = y + rowH + 4;
+
+  return (
+    <div ref={ref} className="w-full">
+      <svg width={width} height={totalH}>
+        {placed.map(b => {
+          const { fill, stroke, text } = genreSvgColor(b.label);
+          const showLabel = b.r >= 28;
+          const showCount = b.r >= 22;
+          return (
+            <g key={b.label} onClick={() => onBubbleClick(b.label)} style={{ cursor: "pointer" }}>
+              <circle cx={b.cx} cy={b.cy} r={b.r} fill={fill} stroke={stroke} strokeWidth={1.5} />
+              {showLabel && (
+                <text x={b.cx} y={b.cy - (showCount ? 6 : 0)} textAnchor="middle"
+                  dominantBaseline="middle" fill={text} fontSize={Math.max(9, b.r * 0.32)}
+                  style={{ pointerEvents: "none", userSelect: "none" }}>
+                  {b.label.length > 10 ? b.label.slice(0, 9) + "…" : b.label}
+                </text>
+              )}
+              {showCount && (
+                <text x={b.cx} y={b.cy + (showLabel ? 10 : 0)} textAnchor="middle"
+                  dominantBaseline="middle" fill={text} fontSize={Math.max(8, b.r * 0.26)}
+                  opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
+                  {b.count}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export default function VinylCrate() {
   const { user } = useUser();
   const [collection, setCollection] = useState(null);
@@ -1427,6 +1510,10 @@ export default function VinylCrate() {
   const [activeGenres, setActiveGenres] = useState(new Set());
   const toggleGenre = (g) =>
     setActiveGenres((prev) => { const s = new Set(prev); s.has(g) ? s.delete(g) : s.add(g); return s; });
+  const [activeStyles, setActiveStyles] = useState(new Set());
+  const toggleStyle = (s) =>
+    setActiveStyles((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
+  const [bubbleView, setBubbleView] = useState("genres");
 
   const [playCounts, setPlayCounts] = useState({});
   const [lastPlayedDates, setLastPlayedDates] = useState({});
@@ -1548,7 +1635,7 @@ export default function VinylCrate() {
 
   const sorted = [...pool].sort((a, b) => {
     if (sortBy === "year") return (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999);
-    if (sortBy === "genre") return (a.genre || "").localeCompare(b.genre || "");
+    if (sortBy === "genre") return (a.genres || a.genre || "").localeCompare(b.genres || b.genre || "");
     return (a.artist || "").localeCompare(b.artist || "");
   });
 
@@ -1559,11 +1646,13 @@ export default function VinylCrate() {
       (r.title || "").toLowerCase().includes(q) ||
       (r.artist || "").toLowerCase().includes(q) ||
       (r.genre || "").toLowerCase().includes(q) ||
+      (r.styles || "").toLowerCase().includes(q) ||
       (r.tracks || []).some((t) => (t.title || "").toLowerCase().includes(q));
     const matchesGenre = !activeGenres.size || getGenres(r).some((g) => activeGenres.has(g));
+    const matchesStyle = !activeStyles.size || getStyles(r).some((s) => activeStyles.has(s));
     const matchesDecade = !activeDecade.size || activeDecade.has(getDecade(r));
     const matchesFormat = !activeFormat || getFormat(r) === activeFormat;
-    return matchesSearch && matchesGenre && matchesDecade && matchesFormat;
+    return matchesSearch && matchesGenre && matchesStyle && matchesDecade && matchesFormat;
   });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -1621,7 +1710,7 @@ export default function VinylCrate() {
             const text = await callClaude(
               [{
                 role: "user",
-                content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: "${hook.record.title}" by ${hook.record.artist} (${hook.record.year_original || hook.record.year_pressed || "?"}, ${hook.record.genre}).\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}`,
+                content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: "${hook.record.title}" by ${hook.record.artist} (${hook.record.year_original || hook.record.year_pressed || "?"}, ${(() => { const g = hook.record.genres || hook.record.genre || ""; const s = hook.record.styles || ""; return s ? `${g}/${s}` : g; })()}).\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}`,
               }],
               120,
               SYSTEM
@@ -1652,7 +1741,10 @@ export default function VinylCrate() {
         } else if (type === "mood") {
           ctx = `Pick the single best record for this mood: "${mood}"`;
         } else {
-          ctx = `I just listened to "${lastPlayed?.title}" by ${lastPlayed?.artist} (${lastPlayed?.year_original || lastPlayed?.year_pressed}, ${lastPlayed?.genre}). Pick the ideal next record.`;
+          const lpGenreStr = lastPlayed?.genres || lastPlayed?.genre || "";
+          const lpStyleStr = lastPlayed?.styles || "";
+          const lpDescriptor = lpStyleStr ? `${lpGenreStr}/${lpStyleStr}` : lpGenreStr;
+          ctx = `I just listened to "${lastPlayed?.title}" by ${lastPlayed?.artist} (${lastPlayed?.year_original || lastPlayed?.year_pressed}, ${lpDescriptor}). Pick the ideal next record.`;
         }
 
         // Re-index to sequential 1-based IDs — prevents Claude from hallucinating a real DB ID.
@@ -1664,7 +1756,10 @@ export default function VinylCrate() {
         const list = sample
           .map((r, i) => {
             indexMap.set(i + 1, r);
-            return `id:${i + 1}|"${r.title}"|${r.artist}|${r.year_original || r.year_pressed || "?"}|${r.genre}${r.is_compilation ? " (comp)" : ""}`;
+            const genreStr = r.genres || r.genre || "";
+            const styleStr = r.styles || "";
+            const descriptor = styleStr ? `${genreStr}/${styleStr}` : genreStr;
+            return `id:${i + 1}|"${r.title}"|${r.artist}|${r.year_original || r.year_pressed || "?"}|${descriptor}${r.is_compilation ? " (comp)" : ""}`;
           })
           .join("\n");
 
@@ -1780,8 +1875,12 @@ export default function VinylCrate() {
     setStatFilterLabel(decade); setViewMode("drift"); setTab("crate");
   }
   function drillByGenre(genre) {
-    setActiveGenres(new Set([genre])); setActiveDecade(new Set()); setActiveFormat(null);
+    setActiveGenres(new Set([genre])); setActiveStyles(new Set()); setActiveDecade(new Set()); setActiveFormat(null);
     setStatFilterLabel(genre); setViewMode("drift"); setTab("crate");
+  }
+  function drillByStyle(style) {
+    setActiveStyles(new Set([style])); setActiveGenres(new Set()); setActiveDecade(new Set()); setActiveFormat(null);
+    setStatFilterLabel(style); setViewMode("drift"); setTab("crate");
   }
   function drillByFormat(fmt) {
     setActiveFormat(fmt); setActiveDecade(new Set()); setActiveGenres(new Set());
@@ -2495,7 +2594,7 @@ export default function VinylCrate() {
       {tab === "stats" && (
         <div className="flex-1 px-4 overflow-y-auto pb-8">
           {(() => {
-            const { decades, genres, formats } = buildCollectionStats(myRecords);
+            const { decades, genres, formats, styles } = buildCollectionStats(myRecords);
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
             const totalPlays = playSessions.length;
 
@@ -2554,25 +2653,30 @@ export default function VinylCrate() {
                   </div>
                 )}
 
-                {/* Top Genres */}
-                {topGenres.length > 0 && (
+                {/* Genre/Style Bubble Map */}
+                {(Object.keys(genres).length > 0 || Object.keys(styles).length > 0) && (
                   <div>
-                    <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">Top Genres</div>
-                    <div className="space-y-2">
-                      {topGenres.map(([genre, count]) => (
-                        <button key={genre} onClick={() => drillByGenre(genre)} className="w-full flex items-center gap-3 group">
-                          <div className="text-stone-500 text-xs w-20 text-right shrink-0 truncate">{genre}</div>
-                          <div className="flex-1 bg-stone-800/50 rounded-full h-5 overflow-hidden">
-                            <div
-                              className="h-full bg-stone-600/70 group-hover:bg-stone-500/80 rounded-full transition-all flex items-center justify-end pr-2"
-                              style={{ width: `${Math.max(8, (count / maxGenreCount) * 100)}%` }}
-                            >
-                              <span className="text-stone-300 text-xs">{count}</span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-stone-500 text-xs uppercase tracking-wider">Collection Map</span>
+                      <div className="flex gap-1">
+                        {["genres", "styles"].map(v => (
+                          <button key={v} onClick={() => setBubbleView(v)}
+                            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                              bubbleView === v
+                                ? "bg-stone-700 border-stone-500 text-stone-100"
+                                : "border-stone-700 text-stone-500 hover:text-stone-300"
+                            }`}>
+                            {v.charAt(0).toUpperCase() + v.slice(1)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                    <GenreBubbleMap
+                      items={Object.entries(bubbleView === "genres" ? genres : styles)
+                        .map(([label, count]) => ({ label, count }))
+                        .filter(i => i.label)}
+                      onBubbleClick={bubbleView === "genres" ? drillByGenre : drillByStyle}
+                    />
                   </div>
                 )}
 

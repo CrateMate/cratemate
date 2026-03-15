@@ -129,6 +129,8 @@ export function mapCollectionRelease(release: Record<string, unknown>, mediaFiel
     // Prefer to set original year via metadata enrichment (master release).
     year_original: null,
     genre: (styles.length > 0 ? styles.slice(0, 3) : genres.slice(0, 2)).join(", "),
+    genres: genres.slice(0, 3).join(", "),
+    styles: styles.slice(0, 5).join(", "),
     condition,
     for_sale: false,
     format: fmtStr,
@@ -159,6 +161,8 @@ export function mapSearchResult(result: Record<string, unknown>) {
     year_pressed: year,
     year_original: year,
     genre: (styles.length > 0 ? styles.slice(0, 3) : genres.slice(0, 2)).join(", "),
+    genres: genres.slice(0, 3).join(", "),
+    styles: styles.slice(0, 5).join(", "),
     condition: "",
     for_sale: false,
     format: formats.join(", "),
