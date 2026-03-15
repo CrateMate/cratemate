@@ -1836,43 +1836,47 @@ export default function VinylCrate() {
   }
 
   async function runEnrichAll(mode) {
-    const startRes = await fetch(`/api/discogs/enrich/job?mode=${encodeURIComponent(mode)}`, {
-      method: "POST",
-    });
-    const startData = await readJsonOrText(startRes);
-    if (!startRes.ok) throw new Error(startData?.error || `Metadata sync failed (${startRes.status})`);
-    const jobId = startData.job_id;
-    if (!jobId) throw new Error("Missing metadata job id");
+    // Start both jobs simultaneously — release metadata (Discogs) and artist dates (MusicBrainz)
+    // are independent so they can run in parallel.
+    const [metaRes, artistRes] = await Promise.all([
+      fetch(`/api/discogs/enrich/job?mode=${encodeURIComponent(mode)}`, { method: "POST" }),
+      fetch("/api/discogs/enrich/artist/job", { method: "POST" }),
+    ]);
+    const metaData = await readJsonOrText(metaRes);
+    const artistData = await readJsonOrText(artistRes);
+    if (!metaRes.ok) throw new Error(metaData?.error || `Metadata sync failed (${metaRes.status})`);
+    if (!artistRes.ok) throw new Error(artistData?.error || `Artist sync failed (${artistRes.status})`);
 
-    let latest = startData;
-    while (true) {
-      const statusRes = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(jobId)}`);
-      const statusData = await readJsonOrText(statusRes);
-      if (!statusRes.ok) throw new Error(statusData?.error || `Metadata job failed (${statusRes.status})`);
-      latest = statusData;
-      if (statusData.status === "completed") break;
-      if (statusData.status === "failed") break;
+    const metaJobId = metaData.job_id;
+    const artistJobId = artistData.job_id;
+    if (!metaJobId) throw new Error("Missing metadata job id");
+    if (!artistJobId) throw new Error("Missing artist job id");
+
+    // Poll both jobs in one loop until both are done
+    let metaDone = false, artistDone = false;
+    let metaLatest = metaData, artistLatest = artistData;
+    while (!metaDone || !artistDone) {
       await new Promise((r) => setTimeout(r, 600));
-    }
-
-    if (latest.status === "failed") {
-      throw new Error(latest.error || "Metadata job failed");
-    }
-
-    // Chain artist date enrichment (birthday/death hooks) after release metadata
-    let artistUpdated = 0;
-    try {
-      const artistRes = await fetch("/api/discogs/enrich/artist", { method: "POST" });
-      if (artistRes.ok) {
-        const artistData = await artistRes.json();
-        artistUpdated = artistData.updated || 0;
+      if (!metaDone) {
+        const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`);
+        const data = await readJsonOrText(res);
+        if (res.ok) metaLatest = data;
+        if (data?.status === "completed" || data?.status === "failed") metaDone = true;
       }
-    } catch { /* non-fatal — release metadata already saved */ }
+      if (!artistDone) {
+        const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`);
+        const data = await readJsonOrText(res);
+        if (res.ok) artistLatest = data;
+        if (data?.status === "completed" || data?.status === "failed") artistDone = true;
+      }
+    }
+
+    if (metaLatest.status === "failed") throw new Error(metaLatest.error || "Metadata job failed");
 
     return {
-      updated: (latest.updated || 0) + artistUpdated,
-      considered: latest.considered || 0,
-      warning: latest.warning || "",
+      updated: (metaLatest.updated || 0) + (artistLatest.updated || 0),
+      considered: metaLatest.considered || 0,
+      warning: metaLatest.warning || "",
     };
   }
 

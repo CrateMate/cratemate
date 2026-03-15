@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { enrichPage } from "@/lib/discogs/enrich";
+import { enrichPage, enrichArtistDates } from "@/lib/discogs/enrich";
 
 type EnrichJobStatus = "pending" | "running" | "completed" | "failed";
 type EnrichJobRow = {
@@ -50,6 +50,50 @@ export async function createEnrichJob({
     throw new Error(error.message || JSON.stringify(error));
   }
   return (data || [])[0] as EnrichJobRow;
+}
+
+export async function createArtistEnrichJob({ userId }: { userId: string }) {
+  const { data, error } = await supabase.from(JOB_TABLE).insert({
+    user_id: userId,
+    type: "artist",
+    mode: "full",
+    force: false,
+    batch_limit: 0,
+    batch_offset: 0,
+    status: "pending",
+    processed: 0,
+    updated: 0,
+    considered: 0,
+  }).select();
+  if (error) throw new Error(error.message || JSON.stringify(error));
+  return (data || [])[0] as EnrichJobRow;
+}
+
+export async function runArtistEnrichJob(jobId: string) {
+  const { data: job } = await supabase.from(JOB_TABLE).select("*").eq("id", jobId).single();
+  if (!job) return;
+
+  await supabase.from(JOB_TABLE)
+    .update({ status: "running", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", jobId);
+
+  try {
+    const result = await enrichArtistDates({ userId: job.user_id });
+    await supabase.from(JOB_TABLE).update({
+      status: "completed",
+      processed: result.processed,
+      updated: result.updated,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", jobId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Artist enrichment failed";
+    await supabase.from(JOB_TABLE).update({
+      status: "failed",
+      error: message,
+      updated_at: new Date().toISOString(),
+    }).eq("id", jobId);
+  }
 }
 
 export async function getEnrichJob(jobId: string, userId: string) {
