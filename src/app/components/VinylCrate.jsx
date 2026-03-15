@@ -1324,6 +1324,62 @@ function StreamingButtons({ artist, title }) {
   );
 }
 
+function buildTodayHook(myRecords, lastPlayedDates, playCounts) {
+  const today = new Date();
+  const todayMonth = today.getMonth() + 1;
+  const todayDay   = today.getDate();
+  const STALE_DAYS = 90;
+  const now = Date.now();
+
+  // Priority 1: Release anniversaries (date-specific — always feels intentional)
+  const anniversaryCandidates = myRecords.filter(
+    (r) => r.release_month === todayMonth && r.release_day === todayDay
+  );
+  if (anniversaryCandidates.length > 0) {
+    const pick = anniversaryCandidates[Math.floor(Math.random() * anniversaryCandidates.length)];
+    const releaseYear = pick.year_original || pick.year_pressed;
+    const years = releaseYear ? today.getFullYear() - releaseYear : null;
+    return {
+      type: "anniversary",
+      record: pick,
+      fact: years
+        ? `"${pick.title}" by ${pick.artist} was released exactly ${years} year${years === 1 ? "" : "s"} ago today.`
+        : `"${pick.title}" by ${pick.artist} was released on this date.`,
+    };
+  }
+
+  // Priority 2: Artist birthdays — Phase 2 placeholder
+
+  // Priority 3: Beloved-but-forgotten
+  // Only records played before — ranked by play count so high-love records surface first.
+  // Picks randomly from the top 10 by play count among stale candidates.
+  const staleCandidates = myRecords
+    .filter((r) => {
+      const last = lastPlayedDates[r.id];
+      if (!last) return false; // never played → not "stale", just unplayed
+      const daysSince = (now - new Date(last).getTime()) / (1000 * 60 * 60 * 24);
+      return daysSince >= STALE_DAYS;
+    })
+    .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0)); // most-played first
+
+  if (staleCandidates.length > 0) {
+    // Pick randomly from top 10 by play count — introduces variety across taps
+    const pool = staleCandidates.slice(0, 10);
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const daysSince = Math.floor((now - new Date(lastPlayedDates[pick.id]).getTime()) / (1000 * 60 * 60 * 24));
+    const plays = playCounts[pick.id] || 0;
+    return {
+      type: "stale",
+      record: pick,
+      fact: plays > 1
+        ? `You've played "${pick.title}" by ${pick.artist} ${plays} times, but not in ${daysSince} days.`
+        : `You haven't played "${pick.title}" by ${pick.artist} in ${daysSince} days.`,
+    };
+  }
+
+  return null; // → smart fallback
+}
+
 export default function VinylCrate() {
   const { user } = useUser();
   const [collection, setCollection] = useState(null);
@@ -1522,11 +1578,58 @@ export default function VinylCrate() {
       setRecoError("");
       setReco(null);
       try {
-        // Cap at 150 records and re-index to sequential 1-based IDs.
-        // Sequential IDs prevent Claude from hallucinating a plausible-looking DB ID.
-        const sample = myRecords.length > 150
-          ? [...myRecords].sort(() => Math.random() - 0.5).slice(0, 150)
-          : myRecords;
+        const today = new Date();
+        const month = today.toLocaleString("default", { month: "long" });
+        const day = today.getDate();
+        let ctx = "";
+        let fallbackPool = myRecords;
+
+        if (type === "daily") {
+          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts);
+          if (hook) {
+            const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Speak like a knowledgeable friend, not a curator. Return valid JSON only — no markdown, no prose outside the JSON.";
+            const text = await callClaude(
+              [{
+                role: "user",
+                content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: "${hook.record.title}" by ${hook.record.artist} (${hook.record.year_original || hook.record.year_pressed || "?"}, ${hook.record.genre}).\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}`,
+              }],
+              120,
+              SYSTEM
+            );
+            const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+            let parsed;
+            try { parsed = JSON.parse(stripped); } catch {
+              const m = stripped.match(/\{[\s\S]*\}/);
+              if (!m) throw new Error("no-json");
+              try { parsed = JSON.parse(m[0]); } catch { throw new Error("no-json"); }
+            }
+            if (Array.isArray(parsed)) parsed = parsed[0];
+            if (!parsed || typeof parsed.reason !== "string") throw new Error("bad-schema");
+            setReco({ record: hook.record, reason: parsed.reason, label: "Today's Pick" });
+            return;
+          }
+
+          // No hook fired — smart fallback: exclude recently played, cap at 60 records
+          const recentIds = new Set(
+            Object.entries(lastPlayedDates)
+              .filter(([, d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000)
+              .map(([id]) => parseInt(id))
+          );
+          fallbackPool = myRecords.filter((r) => !recentIds.has(r.id));
+          ctx = `Today is ${month} ${day}. Pick a record that feels right to spin today — let the season be a light backdrop, not the main filter. Trust the music itself.`;
+        } else if (type === "random") {
+          ctx = "Pick one completely random record. Surprise me.";
+        } else if (type === "mood") {
+          ctx = `Pick the single best record for this mood: "${mood}"`;
+        } else {
+          ctx = `I just listened to "${lastPlayed?.title}" by ${lastPlayed?.artist} (${lastPlayed?.year_original || lastPlayed?.year_pressed}, ${lastPlayed?.genre}). Pick the ideal next record.`;
+        }
+
+        // Re-index to sequential 1-based IDs — prevents Claude from hallucinating a real DB ID.
+        const dailyPool = (type === "daily") ? fallbackPool : myRecords;
+        const sample = dailyPool.length > 60
+          ? [...dailyPool].sort(() => Math.random() - 0.5).slice(0, 60)
+          : dailyPool;
         const indexMap = new Map();
         const list = sample
           .map((r, i) => {
@@ -1534,18 +1637,6 @@ export default function VinylCrate() {
             return `id:${i + 1}|"${r.title}"|${r.artist}|${r.year_original || r.year_pressed || "?"}|${r.genre}${r.is_compilation ? " (comp)" : ""}`;
           })
           .join("\n");
-        const today = new Date();
-        const month = today.toLocaleString("default", { month: "long" });
-        const day = today.getDate();
-        let ctx = "";
-        if (type === "random") ctx = "Pick one completely random record. Surprise me.";
-        else if (type === "daily")
-          ctx = `Today is ${month} ${day}. Pick a record that feels right to spin today — let the season be a light backdrop, not the main filter. Trust the music itself.`;
-        else if (type === "mood") ctx = `Pick the single best record for this mood: "${mood}"`;
-        else
-          ctx = `I just listened to "${lastPlayed?.title}" by ${lastPlayed?.artist} (${lastPlayed?.year_original || lastPlayed?.year_pressed}, ${
-            lastPlayed?.genre
-          }). Pick the ideal next record.`;
 
         const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Speak like a knowledgeable friend, not a curator. Return valid JSON only — no markdown, no prose outside the JSON.";
         const text = await callClaude(
@@ -1574,7 +1665,7 @@ export default function VinylCrate() {
         setRecoLoading(false);
       }
     },
-    [myRecords, mood, lastPlayed]
+    [myRecords, mood, lastPlayed, lastPlayedDates, playCounts]
   );
 
   async function handleDiscogsImport() {

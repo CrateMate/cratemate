@@ -16,6 +16,8 @@ type DbRecord = {
   thumb?: string | null;
   artist?: string | null;
   title?: string | null;
+  release_month?: number | null;
+  release_day?: number | null;
 };
 
 type EnrichParams = {
@@ -25,6 +27,17 @@ type EnrichParams = {
   mode?: "full" | "thumb";
   force?: boolean;
 };
+
+function parseReleaseDate(released: unknown): { month: number | null; day: number | null } {
+  if (typeof released !== "string" || !released.trim()) return { month: null, day: null };
+  const parts = released.trim().split("-");
+  const month = parts[1] ? parseInt(parts[1], 10) : null;
+  const day   = parts[2] ? parseInt(parts[2], 10) : null;
+  return {
+    month: month && month >= 1 && month <= 12 ? month : null,
+    day:   day   && day   >= 1 && day   <= 31 ? day   : null,
+  };
+}
 
 function toYear(value: unknown) {
   const n = typeof value === "number" ? value : typeof value === "string" ? parseInt(value, 10) : NaN;
@@ -256,7 +269,7 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
     }
   }
 
-  const recordSelectBase = "id, discogs_id, year_pressed, year_original, is_compilation, artist, title";
+  const recordSelectBase = "id, discogs_id, year_pressed, year_original, is_compilation, artist, title, release_month, release_day";
   const isMissingThumbColumn = (err: unknown) =>
     JSON.stringify(err || "").toLowerCase().includes("thumb") && JSON.stringify(err || "").toLowerCase().includes("column");
 
@@ -304,7 +317,8 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
       r.year_original == null ||
       r.year_pressed == null ||
       (r.year_original != null && r.year_pressed != null && r.year_original === r.year_pressed) ||
-      r.is_compilation == null
+      r.is_compilation == null ||
+      r.release_month == null
     );
   });
 
@@ -365,6 +379,7 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
         r.year_pressed == null ||
         (r.year_original != null && r.year_pressed != null && r.year_original === r.year_pressed) ||
         r.is_compilation == null);
+    const needsReleaseDateFix = mode !== "thumb" && r.release_month == null;
 
     let thumb = coverByReleaseId.get(releaseId) || "";
     if (!thumb) {
@@ -379,8 +394,8 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
     const cachedCoverOk = !!(cached?.cover_image && !isLowResThumb(cached.cover_image));
 
     let release: DiscogsRelease | null = null;
-    const needsReleaseCall = (needsYearFix || (needsThumb && !thumb)) &&
-      !(cached?.year_pressed && cached?.year_original && (!needsThumb || cachedCoverOk));
+    const needsReleaseCall = (needsYearFix || needsReleaseDateFix || (needsThumb && !thumb)) &&
+      (needsReleaseDateFix || !(cached?.year_pressed && cached?.year_original && (!needsThumb || cachedCoverOk)));
 
     if (needsReleaseCall) {
       await new Promise((r) => setTimeout(r, RATE_DELAY_MS));
@@ -436,6 +451,13 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
       if (pressedYear != null) patch.year_pressed = pressedYear;
       if (originalYear != null) patch.year_original = originalYear;
       if (compilation != null) patch.is_compilation = compilation;
+    }
+
+    if (release) {
+      const released = (release as { released?: unknown })?.released;
+      const { month, day } = parseReleaseDate(released);
+      if (month != null) patch.release_month = month;
+      if (day   != null) patch.release_day   = day;
     }
 
     // iTunes / Discogs search fallback — only for truly missing covers, never for low-res ones.
