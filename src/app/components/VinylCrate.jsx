@@ -1719,7 +1719,7 @@ export default function VinylCrate() {
         if (type === "daily") {
           const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts);
           if (hook) {
-            const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like "dude", "man", or "bro". Return valid JSON only — no markdown, no prose outside the JSON.";
+            const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
             const text = await callClaude(
               [{
                 role: "user",
@@ -1776,7 +1776,7 @@ export default function VinylCrate() {
           })
           .join("\n");
 
-        const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like "dude", "man", or "bro". Return valid JSON only — no markdown, no prose outside the JSON.";
+        const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
         const text = await callClaude(
           [
             {
