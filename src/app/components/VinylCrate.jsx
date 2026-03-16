@@ -590,7 +590,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -913,6 +913,45 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
               );
             })}
           </div>
+
+          {/* Sound Profile */}
+          {(() => {
+            const fromSpotify = spotifyFeatures?.[record.id];
+            const f = fromSpotify || estimateFeaturesFromRecord(record);
+            const isSpotify = !!fromSpotify;
+            const bars = [
+              { label: "Energy",       value: f.energy,       color: "bg-amber-600/70" },
+              { label: "Mood",         value: f.valence,      color: "bg-rose-600/60",    hint: f.valence > 0.6 ? "upbeat" : f.valence < 0.4 ? "melancholic" : "balanced" },
+              { label: "Danceability", value: f.danceability, color: "bg-emerald-700/60" },
+              { label: "Acoustic",     value: f.acousticness, color: "bg-stone-500/70" },
+              { label: "Loudness",     value: f.loudness ?? 0.70, color: "bg-orange-900/70", hint: (f.loudness ?? 0.70) > 0.80 ? "loud" : (f.loudness ?? 0.70) < 0.45 ? "dynamic" : "balanced" },
+            ];
+            return (
+              <div className="mt-6 mb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-stone-600 text-xs">~{Math.round(f.tempo)} BPM</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${isSpotify ? "border-emerald-900/40 text-emerald-700/80 bg-emerald-900/10" : "border-stone-800 text-stone-600 bg-stone-900/40"}`}>
+                      {isSpotify ? "via Spotify" : "estimated"}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  {bars.map(({ label, value, color, hint }) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <div className="text-stone-500 text-xs w-20 shrink-0">
+                        {label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}
+                      </div>
+                      <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden">
+                        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(value * 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {!record.discogs_instance_id && (
             <button
@@ -1422,30 +1461,32 @@ function StreamingButtons({ artist, title }) {
 }
 
 // Genre-based audio profile estimates (used when Spotify audio-features are unavailable)
+// loudness is normalized from dB: (dB + 30) / 27, clamped [0,1]
+// e.g. -3 dB (very loud) ≈ 1.0 · -14 dB (typical) ≈ 0.59 · -30 dB (very dynamic) ≈ 0.0
 const GENRE_AUDIO_PROFILES = {
-  "Electronic":       { energy: 0.82, valence: 0.58, danceability: 0.78, acousticness: 0.05, tempo: 128 },
-  "House":            { energy: 0.86, valence: 0.64, danceability: 0.87, acousticness: 0.02, tempo: 124 },
-  "Techno":           { energy: 0.88, valence: 0.48, danceability: 0.84, acousticness: 0.02, tempo: 132 },
-  "Ambient":          { energy: 0.28, valence: 0.45, danceability: 0.25, acousticness: 0.75, tempo: 80  },
-  "Jazz":             { energy: 0.44, valence: 0.58, danceability: 0.55, acousticness: 0.72, tempo: 108 },
-  "Classical":        { energy: 0.34, valence: 0.52, danceability: 0.28, acousticness: 0.92, tempo: 96  },
-  "Metal":            { energy: 0.92, valence: 0.38, danceability: 0.55, acousticness: 0.05, tempo: 148 },
-  "Punk":             { energy: 0.90, valence: 0.55, danceability: 0.65, acousticness: 0.05, tempo: 168 },
-  "Rock":             { energy: 0.76, valence: 0.54, danceability: 0.60, acousticness: 0.15, tempo: 120 },
-  "Alternative Rock": { energy: 0.72, valence: 0.48, danceability: 0.57, acousticness: 0.18, tempo: 118 },
-  "Indie Rock":       { energy: 0.65, valence: 0.50, danceability: 0.58, acousticness: 0.25, tempo: 116 },
-  "Pop":              { energy: 0.68, valence: 0.70, danceability: 0.72, acousticness: 0.20, tempo: 120 },
-  "Hip Hop":          { energy: 0.70, valence: 0.55, danceability: 0.80, acousticness: 0.15, tempo: 90  },
-  "R&B":              { energy: 0.60, valence: 0.60, danceability: 0.74, acousticness: 0.30, tempo: 95  },
-  "Soul":             { energy: 0.62, valence: 0.66, danceability: 0.70, acousticness: 0.40, tempo: 100 },
-  "Funk":             { energy: 0.78, valence: 0.72, danceability: 0.82, acousticness: 0.15, tempo: 104 },
-  "Blues":            { energy: 0.52, valence: 0.48, danceability: 0.58, acousticness: 0.55, tempo: 88  },
-  "Country":          { energy: 0.56, valence: 0.65, danceability: 0.62, acousticness: 0.55, tempo: 112 },
-  "Folk":             { energy: 0.42, valence: 0.58, danceability: 0.45, acousticness: 0.78, tempo: 96  },
-  "Reggae":           { energy: 0.58, valence: 0.72, danceability: 0.78, acousticness: 0.30, tempo: 80  },
-  "Latin":            { energy: 0.72, valence: 0.78, danceability: 0.84, acousticness: 0.22, tempo: 100 },
-  "Disco":            { energy: 0.80, valence: 0.78, danceability: 0.88, acousticness: 0.08, tempo: 116 },
-  "Dance":            { energy: 0.84, valence: 0.68, danceability: 0.86, acousticness: 0.05, tempo: 126 },
+  "Electronic":       { energy: 0.82, valence: 0.58, danceability: 0.78, acousticness: 0.05, tempo: 128, loudness: 0.89 },
+  "House":            { energy: 0.86, valence: 0.64, danceability: 0.87, acousticness: 0.02, tempo: 124, loudness: 0.89 },
+  "Techno":           { energy: 0.88, valence: 0.48, danceability: 0.84, acousticness: 0.02, tempo: 132, loudness: 0.93 },
+  "Ambient":          { energy: 0.28, valence: 0.45, danceability: 0.25, acousticness: 0.75, tempo: 80,  loudness: 0.37 },
+  "Jazz":             { energy: 0.44, valence: 0.58, danceability: 0.55, acousticness: 0.72, tempo: 108, loudness: 0.59 },
+  "Classical":        { energy: 0.34, valence: 0.52, danceability: 0.28, acousticness: 0.92, tempo: 96,  loudness: 0.19 },
+  "Metal":            { energy: 0.92, valence: 0.38, danceability: 0.55, acousticness: 0.05, tempo: 148, loudness: 0.85 },
+  "Punk":             { energy: 0.90, valence: 0.55, danceability: 0.65, acousticness: 0.05, tempo: 168, loudness: 0.81 },
+  "Rock":             { energy: 0.76, valence: 0.54, danceability: 0.60, acousticness: 0.15, tempo: 120, loudness: 0.78 },
+  "Alternative Rock": { energy: 0.72, valence: 0.48, danceability: 0.57, acousticness: 0.18, tempo: 118, loudness: 0.78 },
+  "Indie Rock":       { energy: 0.65, valence: 0.50, danceability: 0.58, acousticness: 0.25, tempo: 116, loudness: 0.74 },
+  "Pop":              { energy: 0.68, valence: 0.70, danceability: 0.72, acousticness: 0.20, tempo: 120, loudness: 0.85 },
+  "Hip Hop":          { energy: 0.70, valence: 0.55, danceability: 0.80, acousticness: 0.15, tempo: 90,  loudness: 0.81 },
+  "R&B":              { energy: 0.60, valence: 0.60, danceability: 0.74, acousticness: 0.30, tempo: 95,  loudness: 0.78 },
+  "Soul":             { energy: 0.62, valence: 0.66, danceability: 0.70, acousticness: 0.40, tempo: 100, loudness: 0.70 },
+  "Funk":             { energy: 0.78, valence: 0.72, danceability: 0.82, acousticness: 0.15, tempo: 104, loudness: 0.74 },
+  "Blues":            { energy: 0.52, valence: 0.48, danceability: 0.58, acousticness: 0.55, tempo: 88,  loudness: 0.67 },
+  "Country":          { energy: 0.56, valence: 0.65, danceability: 0.62, acousticness: 0.55, tempo: 112, loudness: 0.70 },
+  "Folk":             { energy: 0.42, valence: 0.58, danceability: 0.45, acousticness: 0.78, tempo: 96,  loudness: 0.59 },
+  "Reggae":           { energy: 0.58, valence: 0.72, danceability: 0.78, acousticness: 0.30, tempo: 80,  loudness: 0.74 },
+  "Latin":            { energy: 0.72, valence: 0.78, danceability: 0.84, acousticness: 0.22, tempo: 100, loudness: 0.81 },
+  "Disco":            { energy: 0.80, valence: 0.78, danceability: 0.88, acousticness: 0.08, tempo: 116, loudness: 0.78 },
+  "Dance":            { energy: 0.84, valence: 0.68, danceability: 0.86, acousticness: 0.05, tempo: 126, loudness: 0.89 },
 };
 
 function estimateFeaturesFromRecord(record) {
@@ -1453,7 +1494,7 @@ function estimateFeaturesFromRecord(record) {
   const styleStr = (record.style || record.styles || "").toLowerCase();
   const combined = genreStr + " " + styleStr;
   const match = Object.entries(GENRE_AUDIO_PROFILES).find(([key]) => combined.includes(key.toLowerCase()));
-  const base = match ? { ...match[1] } : { energy: 0.60, valence: 0.55, danceability: 0.60, acousticness: 0.40, tempo: 105 };
+  const base = match ? { ...match[1] } : { energy: 0.60, valence: 0.55, danceability: 0.60, acousticness: 0.40, tempo: 105, loudness: 0.70 };
   // Older records skew more acoustic
   const year = record.year_original || record.year_pressed;
   if (year && year < 1965) base.acousticness = Math.min(1, base.acousticness + 0.2);
@@ -1727,7 +1768,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
   return null;
 }
 
-function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, playCounts }) {
+function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, playCounts, savePrompt, saving, onSaveSession, onDiscardSession }) {
   const CENTER = 140;
   const SLOT = 100;
   const GAP = 18;
@@ -1752,7 +1793,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         <button onClick={onClose} className="text-stone-500 hover:text-stone-300 text-sm flex items-center gap-1.5 transition-colors">
           ← Close
         </button>
-        <span className="text-stone-600 text-xs uppercase tracking-widest">Listening Trail</span>
+        <span className="text-stone-600 text-xs uppercase tracking-widest">Assisted Listening</span>
         <div className="w-12" />
       </div>
 
@@ -1893,6 +1934,49 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
 
       {loading && (
         <div className="text-center pb-6 text-stone-600 text-xs">Finding next records…</div>
+      )}
+
+      {/* Save session prompt overlay */}
+      {savePrompt && (
+        <div className="absolute inset-0 z-10 flex flex-col" style={{ background: "rgba(0,0,0,0.92)" }}>
+          <div className="flex flex-col h-full px-5 pt-12 pb-8">
+            <div className="text-stone-500 text-xs uppercase tracking-widest mb-1">Session complete</div>
+            <div className="text-amber-50 text-2xl mb-4" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
+              Save this listening session?
+            </div>
+            {/* Record list */}
+            <div className="flex-1 overflow-y-auto space-y-1 mb-4">
+              {history.map((rec, i) => (
+                <div key={`${rec.id}-${i}`} className="flex items-center gap-3 px-2.5 py-2 rounded-xl">
+                  <CoverArt record={rec} size={32} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
+                    <div className="text-stone-500 text-xs truncate">{rec.artist}</div>
+                  </div>
+                  {i === 0 && (
+                    <span className="text-stone-600 text-[10px] shrink-0">start</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="text-stone-600 text-xs text-center mb-4">{history.length} record{history.length !== 1 ? "s" : ""}</div>
+            <div className="flex gap-3">
+              <button
+                onClick={onDiscardSession}
+                className="flex-1 py-3 rounded-xl border border-stone-700 text-stone-400 text-sm hover:border-stone-600 hover:text-stone-300 transition-colors"
+              >
+                Discard
+              </button>
+              <button
+                onClick={onSaveSession}
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-sm hover:bg-amber-900/40 transition-colors disabled:opacity-60"
+              >
+                {saving ? "Saving…" : "Save session"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2167,6 +2251,64 @@ function GenreBubbleMap({ items, styleItems, onBubbleClick, onStyleClick }) {
   );
 }
 
+const SESSION_GAP_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function groupPlaySessions(playSessions, collection) {
+  const chronological = [...playSessions].reverse();
+  const groups = [];
+  let current = null;
+  for (const play of chronological) {
+    const t = new Date(play.played_at).getTime();
+    if (!current || t - current.lastTime > SESSION_GAP_MS) {
+      current = { plays: [play], startTime: t, lastTime: t };
+      groups.push(current);
+    } else {
+      current.plays.push(play);
+      current.lastTime = t;
+    }
+  }
+  return groups.reverse().map(g => {
+    const records = g.plays
+      .map(p => collection?.find(r => String(r.id) === String(p.record_id)))
+      .filter(Boolean);
+    const unique = [...new Map(records.map(r => [r.id, r])).values()];
+    const genreCounts = {};
+    for (const r of unique) {
+      for (const genre of (r.genres || r.genre?.split(',').map(s => s.trim()) || [])) {
+        genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+      }
+    }
+    const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    const durationMins = Math.round((g.lastTime - g.startTime) / 60000);
+    return {
+      id: `session-${g.startTime}`,
+      plays: [...g.plays].reverse(),
+      records: unique,
+      startTime: g.startTime,
+      playCount: g.plays.length,
+      durationMins,
+      topGenre,
+    };
+  });
+}
+
+function sessionDateLabel(t) {
+  const d = new Date(t);
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function sessionDurationLabel(durationMins, playCount) {
+  if (playCount === 1) return "1 record";
+  if (durationMins < 2) return `${playCount} records`;
+  if (durationMins < 60) return `${playCount} records · ${durationMins}m`;
+  const h = Math.floor(durationMins / 60), m = durationMins % 60;
+  return `${playCount} records · ${h}h${m > 0 ? ` ${m}m` : ""}`;
+}
+
 export default function VinylCrate() {
   const { user } = useUser();
   const [collection, setCollection] = useState(null);
@@ -2223,6 +2365,9 @@ export default function VinylCrate() {
   const [trailSearch, setTrailSearch] = useState("");
   const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
   const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
+  const [expandedSessions, setExpandedSessions] = useState(new Set());
+  const [trailSavePrompt, setTrailSavePrompt] = useState(false);
+  const [trailSaving, setTrailSaving] = useState(false);
 
   // legacy playToast kept as null so nothing breaks — pill replaces it
   const [playToast] = useState(null);
@@ -2674,8 +2819,13 @@ export default function VinylCrate() {
         body: JSON.stringify({ record_id: record.id, artist: record.artist, title: record.title }),
       });
       if (!res.ok) return null;
-      const f = await res.json();
-      if (f) setSpotifyFeatures(prev => ({ ...prev, [record.id]: f }));
+      const raw = await res.json();
+      if (!raw) return null;
+      // Normalize loudness from dB (typically -30..−3) to 0–1
+      const f = raw.loudness != null
+        ? { ...raw, loudness: Math.min(1, Math.max(0, (raw.loudness + 30) / 27)) }
+        : raw;
+      setSpotifyFeatures(prev => ({ ...prev, [record.id]: f }));
       return f;
     } catch { return null; }
   }
@@ -2689,19 +2839,21 @@ export default function VinylCrate() {
       if (cf && rf) {
         const eDiff = rf.energy - cf.energy;
         const tDiff = rf.tempo - cf.tempo;
+        const lDiff = (rf.loudness ?? 0.70) - (cf.loudness ?? 0.70);
         if (direction === "windDown") {
-          // Want lower energy + lower tempo
-          return eDiff < 0 ? Math.abs(eDiff) * 2 + Math.max(0, -tDiff / 150) : eDiff - 1;
+          // Want lower energy + lower tempo + quieter/more dynamic
+          return eDiff < 0 ? Math.abs(eDiff) * 1.5 + Math.max(0, -tDiff / 150) + Math.max(0, -lDiff) * 0.6 : eDiff - 1;
         }
         if (direction === "liftUp") {
-          // Want higher energy + higher tempo
-          return eDiff > 0 ? eDiff * 2 + Math.max(0, tDiff / 150) : eDiff - 1;
+          // Want higher energy + higher tempo + louder
+          return eDiff > 0 ? eDiff * 1.5 + Math.max(0, tDiff / 150) + Math.max(0, lDiff) * 0.6 : eDiff - 1;
         }
-        // sideways: similar energy but different genre or very different valence
+        // sideways: similar energy + similar loudness (keep the amp at the same level), different genre/valence
         const energyClose = 1 - Math.abs(eDiff);
         const valenceDiff = Math.abs(rf.valence - cf.valence);
+        const loudnessClose = 1 - Math.abs(lDiff);
         const diffGenre = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.6 : 0;
-        return energyClose * 0.4 + valenceDiff * 0.3 + diffGenre;
+        return energyClose * 0.35 + valenceDiff * 0.25 + diffGenre + loudnessClose * 0.15;
       }
       // Fallback: genre/decade heuristics only
       const sameGenre = getGenres(r).some(g => getGenres(centerRecord).includes(g));
@@ -2752,7 +2904,6 @@ export default function VinylCrate() {
   }
 
   async function navigateTrail(record) {
-    await logPlay(record.id);
     setTrailCenter(record);
     setTrailHistory(prev => [...prev, record]);
     setTrailSuggestions(null);
@@ -2768,6 +2919,35 @@ export default function VinylCrate() {
       setTrailError("Couldn't load suggestions — try again.");
     } finally {
       setTrailLoading(false);
+    }
+  }
+
+  function handleTrailClose() {
+    if (trailHistory.length > 1) {
+      setTrailSavePrompt(true);
+    } else {
+      setTrailActive(false);
+      setTrailSearchOpen(false);
+    }
+  }
+
+  function handleTrailDiscard() {
+    setTrailSavePrompt(false);
+    setTrailActive(false);
+    setTrailSearchOpen(false);
+  }
+
+  async function saveTrailSession() {
+    setTrailSaving(true);
+    try {
+      for (const record of trailHistory) {
+        await logPlay(record.id);
+      }
+    } finally {
+      setTrailSaving(false);
+      setTrailSavePrompt(false);
+      setTrailActive(false);
+      setTrailSearchOpen(false);
     }
   }
 
@@ -3498,49 +3678,74 @@ export default function VinylCrate() {
                   <div className="text-stone-600 text-sm text-center py-16">No plays logged yet.</div>
                 ) : (
                   <div className="space-y-1">
-                    {playSessions.map((session) => {
-                      const rec = collection?.find((r) => String(r.id) === String(session.record_id));
-                      if (!rec) return null;
-                      const relDate = (() => {
-                        const diff = Date.now() - new Date(session.played_at).getTime();
-                        const mins = Math.floor(diff / 60000);
-                        if (mins < 1) return "just now";
-                        if (mins < 60) return `${mins}m ago`;
-                        const hrs = Math.floor(mins / 60);
-                        if (hrs < 24) return `${hrs}h ago`;
-                        const days = Math.floor(hrs / 24);
-                        if (days === 1) return "Yesterday";
-                        if (days < 7) return `${days}d ago`;
-                        return new Date(session.played_at).toLocaleDateString();
-                      })();
+                    {groupPlaySessions(playSessions, collection).map((session) => {
+                      const isExpanded = expandedSessions.has(session.id);
+                      const thumbs = session.records.slice(0, 3);
+                      const playCounts2 = {};
+                      for (const p of session.plays) {
+                        playCounts2[p.record_id] = (playCounts2[p.record_id] || 0) + 1;
+                      }
                       return (
-                        <div key={session.id} onClick={() => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }} className="flex items-center gap-3 px-2.5 py-2 rounded-xl cursor-pointer hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all">
-                          <CoverArt record={rec} size={40} />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
-                            <div className="text-stone-500 text-xs truncate">{rec.artist}</div>
+                        <div key={session.id}>
+                          {/* Collapsed row */}
+                          <div
+                            onClick={() => setExpandedSessions(prev => {
+                              const next = new Set(prev);
+                              if (next.has(session.id)) next.delete(session.id);
+                              else next.add(session.id);
+                              return next;
+                            })}
+                            className="flex items-center gap-3 px-2.5 py-2 rounded-xl cursor-pointer hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all"
+                            style={{ minHeight: 52 }}
+                          >
+                            {/* Stacked thumbnails */}
+                            <div className="relative shrink-0" style={{ width: 28 + (thumbs.length - 1) * 14, height: 28 }}>
+                              {thumbs.map((r, i) => (
+                                <div key={r.id} className="absolute rounded-md overflow-hidden border border-stone-800"
+                                  style={{ left: i * 14, top: 0, width: 28, height: 28, zIndex: thumbs.length - i }}>
+                                  <CoverArt record={r} size={28} />
+                                </div>
+                              ))}
+                            </div>
+                            {/* Labels */}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
+                                {sessionDateLabel(session.startTime)}
+                              </div>
+                              <div className="text-stone-500 text-xs">{sessionDurationLabel(session.durationMins, session.playCount)}</div>
+                            </div>
+                            {/* Genre pill + chevron */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {session.topGenre && (
+                                <span className="text-amber-700/80 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-900/40 bg-amber-900/10 truncate" style={{ maxWidth: 72 }}>
+                                  {session.topGenre}
+                                </span>
+                              )}
+                              <span className="text-stone-600 text-xs">{isExpanded ? "▲" : "▼"}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="text-stone-600 text-xs">{relDate}</div>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await fetch(`/api/plays/${session.id}`, { method: "DELETE" });
-                                setPlaySessions((prev) => prev.filter((s) => s.id !== session.id));
-                                setPlayCounts((prev) => ({ ...prev, [session.record_id]: Math.max((prev[session.record_id] || 0) - 1, 0) }));
-                                setLastPlayedDates((prev) => {
-                                  const remaining = playSessions.filter((s) => s.id !== session.id && s.record_id === session.record_id);
-                                  const nd = { ...prev };
-                                  if (remaining.length > 0) nd[session.record_id] = remaining[0].played_at;
-                                  else delete nd[session.record_id];
-                                  return nd;
-                                });
-                              }}
-                              className="text-stone-700 hover:text-stone-400 transition-colors text-base w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/[0.06]"
-                            >
-                              ×
-                            </button>
-                          </div>
+                          {/* Expanded record list */}
+                          {isExpanded && (
+                            <div className="ml-4 mb-1 space-y-0.5">
+                              {session.records.map(rec => {
+                                const count = playCounts2[String(rec.id)] || 1;
+                                return (
+                                  <div key={rec.id}
+                                    onClick={() => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
+                                    className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-white/[0.04] transition-all">
+                                    <CoverArt record={rec} size={36} />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
+                                      <div className="text-stone-500 text-[10px] truncate">{rec.artist}</div>
+                                    </div>
+                                    {count > 1 && (
+                                      <span className="text-stone-500 text-[10px] shrink-0">×{count}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -3677,12 +3882,14 @@ export default function VinylCrate() {
                   const danceability = avg("danceability");
                   const acousticness = avg("acousticness");
                   const tempo = avg("tempo");
+                  const loudness = avg("loudness");
 
                   const bars = [
                     { label: "Energy",        value: energy,        color: "bg-amber-600/70" },
                     { label: "Mood",          value: valence,       color: "bg-rose-600/60", hint: valence > 0.6 ? "upbeat" : valence < 0.4 ? "melancholic" : "balanced" },
                     { label: "Danceability",  value: danceability,  color: "bg-emerald-700/60" },
                     { label: "Acoustic",      value: acousticness,  color: "bg-stone-500/70" },
+                    { label: "Loudness",      value: loudness,      color: "bg-orange-900/70", hint: loudness > 0.80 ? "loud" : loudness < 0.45 ? "dynamic" : "balanced" },
                   ];
 
                   const analyzeCollection = async () => {
@@ -3698,7 +3905,12 @@ export default function VinylCrate() {
                         });
                         if (res.ok) {
                           const data = await res.json();
-                          if (data && data.energy != null) setSpotifyFeatures(prev => ({ ...prev, [record.id]: data }));
+                          if (data && data.energy != null) {
+                            const normalized = data.loudness != null
+                              ? { ...data, loudness: Math.min(1, Math.max(0, (data.loudness + 30) / 27)) }
+                              : data;
+                            setSpotifyFeatures(prev => ({ ...prev, [record.id]: normalized }));
+                          }
                         }
                       } catch {}
                     }
@@ -4037,6 +4249,7 @@ export default function VinylCrate() {
             setTab("reco");
             setSelected(null);
           }}
+          spotifyFeatures={spotifyFeatures}
         />
       )}
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
@@ -4070,7 +4283,7 @@ export default function VinylCrate() {
                 }}
                 className="flex-1 py-2 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-xs hover:bg-amber-900/40 transition-colors"
               >
-                ⬡ Play Trail
+                ⬡ Listening Session
               </button>
             </div>
           </div>
@@ -4091,8 +4304,12 @@ export default function VinylCrate() {
           onNavigate={navigateTrail}
           onSearchChange={setTrailSearch}
           onToggleSearch={() => setTrailSearchOpen(o => !o)}
-          onClose={() => { setTrailActive(false); setTrailSearchOpen(false); }}
+          onClose={handleTrailClose}
           playCounts={playCounts}
+          savePrompt={trailSavePrompt}
+          saving={trailSaving}
+          onSaveSession={saveTrailSession}
+          onDiscardSession={handleTrailDiscard}
         />
       )}
     </div>
