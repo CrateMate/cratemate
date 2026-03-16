@@ -2445,6 +2445,10 @@ export default function VinylCrate() {
   const [overlapData, setOverlapData] = useState(null);
   const [overlapLoading, setOverlapLoading] = useState(false);
   const [showAllSharedArtists, setShowAllSharedArtists] = useState(false);
+  const [enrichmentProgress, setEnrichmentProgress] = useState(null); // null | { done, total, type }
+  const enrichmentAbort = useRef(false);
+  const spotifyFeaturesRef = useRef({});
+  const enrichmentStarted = useRef(false);
 
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
@@ -2474,7 +2478,17 @@ export default function VinylCrate() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/spotify/features").then(r => r.ok ? r.json() : {}).then(d => setSpotifyFeatures(d || {})).catch(() => {});
+    fetch("/api/spotify/features").then(r => r.ok ? r.json() : {}).then(raw => {
+      if (!raw) return;
+      // Normalize loudness from dB to 0–1, same as fetchAndCacheFeatures
+      const normalized = Object.fromEntries(
+        Object.entries(raw).map(([id, f]) => [
+          id,
+          f.loudness != null ? { ...f, loudness: Math.min(1, Math.max(0, (f.loudness + 30) / 27)) } : f,
+        ])
+      );
+      setSpotifyFeatures(normalized);
+    }).catch(() => {});
 
     fetch("/api/discogs/status")
       .then((r) => r.json())
@@ -2563,6 +2577,76 @@ export default function VinylCrate() {
     if (heartsSentinelRef.current) observer.observe(heartsSentinelRef.current);
     return () => observer.disconnect();
   }, [heartsInfiniteScroll, heartsVisible]);
+
+  // Keep ref in sync for background loops that need fresh feature data without stale closures
+  useEffect(() => { spotifyFeaturesRef.current = spotifyFeatures; }, [spotifyFeatures]);
+
+  // Background audio-features enrichment: runs once after collection + initial features load
+  useEffect(() => {
+    if (!Array.isArray(collection) || collection.length === 0) return;
+    if (enrichmentStarted.current) return;
+    enrichmentStarted.current = true;
+    enrichmentAbort.current = false;
+
+    async function runFeaturesQueue() {
+      // Wait 4s for the initial GET /api/spotify/features to settle
+      await new Promise(res => setTimeout(res, 4000));
+      const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]);
+      if (uncached.length === 0) return;
+      setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
+      let done = 0;
+      for (const record of uncached) {
+        if (enrichmentAbort.current) break;
+        await fetchAndCacheFeatures(record);
+        done++;
+        setEnrichmentProgress({ done, total: uncached.length, type: "audio" });
+        await new Promise(res => setTimeout(res, 1500));
+      }
+      setEnrichmentProgress(null);
+    }
+
+    runFeaturesQueue();
+    return () => { enrichmentAbort.current = true; };
+  }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Background Discogs ID resolution: quietly resolve records missing discogs_id
+  useEffect(() => {
+    if (!Array.isArray(collection) || collection.length === 0) return;
+
+    async function runDiscogsQueue() {
+      await new Promise(res => setTimeout(res, 6000)); // start after features queue
+      const unresolved = collection.filter(r => r.artist && r.title && !r.discogs_id);
+      if (unresolved.length === 0) return;
+      setEnrichmentProgress(p => p ?? { done: 0, total: unresolved.length, type: "discogs" });
+      let done = 0;
+      for (const record of unresolved) {
+        if (enrichmentAbort.current) break;
+        try {
+          const res = await fetch(
+            `/api/discogs/resolve?artist=${encodeURIComponent(record.artist || "")}&title=${encodeURIComponent(record.title || "")}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data.release_id) {
+              const patch = { discogs_id: data.release_id, ...(data.cover_image ? { thumb: data.cover_image } : {}) };
+              await fetch(`/api/records/${record.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patch),
+              });
+              setCollection(prev => Array.isArray(prev) ? prev.map(r => r.id === record.id ? { ...r, ...patch } : r) : prev);
+            }
+          }
+        } catch {}
+        done++;
+        setEnrichmentProgress({ done, total: unresolved.length, type: "discogs" });
+        await new Promise(res => setTimeout(res, 1200));
+      }
+      setEnrichmentProgress(null);
+    }
+
+    runDiscogsQueue();
+  }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
@@ -4447,6 +4531,18 @@ export default function VinylCrate() {
           onSaveSession={saveTrailSession}
           onDiscardSession={handleTrailDiscard}
         />
+      )}
+
+      {/* Background enrichment indicator */}
+      {enrichmentProgress && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[150] pointer-events-none">
+          <div className="bg-stone-950/90 border border-stone-800/60 rounded-full px-3 py-1.5 flex items-center gap-2 backdrop-blur-sm">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-600/70 animate-pulse shrink-0" />
+            <span className="text-stone-500 text-[11px]">
+              {enrichmentProgress.type === "audio" ? "Analyzing audio" : "Enriching library"} · {enrichmentProgress.done}/{enrichmentProgress.total}
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );
