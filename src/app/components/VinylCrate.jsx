@@ -2374,6 +2374,7 @@ export default function VinylCrate() {
   const [tab, setTab] = useState("crate");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("artist");
+  const [sortDir, setSortDir] = useState("asc");
   const [showForSale, setShowForSale] = useState(false);
   const [selected, setSelected] = useState(null);
   const [lastPlayed, setLastPlayed] = useState(null);
@@ -2558,7 +2559,7 @@ export default function VinylCrate() {
     }
   }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
 
-  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, activeGenres, activeDecade, activeFormat, showForSale]);
+  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, showForSale]);
 
   useEffect(() => {
     if (!infiniteScroll) return;
@@ -2653,9 +2654,12 @@ export default function VinylCrate() {
   const pool = showForSale ? forSaleRecords : myRecords;
 
   const sorted = [...pool].sort((a, b) => {
-    if (sortBy === "year") return (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999);
-    if (sortBy === "genre") return (a.genres || a.genre || "").localeCompare(b.genres || b.genre || "");
-    return (a.artist || "").localeCompare(b.artist || "");
+    let cmp = 0;
+    if (sortBy === "year") cmp = (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999);
+    else if (sortBy === "genre") cmp = (a.genres || a.genre || "").localeCompare(b.genres || b.genre || "");
+    else if (sortBy === "hearts") cmp = (a.favorite_tracks || []).length - (b.favorite_tracks || []).length;
+    else cmp = (a.artist || "").localeCompare(b.artist || "");
+    return sortDir === "asc" ? cmp : -cmp;
   });
 
   const filtered = sorted.filter((r) => {
@@ -3243,15 +3247,19 @@ export default function VinylCrate() {
                   ["artist", "A–Z"],
                   ["year", "Year"],
                   ["genre", "Genre"],
+                  ["hearts", "♥"],
                 ].map(([k, l]) => (
                   <button
                     key={k}
-                    onClick={() => setSortBy(k)}
-                    className={`px-2.5 py-1 rounded-lg text-xs transition-all ${
+                    onClick={() => {
+                      if (sortBy === k) setSortDir(d => d === "asc" ? "desc" : "asc");
+                      else { setSortBy(k); setSortDir("asc"); }
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-0.5 ${
                       sortBy === k ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"
                     }`}
                   >
-                    {l}
+                    {l}{sortBy === k && <span className="text-[10px] leading-none">{sortDir === "asc" ? "↑" : "↓"}</span>}
                   </button>
                 ))}
               </div>
