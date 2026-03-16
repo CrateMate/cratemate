@@ -1776,25 +1776,35 @@ function computeForceLayout(bubbles, width, height) {
   return nodes;
 }
 
-function GenreBubbleMap({ items, styleItems, onBubbleClick, onStyleClick }) {
-  const [width, setWidth] = useState(320);
+function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, fullscreen = false }) {
+  const [containerWidth, setContainerWidth] = useState(fullscreen ? window.innerWidth : 320);
   const [expandedGenre, setExpandedGenre] = useState(null);
   const ref = useRef(null);
+
   useEffect(() => {
-    if (ref.current) setWidth(ref.current.clientWidth);
-  }, []);
+    if (!fullscreen && ref.current) setContainerWidth(ref.current.clientWidth);
+    if (fullscreen) {
+      const update = () => setContainerWidth(window.innerWidth);
+      window.addEventListener("resize", update);
+      return () => window.removeEventListener("resize", update);
+    }
+  }, [fullscreen]);
+
+  const width = containerWidth;
+  const height = fullscreen
+    ? Math.max(400, window.innerHeight - 140)
+    : Math.max(220, Math.min(380, items.length * 18));
 
   const maxCount = Math.max(...items.map(i => i.count), 1);
-  const MAX_R = Math.min(width * 0.18, 60);
-  const MIN_R = 16;
-  const height = Math.max(220, Math.min(380, items.length * 18));
+  const MAX_R = fullscreen ? Math.min(width * 0.12, 80) : Math.min(width * 0.18, 60);
+  const MIN_R = fullscreen ? 22 : 16;
 
   const bubbles = useMemo(() => {
     return [...items]
       .sort((a, b) => b.count - a.count)
       .map(item => ({ ...item, r: MIN_R + (MAX_R - MIN_R) * Math.sqrt(item.count / maxCount) }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length, width]);
+  }, [items.length, width, fullscreen]);
 
   const placed = useMemo(() => {
     if (bubbles.length === 0) return [];
@@ -1802,73 +1812,148 @@ function GenreBubbleMap({ items, styleItems, onBubbleClick, onStyleClick }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bubbles]);
 
-  return (
-    <div ref={ref} className="w-full">
-      <svg width={width} height={height} onClick={() => setExpandedGenre(null)}>
-        {placed.map(b => {
-          const { fill, stroke, text } = genreSvgColor(b.label);
-          const showLabel = b.r >= 22;
-          const showCount = b.r >= 18;
-          const isExpanded = expandedGenre === b.label;
-          const styleList = styleItems?.[b.label] || [];
+  // When a genre is expanded, position it at SVG center for maximum orbit room
+  const cx = width / 2;
+  const cy = height / 2;
 
-          return (
-            <g key={b.label}>
-              {/* Style sub-bubbles when expanded */}
-              {isExpanded && styleList.map((s, idx) => {
-                const angle = (idx / Math.max(styleList.length, 1)) * Math.PI * 2 - Math.PI / 2;
-                const orbitR = b.r + 28;
-                const scx = b.cx + orbitR * Math.cos(angle);
-                const scy = b.cy + orbitR * Math.sin(angle);
-                const maxSCount = Math.max(...styleList.map(x => x.count), 1);
-                const sr = 8 + 12 * Math.sqrt(s.count / maxSCount);
-                const { fill: sf, stroke: ss, text: st } = genreSvgColor(s.label);
-                return (
-                  <g key={s.label} onClick={(e) => { e.stopPropagation(); onStyleClick?.(s.label); }} style={{ cursor: "pointer" }}>
-                    <circle cx={scx} cy={scy} r={sr} fill={sf} stroke={ss} strokeWidth={1} opacity={0.9} />
-                    {sr >= 14 && (
-                      <text x={scx} y={scy} textAnchor="middle" dominantBaseline="middle"
-                        fill={st} fontSize={Math.max(7, sr * 0.35)}
-                        style={{ pointerEvents: "none", userSelect: "none" }}>
-                        {s.label.length > 8 ? s.label.slice(0, 7) + "…" : s.label}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-              {/* Main genre bubble */}
-              <g
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isExpanded) { onBubbleClick(b.label); setExpandedGenre(null); }
-                  else setExpandedGenre(b.label);
-                }}
-                style={{ cursor: "pointer" }}
-                transform={isExpanded ? `translate(${b.cx},${b.cy}) scale(1.15) translate(${-b.cx},${-b.cy})` : ""}
-              >
-                <circle cx={b.cx} cy={b.cy} r={b.r} fill={fill} stroke={isExpanded ? "#fbbf24" : stroke} strokeWidth={isExpanded ? 2 : 1.5} />
-                {showLabel && (
-                  <text x={b.cx} y={b.cy - (showCount ? 6 : 0)} textAnchor="middle"
-                    dominantBaseline="middle" fill={text} fontSize={Math.max(9, b.r * 0.32)}
-                    style={{ pointerEvents: "none", userSelect: "none" }}>
-                    {b.label.length > 10 ? b.label.slice(0, 9) + "…" : b.label}
-                  </text>
-                )}
-                {showCount && (
-                  <text x={b.cx} y={b.cy + (showLabel ? 10 : 0)} textAnchor="middle"
-                    dominantBaseline="middle" fill={text} fontSize={Math.max(8, b.r * 0.26)}
-                    opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
-                    {b.count}
-                  </text>
-                )}
+  function renderBubbles() {
+    return placed.map(b => {
+      const { fill, stroke, text } = genreSvgColor(b.label);
+      const isExpanded = expandedGenre === b.label;
+      const isHidden = expandedGenre !== null && !isExpanded;
+      const styleList = styleItems?.[b.label] || [];
+
+      // In expanded mode the genre moves to center
+      const bx = isExpanded ? cx : b.cx;
+      const by = isExpanded ? cy : b.cy;
+      const br = isExpanded ? (fullscreen ? b.r * 1.4 : b.r * 1.2) : b.r;
+      const showLabel = br >= 22;
+      const showCount = br >= 18;
+
+      // Orbit radius scales with available space
+      const orbitR = br + (fullscreen ? 60 : 36);
+      const maxSCount = Math.max(...styleList.map(x => x.count), 1);
+
+      return (
+        <g key={b.label} style={{ transition: "opacity 0.25s", opacity: isHidden ? 0 : 1, pointerEvents: isHidden ? "none" : "auto" }}>
+          {/* Style sub-bubbles orbit center when expanded */}
+          {isExpanded && styleList.map((s, idx) => {
+            const angle = (idx / Math.max(styleList.length, 1)) * Math.PI * 2 - Math.PI / 2;
+            const scx = bx + orbitR * Math.cos(angle);
+            const scy = by + orbitR * Math.sin(angle);
+            const sr = (fullscreen ? 14 : 9) + (fullscreen ? 18 : 12) * Math.sqrt(s.count / maxSCount);
+            const { fill: sf, stroke: ss, text: st } = genreSvgColor(s.label);
+            return (
+              <g key={s.label} onClick={(e) => { e.stopPropagation(); onStyleClick?.(s.label); }} style={{ cursor: "pointer" }}>
+                <circle cx={scx} cy={scy} r={sr} fill={sf} stroke={ss} strokeWidth={1} opacity={0.9} />
+                <text x={scx} y={scy} textAnchor="middle" dominantBaseline="middle"
+                  fill={st} fontSize={Math.max(8, sr * 0.38)}
+                  style={{ pointerEvents: "none", userSelect: "none" }}>
+                  {s.label.length > 10 ? s.label.slice(0, 9) + "…" : s.label}
+                </text>
               </g>
-            </g>
-          );
-        })}
+            );
+          })}
+          {/* Main genre bubble */}
+          <g
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isExpanded) { onBubbleClick(b.label); setExpandedGenre(null); }
+              else setExpandedGenre(b.label);
+            }}
+            style={{ cursor: "pointer", transition: "transform 0.25s" }}
+          >
+            <circle cx={bx} cy={by} r={br} fill={fill} stroke={isExpanded ? "#fbbf24" : stroke} strokeWidth={isExpanded ? 2.5 : 1.5} />
+            {showLabel && (
+              <text x={bx} y={by - (showCount ? 7 : 0)} textAnchor="middle"
+                dominantBaseline="middle" fill={text} fontSize={Math.max(9, br * 0.32)}
+                style={{ pointerEvents: "none", userSelect: "none" }}>
+                {b.label.length > 12 ? b.label.slice(0, 11) + "…" : b.label}
+              </text>
+            )}
+            {showCount && (
+              <text x={bx} y={by + (showLabel ? 11 : 0)} textAnchor="middle"
+                dominantBaseline="middle" fill={text} fontSize={Math.max(8, br * 0.26)}
+                opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
+                {b.count}
+              </text>
+            )}
+          </g>
+        </g>
+      );
+    });
+  }
+
+  return (
+    <div ref={ref} className="w-full h-full relative">
+      <svg width={width} height={height} onClick={() => setExpandedGenre(null)} style={{ display: "block" }}>
+        {renderBubbles()}
       </svg>
       {expandedGenre && (
-        <div className="text-center text-stone-600 text-xs mt-1">
+        <div className="text-center text-stone-600 text-xs mt-1 absolute bottom-0 w-full">
           Tap genre again to filter · tap a style to drill in
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GenreBubbleMap({ items, styleItems, onBubbleClick, onStyleClick }) {
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  return (
+    <div className="w-full relative">
+      {/* Enlarge button */}
+      <button
+        onClick={() => setFullscreen(true)}
+        className="absolute top-0 right-0 z-10 text-stone-600 hover:text-amber-400 transition-colors p-1"
+        title="Expand map"
+        style={{ lineHeight: 1 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9" />
+        </svg>
+      </button>
+
+      <GenreBubbleMapInner
+        items={items}
+        styleItems={styleItems}
+        onBubbleClick={onBubbleClick}
+        onStyleClick={onStyleClick}
+      />
+
+      {/* Fullscreen overlay */}
+      {fullscreen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex flex-col"
+          style={{ backdropFilter: "blur(4px)" }}
+        >
+          <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
+            <span className="text-stone-400 text-sm font-medium tracking-wide">Collection Map</span>
+            <button
+              onClick={() => setFullscreen(false)}
+              className="text-stone-500 hover:text-amber-400 transition-colors text-lg leading-none px-2"
+              title="Close (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <GenreBubbleMapInner
+              items={items}
+              styleItems={styleItems}
+              onBubbleClick={(g) => { onBubbleClick(g); setFullscreen(false); }}
+              onStyleClick={(s) => { onStyleClick(s); setFullscreen(false); }}
+              fullscreen
+            />
+          </div>
         </div>
       )}
     </div>
