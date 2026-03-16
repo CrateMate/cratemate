@@ -2311,6 +2311,18 @@ function RadarChart({ myData, theirData, myLabel, theirLabel }) {
 
 const SESSION_GAP_MS = 2 * 60 * 60 * 1000; // 2 hours
 
+// Parse "M:SS" or "H:MM:SS" duration strings from a Discogs tracklist and sum to total seconds
+function parseDurationSecs(tracklist) {
+  let total = 0;
+  for (const t of tracklist || []) {
+    if (!t.duration) continue;
+    const parts = t.duration.split(":").map(Number);
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) total += parts[0] * 60 + parts[1];
+    else if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) total += parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  return total > 0 ? total : null;
+}
+
 function groupPlaySessions(playSessions, collection) {
   const chronological = [...playSessions].reverse();
   const groups = [];
@@ -2338,6 +2350,13 @@ function groupPlaySessions(playSessions, collection) {
     }
     const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
     const durationMins = Math.round((g.lastTime - g.startTime) / 60000);
+    // Compute actual listening time: album duration × play count per record
+    const playCounts = {};
+    for (const play of g.plays) playCounts[play.record_id] = (playCounts[play.record_id] || 0) + 1;
+    const allHaveDuration = unique.length > 0 && unique.every(r => r.duration_secs > 0);
+    const listeningSecs = allHaveDuration
+      ? unique.reduce((sum, r) => sum + r.duration_secs * (playCounts[r.id] || 1), 0)
+      : null;
     return {
       id: `session-${g.startTime}`,
       plays: [...g.plays].reverse(),
@@ -2345,6 +2364,7 @@ function groupPlaySessions(playSessions, collection) {
       startTime: g.startTime,
       playCount: g.plays.length,
       durationMins,
+      listeningSecs,
       topGenre,
     };
   });
@@ -2359,12 +2379,20 @@ function sessionDateLabel(t) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function sessionDurationLabel(durationMins, playCount) {
-  if (playCount === 1) return "1 record";
-  if (durationMins < 2) return `${playCount} records`;
-  if (durationMins < 60) return `${playCount} records · ${durationMins}m`;
-  const h = Math.floor(durationMins / 60), m = durationMins % 60;
-  return `${playCount} records · ${h}h${m > 0 ? ` ${m}m` : ""}`;
+function formatListeningTime(secs) {
+  const m = Math.round(secs / 60);
+  if (m < 1) return null;
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60), rem = m % 60;
+  return `${h}h${rem > 0 ? ` ${rem}m` : ""}`;
+}
+
+function sessionDurationLabel(durationMins, playCount, listeningSecs) {
+  const countStr = playCount === 1 ? "1 record" : `${playCount} records`;
+  const timeStr = listeningSecs != null
+    ? formatListeningTime(listeningSecs)
+    : (durationMins >= 2 ? formatListeningTime(durationMins * 60) : null);
+  return timeStr ? `${countStr} · ${timeStr}` : countStr;
 }
 
 export default function VinylCrate() {
@@ -2647,6 +2675,38 @@ export default function VinylCrate() {
     }
 
     runDiscogsQueue();
+  }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Background duration enrichment: fetch tracklist from Discogs cache and compute album duration
+  useEffect(() => {
+    if (!Array.isArray(collection) || collection.length === 0) return;
+
+    async function runDurationQueue() {
+      await new Promise(res => setTimeout(res, 10000)); // start after Discogs resolution queue
+      const needsDuration = collection.filter(r => r.discogs_id && !r.duration_secs);
+      if (needsDuration.length === 0) return;
+      for (const record of needsDuration) {
+        if (enrichmentAbort.current) break;
+        try {
+          const res = await fetch(`/api/discogs/release/${record.discogs_id}`);
+          if (res.ok) {
+            const data = await res.json();
+            const secs = parseDurationSecs(data.tracklist);
+            if (secs) {
+              await fetch(`/api/records/${record.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ duration_secs: secs }),
+              });
+              setCollection(prev => Array.isArray(prev) ? prev.map(r => r.id === record.id ? { ...r, duration_secs: secs } : r) : prev);
+            }
+          }
+        } catch {}
+        await new Promise(res => setTimeout(res, 1500));
+      }
+    }
+
+    runDurationQueue();
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
@@ -3863,7 +3923,7 @@ export default function VinylCrate() {
                               <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
                                 {sessionDateLabel(session.startTime)}
                               </div>
-                              <div className="text-stone-500 text-xs">{sessionDurationLabel(session.durationMins, session.playCount)}</div>
+                              <div className="text-stone-500 text-xs">{sessionDurationLabel(session.durationMins, session.playCount, session.listeningSecs)}</div>
                             </div>
                             {/* Genre pill + chevron */}
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -3939,6 +3999,15 @@ export default function VinylCrate() {
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
             const totalPlays = playSessions.length;
 
+            // Listening time stats using duration_secs
+            const recordDurationMap = Object.fromEntries((collection || []).filter(r => r.duration_secs).map(r => [String(r.id), r.duration_secs]));
+            const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const playsThisWeek = playSessions.filter(p => new Date(p.played_at).getTime() >= weekAgo);
+            const weekListeningSecs = playsThisWeek.reduce((sum, p) => sum + (recordDurationMap[String(p.record_id)] || 0), 0);
+            const totalListeningSecs = playSessions.reduce((sum, p) => sum + (recordDurationMap[String(p.record_id)] || 0), 0);
+            const weekListeningLabel = weekListeningSecs > 0 ? formatListeningTime(weekListeningSecs) : null;
+            const totalListeningLabel = totalListeningSecs > 0 ? formatListeningTime(totalListeningSecs) : null;
+
             const sortedDecades = Object.entries(decades).sort((a, b) => a[0].localeCompare(b[0]));
             const maxDecadeCount = Math.max(...Object.values(decades), 1);
             const topGenres = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 7);
@@ -3969,6 +4038,24 @@ export default function VinylCrate() {
                       <div className="text-xl">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "🎉" : "📅"}</div>
                       <div className="text-amber-300 text-xs font-medium mt-1">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "Weekend Warrior" : "Daily Listener"}</div>
                     </div>
+                  </div>
+                )}
+
+                {/* Listening time */}
+                {(weekListeningLabel || totalListeningLabel) && (
+                  <div className="flex gap-2">
+                    {weekListeningLabel && (
+                      <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
+                        <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{weekListeningLabel}</div>
+                        <div className="text-stone-500 text-xs mt-0.5">this week</div>
+                      </div>
+                    )}
+                    {totalListeningLabel && (
+                      <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
+                        <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{totalListeningLabel}</div>
+                        <div className="text-stone-500 text-xs mt-0.5">all time</div>
+                      </div>
+                    )}
                   </div>
                 )}
 
