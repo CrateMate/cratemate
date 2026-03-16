@@ -583,7 +583,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
           ))}
         </div>
         {playCount > 0 && (
-          <div className="text-stone-600 text-[11px]">▶ {playCount}</div>
+          <div className="text-stone-600 text-[11px]">· {playCount}</div>
         )}
       </div>
     </div>
@@ -847,7 +847,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
               onClick={() => onLogPlay?.(record.id)}
               className="flex-1 py-3 rounded-xl bg-stone-900/40 border border-stone-800/60 text-stone-300 text-sm font-medium hover:border-amber-900/50 hover:text-amber-200 transition-colors flex items-center justify-between px-4"
             >
-              <span>▶ Log Play</span>
+              <span>Log Play</span>
               {playCount > 0 && (
                 <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
               )}
@@ -1245,7 +1245,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                   >
                     <p style={{ color: "#fef3c7", fontSize: 9, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.title}</p>
                     <p style={{ color: "#a8a29e", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.artist}</p>
-                    {plays > 0 && <p style={{ color: "#78716c", fontSize: 7, marginTop: 1 }}>▶ {plays}</p>}
+                    {plays > 0 && <p style={{ color: "#78716c", fontSize: 7, marginTop: 1 }}>{plays}×</p>}
                   </div>
                 )}
               </div>
@@ -3633,7 +3633,7 @@ export default function VinylCrate() {
                     }}
                     className="text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
                   >
-                    {allExpanded ? "▼ Collapse all" : "▶ Expand all"}
+                    {allExpanded ? "− Collapse all" : "+ Expand all"}
                   </button>
                   <button
                     onClick={() => { setHeartsInfiniteScroll(s => !s); setHeartsPage(1); setHeartsVisible(HEARTS_PAGE_SIZE); }}
@@ -3664,7 +3664,7 @@ export default function VinylCrate() {
                             </span>
                           </div>
                           <span className="text-rose-400 text-xs shrink-0 mr-1">♥ {heartCount}</span>
-                          <span className="text-stone-600 text-xs shrink-0">{isExpanded ? "▼" : "▶"}</span>
+                          <span className={`text-stone-600 text-xs transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>›</span>
                         </button>
                         {isExpanded && (
                           <div className="space-y-0.5 pl-[52px] pr-2 pb-2">
@@ -4500,7 +4500,7 @@ export default function VinylCrate() {
                 }}
                 className="flex-1 py-2 rounded-xl border border-stone-700 text-stone-300 text-xs hover:border-amber-900/50 hover:text-amber-200 transition-colors"
               >
-                ▶ Log play
+                Log play
               </button>
               <button
                 onClick={() => {
