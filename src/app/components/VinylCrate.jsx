@@ -379,9 +379,20 @@ export function CoverArt({ record, size = 64 }) {
   return <VinylDisc record={record} size={size} />;
 }
 
+// Discogs genres that contain commas — must be protected before splitting on ","
+const COMPOUND_GENRES = ["Folk, World, & Country"];
+
 function getGenres(record) {
-  const source = record.genres || record.genre || "";
-  return source.split(",").map((g) => g.trim()).filter(Boolean);
+  let source = record.genres || record.genre || "";
+  const saved = {};
+  COMPOUND_GENRES.forEach((g, i) => {
+    const ph = `__CG${i}__`;
+    if (source.includes(g)) { saved[ph] = g; source = source.replace(g, ph); }
+  });
+  return source.split(",").map((g) => {
+    const t = g.trim();
+    return saved[t] || t;
+  }).filter(Boolean);
 }
 
 function getStyles(record) {
