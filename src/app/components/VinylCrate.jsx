@@ -2677,11 +2677,26 @@ export default function VinylCrate() {
                   <button
                     onClick={handleDiscogsImport}
                     disabled={importLoading}
-                    title={discogsUsername ? `Linked as ${discogsUsername}` : "Discogs linked"}
+                    title={discogsUsername ? `Linked as @${discogsUsername}` : "Discogs linked"}
                     className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all disabled:opacity-40"
                   >
-                    {importLoading ? "Importing..." : `↓ Discogs`}
+                    {importLoading ? "Importing..." : `↓ ${discogsUsername ? `@${discogsUsername}` : "Discogs"}`}
                   </button>
+                  <a
+                    href="/api/discogs/auth"
+                    title="Connect a different Discogs account"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      await fetch("/api/discogs/disconnect", { method: "POST" });
+                      setDiscogsConnected(false);
+                      setDiscogsUsername(null);
+                      window.location.href = "/api/discogs/auth";
+                    }}
+                    className="text-xs px-2 py-1 rounded-lg text-stone-700 hover:text-amber-500 transition-colors"
+                    title="Re-link a different Discogs account"
+                  >
+                    ↺
+                  </a>
                   {hasUnlinked && (
                     <button
                       onClick={handleCleanupSeeded}
