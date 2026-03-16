@@ -23,7 +23,15 @@ export async function POST(request: Request) {
   if (cached) return NextResponse.json(cached);
 
   // Fetch from Spotify
-  const features = await fetchAlbumFeatures(artist, title);
+  let features;
+  try {
+    features = await fetchAlbumFeatures(artist, title);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === "SPOTIFY_AUDIO_FEATURES_DEPRECATED") {
+      return NextResponse.json({ error: "audio_features_deprecated" }, { status: 200 });
+    }
+    return NextResponse.json(null);
+  }
   if (!features) return NextResponse.json(null);
 
   // Store in cache

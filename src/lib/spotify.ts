@@ -62,9 +62,15 @@ export async function fetchAlbumFeatures(
   if (trackIds.length === 0) return null;
 
   // Batch fetch audio features (max 100 per request)
+  // NOTE: /audio-features was deprecated by Spotify on Nov 27 2024 for new apps (returns 403)
   const ids = trackIds.slice(0, 100).join(",");
   const featuresRes = await spotifyGet(`/audio-features?ids=${ids}`);
-  if (!featuresRes.ok) return null;
+  if (!featuresRes.ok) {
+    if (featuresRes.status === 403) {
+      throw new Error("SPOTIFY_AUDIO_FEATURES_DEPRECATED");
+    }
+    return null;
+  }
   const featuresData = await featuresRes.json();
   const features: Array<{
     energy: number;

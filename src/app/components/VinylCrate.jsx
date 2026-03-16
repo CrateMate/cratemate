@@ -1421,6 +1421,46 @@ function StreamingButtons({ artist, title }) {
   );
 }
 
+// Genre-based audio profile estimates (used when Spotify audio-features are unavailable)
+const GENRE_AUDIO_PROFILES = {
+  "Electronic":       { energy: 0.82, valence: 0.58, danceability: 0.78, acousticness: 0.05, tempo: 128 },
+  "House":            { energy: 0.86, valence: 0.64, danceability: 0.87, acousticness: 0.02, tempo: 124 },
+  "Techno":           { energy: 0.88, valence: 0.48, danceability: 0.84, acousticness: 0.02, tempo: 132 },
+  "Ambient":          { energy: 0.28, valence: 0.45, danceability: 0.25, acousticness: 0.75, tempo: 80  },
+  "Jazz":             { energy: 0.44, valence: 0.58, danceability: 0.55, acousticness: 0.72, tempo: 108 },
+  "Classical":        { energy: 0.34, valence: 0.52, danceability: 0.28, acousticness: 0.92, tempo: 96  },
+  "Metal":            { energy: 0.92, valence: 0.38, danceability: 0.55, acousticness: 0.05, tempo: 148 },
+  "Punk":             { energy: 0.90, valence: 0.55, danceability: 0.65, acousticness: 0.05, tempo: 168 },
+  "Rock":             { energy: 0.76, valence: 0.54, danceability: 0.60, acousticness: 0.15, tempo: 120 },
+  "Alternative Rock": { energy: 0.72, valence: 0.48, danceability: 0.57, acousticness: 0.18, tempo: 118 },
+  "Indie Rock":       { energy: 0.65, valence: 0.50, danceability: 0.58, acousticness: 0.25, tempo: 116 },
+  "Pop":              { energy: 0.68, valence: 0.70, danceability: 0.72, acousticness: 0.20, tempo: 120 },
+  "Hip Hop":          { energy: 0.70, valence: 0.55, danceability: 0.80, acousticness: 0.15, tempo: 90  },
+  "R&B":              { energy: 0.60, valence: 0.60, danceability: 0.74, acousticness: 0.30, tempo: 95  },
+  "Soul":             { energy: 0.62, valence: 0.66, danceability: 0.70, acousticness: 0.40, tempo: 100 },
+  "Funk":             { energy: 0.78, valence: 0.72, danceability: 0.82, acousticness: 0.15, tempo: 104 },
+  "Blues":            { energy: 0.52, valence: 0.48, danceability: 0.58, acousticness: 0.55, tempo: 88  },
+  "Country":          { energy: 0.56, valence: 0.65, danceability: 0.62, acousticness: 0.55, tempo: 112 },
+  "Folk":             { energy: 0.42, valence: 0.58, danceability: 0.45, acousticness: 0.78, tempo: 96  },
+  "Reggae":           { energy: 0.58, valence: 0.72, danceability: 0.78, acousticness: 0.30, tempo: 80  },
+  "Latin":            { energy: 0.72, valence: 0.78, danceability: 0.84, acousticness: 0.22, tempo: 100 },
+  "Disco":            { energy: 0.80, valence: 0.78, danceability: 0.88, acousticness: 0.08, tempo: 116 },
+  "Dance":            { energy: 0.84, valence: 0.68, danceability: 0.86, acousticness: 0.05, tempo: 126 },
+};
+
+function estimateFeaturesFromRecord(record) {
+  const genreStr = (record.genre || "").toLowerCase();
+  const styleStr = (record.style || record.styles || "").toLowerCase();
+  const combined = genreStr + " " + styleStr;
+  const match = Object.entries(GENRE_AUDIO_PROFILES).find(([key]) => combined.includes(key.toLowerCase()));
+  const base = match ? { ...match[1] } : { energy: 0.60, valence: 0.55, danceability: 0.60, acousticness: 0.40, tempo: 105 };
+  // Older records skew more acoustic
+  const year = record.year_original || record.year_pressed;
+  if (year && year < 1965) base.acousticness = Math.min(1, base.acousticness + 0.2);
+  else if (year && year >= 1990) base.acousticness = Math.max(0, base.acousticness - 0.08);
+  return base;
+}
+
 const SEASON_GENRES = {
   winter: ["Jazz", "Blues", "Classical", "Ambient", "Soul", "R&B"],
   spring: ["Folk", "Funk", "Pop", "Indie", "Country", "Afrobeat"],
@@ -2182,6 +2222,8 @@ export default function VinylCrate() {
   const [trailSearchOpen, setTrailSearchOpen] = useState(false);
   const [trailSearch, setTrailSearch] = useState("");
   const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
+  const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
+  const [spotifyDeprecated, setSpotifyDeprecated] = useState(false);
 
   // legacy playToast kept as null so nothing breaks — pill replaces it
   const [playToast] = useState(null);
@@ -3621,36 +3663,61 @@ export default function VinylCrate() {
                 {/* Sound Profile */}
                 {(() => {
                   const myIds = new Set(myRecords.map(r => r.id));
-                  const relevant = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
-                  const n = relevant.length;
-                  if (n === 0) return (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
-                        <div className="text-stone-700 text-xs">0 / {myRecords.length} analyzed</div>
-                      </div>
-                      <div className="text-stone-700 text-xs">Start a Play Trail on any record to begin building your sound profile.</div>
-                    </div>
-                  );
-                  const avg = (key) => relevant.reduce((s, f) => s + (f[key] || 0), 0) / n;
+                  const spotifyData = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
+                  const n = spotifyData.length;
+                  const usingSpotify = n > 0;
+
+                  // Fall back to genre-based estimates when no Spotify data
+                  const relevant = usingSpotify
+                    ? spotifyData
+                    : myRecords.map(r => estimateFeaturesFromRecord(r));
+
+                  const avg = (key) => relevant.reduce((s, f) => s + (f[key] || 0), 0) / relevant.length;
                   const energy = avg("energy");
                   const valence = avg("valence");
                   const danceability = avg("danceability");
                   const acousticness = avg("acousticness");
                   const tempo = avg("tempo");
+
                   const bars = [
-                    { label: "Energy", value: energy, color: "bg-amber-600/70" },
-                    { label: "Mood", value: valence, color: "bg-rose-600/60", hint: valence > 0.6 ? "upbeat" : valence < 0.4 ? "melancholic" : "balanced" },
-                    { label: "Danceability", value: danceability, color: "bg-emerald-700/60" },
-                    { label: "Acoustic", value: acousticness, color: "bg-stone-500/70" },
+                    { label: "Energy",        value: energy,        color: "bg-amber-600/70" },
+                    { label: "Mood",          value: valence,       color: "bg-rose-600/60", hint: valence > 0.6 ? "upbeat" : valence < 0.4 ? "melancholic" : "balanced" },
+                    { label: "Danceability",  value: danceability,  color: "bg-emerald-700/60" },
+                    { label: "Acoustic",      value: acousticness,  color: "bg-stone-500/70" },
                   ];
+
+                  const analyzeCollection = async () => {
+                    if (spotifyAnalyzing || spotifyDeprecated) return;
+                    setSpotifyAnalyzing(true);
+                    const uncached = myRecords.filter(r => !spotifyFeatures[r.id]).slice(0, 25);
+                    for (const record of uncached) {
+                      try {
+                        const res = await fetch("/api/spotify/features", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ record_id: record.id, artist: record.artist, title: record.title }),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          if (data?.error === "audio_features_deprecated") { setSpotifyDeprecated(true); break; }
+                          if (data && data.energy != null) setSpotifyFeatures(prev => ({ ...prev, [record.id]: data }));
+                        }
+                      } catch {}
+                    }
+                    setSpotifyAnalyzing(false);
+                  };
+
                   return (
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
-                        <div className="text-stone-600 text-xs">{n} / {myRecords.length} analyzed · {Math.round(tempo)} BPM avg</div>
+                        <div className="text-stone-600 text-xs">
+                          {usingSpotify
+                            ? `${n} / ${myRecords.length} via Spotify · ${Math.round(tempo)} BPM`
+                            : `estimated · ${Math.round(tempo)} BPM avg`}
+                        </div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 mb-3">
                         {bars.map(({ label, value, color, hint }) => (
                           <div key={label} className="flex items-center gap-3">
                             <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
@@ -3661,6 +3728,25 @@ export default function VinylCrate() {
                           </div>
                         ))}
                       </div>
+                      {spotifyDeprecated ? (
+                        <div className="text-stone-700 text-xs">Spotify audio analysis isn't available for this app — showing genre-based estimates.</div>
+                      ) : !usingSpotify ? (
+                        <button
+                          onClick={analyzeCollection}
+                          disabled={spotifyAnalyzing}
+                          className="text-xs text-stone-600 hover:text-amber-400 transition-colors disabled:opacity-40"
+                        >
+                          {spotifyAnalyzing ? "Analyzing via Spotify…" : "↑ Analyze via Spotify for precise data"}
+                        </button>
+                      ) : n < myRecords.length ? (
+                        <button
+                          onClick={analyzeCollection}
+                          disabled={spotifyAnalyzing}
+                          className="text-xs text-stone-600 hover:text-amber-400 transition-colors disabled:opacity-40"
+                        >
+                          {spotifyAnalyzing ? `Analyzing… (${n} done)` : `↑ Analyze ${myRecords.length - n} more records`}
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })()}
