@@ -3868,7 +3868,7 @@ export default function VinylCrate() {
                             {/* Genre pill + chevron */}
                             <div className="flex items-center gap-1.5 shrink-0">
                               {session.topGenre && (
-                                <span className="text-amber-700/80 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-900/40 bg-amber-900/10 truncate" style={{ maxWidth: 72 }}>
+                                <span className="text-amber-700/80 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-900/40 bg-amber-900/10 truncate inline-block" style={{ maxWidth: 72 }}>
                                   {session.topGenre}
                                 </span>
                               )}
