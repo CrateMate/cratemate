@@ -88,10 +88,10 @@ export async function GET(request: Request) {
 
   if (!tokenRow) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  // Fetch both collections (now including genre/style/year for profile estimation)
+  // Fetch both collections — select("*") to avoid failing if optional columns are missing
   const [{ data: myRaw }, { data: theirRaw }] = await Promise.all([
-    supabase.from("records").select("artist, title, thumb, genre, style, year_original, year_pressed").eq("user_id", userId).eq("for_sale", false),
-    supabase.from("records").select("artist, title, thumb, genre, style, year_original, year_pressed").eq("user_id", tokenRow.user_id).eq("for_sale", false),
+    supabase.from("records").select("*").eq("user_id", userId).eq("for_sale", false),
+    supabase.from("records").select("*").eq("user_id", tokenRow.user_id).eq("for_sale", false),
   ]);
 
   const myRecords: RecordRow[] = myRaw || [];
