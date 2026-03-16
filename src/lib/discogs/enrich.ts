@@ -335,7 +335,7 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
   if (thumbSupported && discogs_username && candidates.length > 0) {
     const needed = new Set<number>();
     for (const r of candidates) {
-      if (!isMissingThumb(r.thumb)) continue;
+      if (!isMissingThumb(r.thumb) && !isLowResThumb(r.thumb)) continue;
       const releaseId = Number(r.discogs_id);
       if (Number.isFinite(releaseId)) needed.add(releaseId);
     }

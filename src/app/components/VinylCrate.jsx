@@ -497,14 +497,43 @@ function ArtistTag({ artist, discogsId }) {
   );
 }
 
-function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount }) {
+function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, onLogPlay, onShowToast }) {
+  const longPressTimer = useRef(null);
+  const didLongPress = useRef(false);
   const originalYear = record.year_original || record.year_pressed;
   const pressedYear = record.year_pressed || null;
   const showPressed = originalYear && pressedYear && pressedYear !== originalYear;
+
+  function handlePointerDown() {
+    didLongPress.current = false;
+    if (!onLogPlay) return;
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      onLogPlay(record.id);
+      onShowToast?.(record.title);
+    }, 500);
+  }
+  function handlePointerUp() {
+    clearTimeout(longPressTimer.current);
+    if (didLongPress.current) return;
+    onClick(record);
+  }
+  function handlePointerLeave() { clearTimeout(longPressTimer.current); }
+  function handleDoubleClick(e) {
+    e.stopPropagation();
+    if (!onLogPlay) return;
+    onLogPlay(record.id);
+    onShowToast?.(record.title);
+  }
+
   return (
     <div
-      onClick={() => onClick(record)}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
+      onDoubleClick={handleDoubleClick}
       className="flex items-center gap-3 px-2.5 py-2 rounded-xl cursor-pointer transition-all duration-150 hover:bg-white/[0.04] active:scale-[0.99] border border-transparent hover:border-white/[0.07]"
+      style={{ touchAction: "manipulation" }}
     >
       <CoverArt record={record} size={52} />
       <div className="flex-1 min-w-0">
@@ -879,7 +908,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   );
 }
 
-export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onShowToast }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -891,6 +920,8 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
   const scaleRafRef = useRef(null);
   const cellsRef = useRef([]);
   const [scales, setScales] = useState({});
+  const hexLongPressTimer = useRef(null);
+  const hexLongPressDidFire = useRef(false);
 
   const BASE_SIZE = Math.round(180 * zoom);
   const COL_STEP = BASE_SIZE * 0.76;
@@ -1038,6 +1069,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
     const dy = pos.clientY - lastPos.current.y;
     lastPos.current = { x: pos.clientX, y: pos.clientY };
     moveDistance.current += Math.abs(dx) + Math.abs(dy);
+    if (moveDistance.current > 6) { clearTimeout(hexLongPressTimer.current); }
     velocity.current = { x: dx, y: dy };
     const clamped = clampOffset(offsetRef.current.x + dx, offsetRef.current.y + dy);
     offsetRef.current = clamped;
@@ -1051,8 +1083,10 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
   function onPointerUp(e, record) {
     if (!dragging.current) return;
     dragging.current = false;
+    clearTimeout(hexLongPressTimer.current);
     if (moveDistance.current < 6 && record) {
-      onSelect(record);
+      if (!hexLongPressDidFire.current) onSelect(record);
+      hexLongPressDidFire.current = false;
     } else {
       startMomentum();
     }
@@ -1102,6 +1136,24 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1 }) {
                 transformOrigin: "center center",
                 transition: "transform 150ms ease-out",
                 zIndex,
+              }}
+              onMouseDown={(e) => {
+                if (!onLogPlay) return;
+                hexLongPressDidFire.current = false;
+                hexLongPressTimer.current = setTimeout(() => {
+                  hexLongPressDidFire.current = true;
+                  onLogPlay(record.id);
+                  onShowToast?.(record.title);
+                }, 500);
+              }}
+              onTouchStart={(e) => {
+                if (!onLogPlay) return;
+                hexLongPressDidFire.current = false;
+                hexLongPressTimer.current = setTimeout(() => {
+                  hexLongPressDidFire.current = true;
+                  onLogPlay(record.id);
+                  onShowToast?.(record.title);
+                }, 500);
               }}
               onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
               onTouchEnd={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
@@ -1448,60 +1500,186 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts) {
   return null; // → smart fallback
 }
 
-function GenreBubbleMap({ items, onBubbleClick }) {
+const GENRE_PROXIMITY = {
+  "Rock": ["Alternative Rock", "Indie Rock", "Metal", "Punk", "Pop Rock", "Folk Rock"],
+  "Jazz": ["Blues", "Soul", "Funk", "R&B", "Bossa Nova", "Latin Jazz"],
+  "Electronic": ["House", "Techno", "Ambient", "Dance", "Synth-pop", "Electronica"],
+  "Hip Hop": ["R&B", "Funk", "Soul", "Rap"],
+  "Classical": ["Contemporary Classical", "Baroque", "Orchestral", "Chamber Music"],
+  "Reggae": ["Dub", "Ska", "Dancehall"],
+  "Folk": ["Country", "Americana", "Singer-Songwriter", "World"],
+  "Pop": ["Synth-pop", "Indie Pop", "Dream Pop"],
+};
+
+function computeForceLayout(bubbles, width, height) {
+  const PADDING = 8;
+  // Init random positions
+  const nodes = bubbles.map((b, i) => ({
+    ...b,
+    cx: PADDING + b.r + Math.random() * (width - b.r * 2 - PADDING * 2),
+    cy: PADDING + b.r + Math.random() * (height - b.r * 2 - PADDING * 2),
+    vx: 0, vy: 0,
+  }));
+
+  const labelSet = new Set(nodes.map(n => n.label));
+
+  for (let iter = 0; iter < 80; iter++) {
+    // Reset forces
+    for (const n of nodes) { n.vx = 0; n.vy = 0; }
+
+    // Repulsion between all pairs
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = a.cx - b.cx, dy = a.cy - b.cy;
+        const dist = Math.max(Math.hypot(dx, dy), 0.1);
+        const minDist = a.r + b.r + 6;
+        if (dist < minDist) {
+          const force = (minDist - dist) * 0.3;
+          const nx = dx / dist, ny = dy / dist;
+          a.vx += nx * force; a.vy += ny * force;
+          b.vx -= nx * force; b.vy -= ny * force;
+        } else {
+          const force = 800 / (dist * dist);
+          const nx = dx / dist, ny = dy / dist;
+          a.vx += nx * force; a.vy += ny * force;
+          b.vx -= nx * force; b.vy -= ny * force;
+        }
+      }
+    }
+
+    // Center gravity (larger bubbles pulled stronger)
+    const cx = width / 2, cy = height / 2;
+    for (const n of nodes) {
+      const dx = cx - n.cx, dy = cy - n.cy;
+      const strength = 0.015 * Math.sqrt(n.count);
+      n.vx += dx * strength;
+      n.vy += dy * strength;
+    }
+
+    // Proximity attraction
+    for (const [genre, relatives] of Object.entries(GENRE_PROXIMITY)) {
+      const gNode = nodes.find(n => n.label === genre);
+      if (!gNode) continue;
+      for (const rel of relatives) {
+        if (!labelSet.has(rel)) continue;
+        const rNode = nodes.find(n => n.label === rel);
+        if (!rNode) continue;
+        const dx = rNode.cx - gNode.cx, dy = rNode.cy - gNode.cy;
+        const dist = Math.max(Math.hypot(dx, dy), 0.1);
+        const force = 0.04;
+        gNode.vx += (dx / dist) * force * dist;
+        gNode.vy += (dy / dist) * force * dist;
+        rNode.vx -= (dx / dist) * force * dist;
+        rNode.vy -= (dy / dist) * force * dist;
+      }
+    }
+
+    // Apply velocities + clamp to boundary
+    for (const n of nodes) {
+      n.cx = Math.max(n.r + PADDING, Math.min(width - n.r - PADDING, n.cx + n.vx * 0.3));
+      n.cy = Math.max(n.r + PADDING, Math.min(height - n.r - PADDING, n.cy + n.vy * 0.3));
+    }
+  }
+
+  return nodes;
+}
+
+function GenreBubbleMap({ items, styleItems, onBubbleClick, onStyleClick }) {
   const [width, setWidth] = useState(320);
+  const [expandedGenre, setExpandedGenre] = useState(null);
   const ref = useRef(null);
   useEffect(() => {
     if (ref.current) setWidth(ref.current.clientWidth);
   }, []);
 
   const maxCount = Math.max(...items.map(i => i.count), 1);
-  const GAP = 6;
-  const MAX_R = Math.min(width * 0.22, 72);
-  const MIN_R = 18;
+  const MAX_R = Math.min(width * 0.18, 60);
+  const MIN_R = 16;
+  const height = Math.max(220, Math.min(380, items.length * 18));
 
-  const bubbles = [...items]
-    .sort((a, b) => b.count - a.count)
-    .map(item => ({ ...item, r: MIN_R + (MAX_R - MIN_R) * Math.sqrt(item.count / maxCount) }));
+  const bubbles = useMemo(() => {
+    return [...items]
+      .sort((a, b) => b.count - a.count)
+      .map(item => ({ ...item, r: MIN_R + (MAX_R - MIN_R) * Math.sqrt(item.count / maxCount) }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length, width]);
 
-  let x = 0, y = 0, rowH = 0;
-  const placed = bubbles.map(b => {
-    if (x > 0 && x + b.r * 2 > width) { y += rowH + GAP; x = 0; rowH = 0; }
-    const cx = x + b.r, cy = y + b.r;
-    x += b.r * 2 + GAP;
-    rowH = Math.max(rowH, b.r * 2);
-    return { ...b, cx, cy };
-  });
-  const totalH = y + rowH + 4;
+  const placed = useMemo(() => {
+    if (bubbles.length === 0) return [];
+    return computeForceLayout(bubbles, width, height);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bubbles]);
 
   return (
     <div ref={ref} className="w-full">
-      <svg width={width} height={totalH}>
+      <svg width={width} height={height} onClick={() => setExpandedGenre(null)}>
         {placed.map(b => {
           const { fill, stroke, text } = genreSvgColor(b.label);
-          const showLabel = b.r >= 28;
-          const showCount = b.r >= 22;
+          const showLabel = b.r >= 22;
+          const showCount = b.r >= 18;
+          const isExpanded = expandedGenre === b.label;
+          const styleList = styleItems?.[b.label] || [];
+
           return (
-            <g key={b.label} onClick={() => onBubbleClick(b.label)} style={{ cursor: "pointer" }}>
-              <circle cx={b.cx} cy={b.cy} r={b.r} fill={fill} stroke={stroke} strokeWidth={1.5} />
-              {showLabel && (
-                <text x={b.cx} y={b.cy - (showCount ? 6 : 0)} textAnchor="middle"
-                  dominantBaseline="middle" fill={text} fontSize={Math.max(9, b.r * 0.32)}
-                  style={{ pointerEvents: "none", userSelect: "none" }}>
-                  {b.label.length > 10 ? b.label.slice(0, 9) + "…" : b.label}
-                </text>
-              )}
-              {showCount && (
-                <text x={b.cx} y={b.cy + (showLabel ? 10 : 0)} textAnchor="middle"
-                  dominantBaseline="middle" fill={text} fontSize={Math.max(8, b.r * 0.26)}
-                  opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
-                  {b.count}
-                </text>
-              )}
+            <g key={b.label}>
+              {/* Style sub-bubbles when expanded */}
+              {isExpanded && styleList.map((s, idx) => {
+                const angle = (idx / Math.max(styleList.length, 1)) * Math.PI * 2 - Math.PI / 2;
+                const orbitR = b.r + 28;
+                const scx = b.cx + orbitR * Math.cos(angle);
+                const scy = b.cy + orbitR * Math.sin(angle);
+                const maxSCount = Math.max(...styleList.map(x => x.count), 1);
+                const sr = 8 + 12 * Math.sqrt(s.count / maxSCount);
+                const { fill: sf, stroke: ss, text: st } = genreSvgColor(s.label);
+                return (
+                  <g key={s.label} onClick={(e) => { e.stopPropagation(); onStyleClick?.(s.label); }} style={{ cursor: "pointer" }}>
+                    <circle cx={scx} cy={scy} r={sr} fill={sf} stroke={ss} strokeWidth={1} opacity={0.9} />
+                    {sr >= 14 && (
+                      <text x={scx} y={scy} textAnchor="middle" dominantBaseline="middle"
+                        fill={st} fontSize={Math.max(7, sr * 0.35)}
+                        style={{ pointerEvents: "none", userSelect: "none" }}>
+                        {s.label.length > 8 ? s.label.slice(0, 7) + "…" : s.label}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+              {/* Main genre bubble */}
+              <g
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isExpanded) { onBubbleClick(b.label); setExpandedGenre(null); }
+                  else setExpandedGenre(b.label);
+                }}
+                style={{ cursor: "pointer" }}
+                transform={isExpanded ? `translate(${b.cx},${b.cy}) scale(1.15) translate(${-b.cx},${-b.cy})` : ""}
+              >
+                <circle cx={b.cx} cy={b.cy} r={b.r} fill={fill} stroke={isExpanded ? "#fbbf24" : stroke} strokeWidth={isExpanded ? 2 : 1.5} />
+                {showLabel && (
+                  <text x={b.cx} y={b.cy - (showCount ? 6 : 0)} textAnchor="middle"
+                    dominantBaseline="middle" fill={text} fontSize={Math.max(9, b.r * 0.32)}
+                    style={{ pointerEvents: "none", userSelect: "none" }}>
+                    {b.label.length > 10 ? b.label.slice(0, 9) + "…" : b.label}
+                  </text>
+                )}
+                {showCount && (
+                  <text x={b.cx} y={b.cy + (showLabel ? 10 : 0)} textAnchor="middle"
+                    dominantBaseline="middle" fill={text} fontSize={Math.max(8, b.r * 0.26)}
+                    opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
+                    {b.count}
+                  </text>
+                )}
+              </g>
             </g>
           );
         })}
       </svg>
+      {expandedGenre && (
+        <div className="text-center text-stone-600 text-xs mt-1">
+          Tap genre again to filter · tap a style to drill in
+        </div>
+      )}
     </div>
   );
 }
@@ -1537,6 +1715,7 @@ export default function VinylCrate() {
   const [activeDecade, setActiveDecade] = useState(new Set());
   const [activeFormat, setActiveFormat] = useState(null);
   const [statFilterLabel, setStatFilterLabel] = useState(null);
+  const [previousTab, setPreviousTab] = useState(null);
 
   const [shareCopied, setShareCopied] = useState(false);
   const [favTitles, setFavTitles] = useState({});
@@ -1545,6 +1724,20 @@ export default function VinylCrate() {
   const [visibleCount, setVisibleCount] = useState(25);
   const PAGE_SIZE = 25;
   const sentinelRef = useRef(null);
+
+  const [playToast, setPlayToast] = useState(null);
+  const playToastTimer = useRef(null);
+
+  const [expandedHearts, setExpandedHearts] = useState(new Set());
+  const [heartsPage, setHeartsPage] = useState(1);
+  const [heartsInfiniteScroll, setHeartsInfiniteScroll] = useState(false);
+  const [heartsVisible, setHeartsVisible] = useState(20);
+  const HEARTS_PAGE_SIZE = 20;
+  const heartsSentinelRef = useRef(null);
+
+  const [isDiscoverable, setIsDiscoverable] = useState(false);
+  const [discoverResults, setDiscoverResults] = useState(null);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
 
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
@@ -1579,6 +1772,7 @@ export default function VinylCrate() {
       .then((d) => {
         setDiscogsConnected(d.connected);
         setDiscogsUsername(d.username);
+        setIsDiscoverable(d.is_discoverable ?? false);
       })
       .catch(() => {});
 
@@ -1590,6 +1784,7 @@ export default function VinylCrate() {
         .then((d) => {
           setDiscogsConnected(d.connected);
           setDiscogsUsername(d.username);
+          setIsDiscoverable(d.is_discoverable ?? false);
         })
         .catch(() => {});
     }
@@ -1605,6 +1800,12 @@ export default function VinylCrate() {
         setPlaySessions(data.sessions || []);
       }
     } catch {}
+  }
+
+  function showPlayToast(title) {
+    clearTimeout(playToastTimer.current);
+    setPlayToast(title);
+    playToastTimer.current = setTimeout(() => setPlayToast(null), 1500);
   }
 
   useEffect(() => {
@@ -1641,6 +1842,15 @@ export default function VinylCrate() {
     if (sentinelRef.current) observer.observe(sentinelRef.current);
     return () => observer.disconnect();
   }, [infiniteScroll, visibleCount]);
+
+  useEffect(() => {
+    if (!heartsInfiniteScroll) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setHeartsVisible(c => c + HEARTS_PAGE_SIZE);
+    }, { threshold: 0.1 });
+    if (heartsSentinelRef.current) observer.observe(heartsSentinelRef.current);
+    return () => observer.disconnect();
+  }, [heartsInfiniteScroll, heartsVisible]);
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
@@ -1898,23 +2108,28 @@ export default function VinylCrate() {
   }
 
   function drillByDecade(decade) {
+    setPreviousTab(tab);
     setActiveDecade(new Set([decade])); setActiveFormat(null); setActiveGenres(new Set());
     setStatFilterLabel(decade); setViewMode("drift"); setTab("crate");
   }
   function drillByGenre(genre) {
+    setPreviousTab(tab);
     setActiveGenres(new Set([genre])); setActiveStyles(new Set()); setActiveDecade(new Set()); setActiveFormat(null);
     setStatFilterLabel(genre); setViewMode("drift"); setTab("crate");
   }
   function drillByStyle(style) {
+    setPreviousTab(tab);
     setActiveStyles(new Set([style])); setActiveGenres(new Set()); setActiveDecade(new Set()); setActiveFormat(null);
     setStatFilterLabel(style); setViewMode("drift"); setTab("crate");
   }
   function drillByFormat(fmt) {
+    setPreviousTab(tab);
     setActiveFormat(fmt); setActiveDecade(new Set()); setActiveGenres(new Set());
     setStatFilterLabel(fmt); setViewMode("drift"); setTab("crate");
   }
   function clearStatFilter() {
     setActiveDecade(new Set()); setActiveFormat(null); setActiveGenres(new Set()); setStatFilterLabel(null);
+    setPreviousTab(null);
   }
 
   async function handleDelete(record) {
@@ -2026,13 +2241,14 @@ export default function VinylCrate() {
         </div>
       )}
 
-      {viewMode !== "drift" && <div className="flex px-4 gap-0.5 mt-3 mb-2">
+      <div className={`flex px-4 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "relative z-[60]" : ""}`}>
         {[
           ["crate", "⏺ Crate"],
           ["hearts", "♥ Hearts"],
           ["history", "▷ History"],
           ["reco", "✦ Reco"],
           ["stats", "◎ Stats"],
+          ["discover", "⊕ Discover"],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -2040,13 +2256,13 @@ export default function VinylCrate() {
             className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-all ${
               tab === id
                 ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
-                : "text-stone-500 hover:text-stone-300"
+                : viewMode === "drift" ? "text-stone-600 hover:text-stone-400 bg-black/40" : "text-stone-500 hover:text-stone-300"
             }`}
           >
             {label}
           </button>
         ))}
-      </div>}
+      </div>
 
       {tab === "crate" && (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -2239,14 +2455,19 @@ export default function VinylCrate() {
                   setSelected(rec);
                   if (!rec.for_sale) setLastPlayed(rec);
                 }}
+                onLogPlay={logPlay}
+                onShowToast={showPlayToast}
               />
               {/* Top-left: back to list + share */}
-              <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
+              <div className="absolute top-16 left-4 z-50 flex items-center gap-2">
                 <button
-                  onClick={() => setViewMode("list")}
+                  onClick={() => {
+                    setViewMode("list");
+                    if (previousTab) { setTab(previousTab); setPreviousTab(null); }
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
                 >
-                  ≡ List
+                  {previousTab === "stats" ? "← Stats" : "≡ List"}
                 </button>
                 {discogsConnected && (
                   <button
@@ -2367,6 +2588,8 @@ export default function VinylCrate() {
                   onGenreClick={toggleGenre}
                   activeGenres={activeGenres}
                   playCount={playCounts[r.id] || 0}
+                  onLogPlay={logPlay}
+                  onShowToast={showPlayToast}
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
@@ -2395,10 +2618,10 @@ export default function VinylCrate() {
       {tab === "hearts" && (
         <div className="flex-1 px-4 overflow-y-auto pb-8">
           {(() => {
-            const favRecords = myRecords
+            const allFavRecords = myRecords
               .filter((r) => (r.favorite_tracks || []).length > 0)
               .sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
-            if (favRecords.length === 0) {
+            if (allFavRecords.length === 0) {
               return (
                 <div className="text-center py-16">
                   <div className="text-3xl mb-3 text-stone-700">♥</div>
@@ -2407,48 +2630,103 @@ export default function VinylCrate() {
                 </div>
               );
             }
+            const heartsTotalPages = Math.ceil(allFavRecords.length / HEARTS_PAGE_SIZE);
+            const visibleFavRecords = heartsInfiniteScroll
+              ? allFavRecords.slice(0, heartsVisible)
+              : allFavRecords.slice((heartsPage - 1) * HEARTS_PAGE_SIZE, heartsPage * HEARTS_PAGE_SIZE);
+            const heartsHasMore = heartsInfiniteScroll && heartsVisible < allFavRecords.length;
+            const allExpanded = expandedHearts.size >= visibleFavRecords.length;
             return (
-              <div className="space-y-5 mt-2">
-                {favRecords.map((r) => (
-                  <div key={r.id}>
-                    <button
-                      onClick={() => { setSelected(r); if (!r.for_sale) setLastPlayed(r); }}
-                      className="flex items-center gap-3 w-full mb-2 text-left hover:opacity-80 transition-opacity"
-                    >
-                      <CoverArt record={r} size={40} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
-                        <div className="text-stone-500 text-xs truncate">{r.artist}</div>
-                      </div>
-                      <span className="text-stone-600 text-xs pr-1">→</span>
-                    </button>
-                    <div className="space-y-0.5 pl-[52px]">
-                      {(r.favorite_tracks || []).map((f) => {
-                        const { key, title } = normFav(f);
-                        const displayTitle = (title && title !== key) ? title : (favTitles[r.id]?.[key] || key);
-                        return (
-                          <div key={key} className="flex items-center gap-2 py-0.5">
-                            <span className="text-stone-600 text-xs w-8 shrink-0">{key}</span>
-                            <span className="text-stone-300 text-sm flex-1 truncate">{displayTitle}</span>
-                            <button
-                              onClick={() => {
-                                const next = (r.favorite_tracks || []).filter((ff) => (typeof ff === "object" ? ff.key : ff) !== key);
-                                setCollection((prev) => Array.isArray(prev) ? prev.map((rec) => rec.id === r.id ? { ...rec, favorite_tracks: next } : rec) : prev);
-                                fetch(`/api/records/${r.id}`, {
-                                  method: "PATCH",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ favorite_tracks: next }),
-                                }).catch(() => {});
-                              }}
-                              className="text-rose-400 hover:text-rose-300 transition-colors text-sm shrink-0"
-                            >♥</button>
+              <>
+                <div className="flex items-center gap-2 mt-2 mb-3">
+                  <button
+                    onClick={() => {
+                      if (allExpanded) setExpandedHearts(new Set());
+                      else setExpandedHearts(new Set(visibleFavRecords.map(r => r.id)));
+                    }}
+                    className="text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+                  >
+                    {allExpanded ? "▼ Collapse all" : "▶ Expand all"}
+                  </button>
+                  <button
+                    onClick={() => { setHeartsInfiniteScroll(s => !s); setHeartsPage(1); setHeartsVisible(HEARTS_PAGE_SIZE); }}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${heartsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                  >
+                    {heartsInfiniteScroll ? "∞ scroll" : "pages"}
+                  </button>
+                </div>
+                <div className="space-y-0.5">
+                  {visibleFavRecords.map((r) => {
+                    const isExpanded = expandedHearts.has(r.id);
+                    const heartCount = (r.favorite_tracks || []).length;
+                    return (
+                      <div key={r.id} className="rounded-xl overflow-hidden">
+                        <button
+                          onClick={() => setExpandedHearts(prev => {
+                            const next = new Set(prev);
+                            next.has(r.id) ? next.delete(r.id) : next.add(r.id);
+                            return next;
+                          })}
+                          className="flex items-center gap-3 w-full px-2.5 py-2 text-left hover:bg-white/[0.04] transition-colors rounded-xl"
+                          style={{ minHeight: 44 }}
+                        >
+                          <CoverArt record={r} size={36} />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-amber-50 text-sm truncate block" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
+                              {r.artist} — {r.title}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                          <span className="text-rose-400 text-xs shrink-0 mr-1">♥ {heartCount}</span>
+                          <span className="text-stone-600 text-xs shrink-0">{isExpanded ? "▼" : "▶"}</span>
+                        </button>
+                        {isExpanded && (
+                          <div className="space-y-0.5 pl-[52px] pr-2 pb-2">
+                            {(r.favorite_tracks || []).map((f) => {
+                              const { key, title } = normFav(f);
+                              const displayTitle = (title && title !== key) ? title : (favTitles[r.id]?.[key] || key);
+                              return (
+                                <div key={key} className="flex items-center gap-2 py-0.5">
+                                  <span className="text-stone-600 text-xs w-8 shrink-0">{key}</span>
+                                  <span className="text-stone-300 text-sm flex-1 truncate">{displayTitle}</span>
+                                  <button
+                                    onClick={() => {
+                                      const next = (r.favorite_tracks || []).filter((ff) => (typeof ff === "object" ? ff.key : ff) !== key);
+                                      setCollection((prev) => Array.isArray(prev) ? prev.map((rec) => rec.id === r.id ? { ...rec, favorite_tracks: next } : rec) : prev);
+                                      fetch(`/api/records/${r.id}`, {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ favorite_tracks: next }),
+                                      }).catch(() => {});
+                                    }}
+                                    className="text-rose-400 hover:text-rose-300 transition-colors text-sm shrink-0"
+                                  >♥</button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {heartsInfiniteScroll ? (
+                    heartsHasMore && <div ref={heartsSentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>
+                  ) : (
+                    heartsTotalPages > 1 && (
+                      <div className="flex items-center justify-center gap-3 py-4">
+                        <button onClick={() => setHeartsPage(p => Math.max(1, p - 1))} disabled={heartsPage === 1}
+                          className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                          ← Prev
+                        </button>
+                        <span className="text-stone-600 text-xs">{heartsPage} / {heartsTotalPages}</span>
+                        <button onClick={() => setHeartsPage(p => Math.min(heartsTotalPages, p + 1))} disabled={heartsPage === heartsTotalPages}
+                          className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                          Next →
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              </>
             );
           })()}
         </div>
@@ -2681,31 +2959,47 @@ export default function VinylCrate() {
                 )}
 
                 {/* Genre/Style Bubble Map */}
-                {(Object.keys(genres).length > 0 || Object.keys(styles).length > 0) && (
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-stone-500 text-xs uppercase tracking-wider">Collection Map</span>
-                      <div className="flex gap-1">
-                        {["genres", "styles"].map(v => (
-                          <button key={v} onClick={() => setBubbleView(v)}
-                            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                              bubbleView === v
-                                ? "bg-stone-700 border-stone-500 text-stone-100"
-                                : "border-stone-700 text-stone-500 hover:text-stone-300"
-                            }`}>
-                            {v.charAt(0).toUpperCase() + v.slice(1)}
-                          </button>
-                        ))}
+                {(Object.keys(genres).length > 0 || Object.keys(styles).length > 0) && (() => {
+                  // Build stylesByGenre for expanded style sub-bubbles
+                  const stylesByGenre = {};
+                  myRecords.forEach(r => {
+                    getGenres(r).forEach(g => {
+                      stylesByGenre[g] = stylesByGenre[g] || {};
+                      getStyles(r).forEach(s => { stylesByGenre[g][s] = (stylesByGenre[g][s] || 0) + 1; });
+                    });
+                  });
+                  const styleItems = {};
+                  for (const [g, sMap] of Object.entries(stylesByGenre)) {
+                    styleItems[g] = Object.entries(sMap).map(([label, count]) => ({ label, count })).sort((a,b) => b.count - a.count).slice(0, 8);
+                  }
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-stone-500 text-xs uppercase tracking-wider">Collection Map</span>
+                        <div className="flex gap-1">
+                          {["genres", "styles"].map(v => (
+                            <button key={v} onClick={() => setBubbleView(v)}
+                              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                                bubbleView === v
+                                  ? "bg-stone-700 border-stone-500 text-stone-100"
+                                  : "border-stone-700 text-stone-500 hover:text-stone-300"
+                              }`}>
+                              {v.charAt(0).toUpperCase() + v.slice(1)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                      <GenreBubbleMap
+                        items={Object.entries(bubbleView === "genres" ? genres : styles)
+                          .map(([label, count]) => ({ label, count }))
+                          .filter(i => i.label)}
+                        styleItems={bubbleView === "genres" ? styleItems : {}}
+                        onBubbleClick={bubbleView === "genres" ? drillByGenre : drillByStyle}
+                        onStyleClick={drillByStyle}
+                      />
                     </div>
-                    <GenreBubbleMap
-                      items={Object.entries(bubbleView === "genres" ? genres : styles)
-                        .map(([label, count]) => ({ label, count }))
-                        .filter(i => i.label)}
-                      onBubbleClick={bubbleView === "genres" ? drillByGenre : drillByStyle}
-                    />
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* By Format */}
                 {formatEntries.length > 0 && (
@@ -2814,6 +3108,99 @@ export default function VinylCrate() {
         </div>
       )}
 
+      {tab === "discover" && (
+        <div className="flex-1 px-4 overflow-y-auto pb-8 pt-2 space-y-4">
+          {/* Discovery toggle */}
+          <div className="bg-white/[0.04] rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-stone-200 text-sm font-medium">Make my crate discoverable</div>
+                <div className="text-stone-600 text-xs mt-0.5">Let other CrateMate users find you by shared artists</div>
+              </div>
+              <button
+                onClick={async () => {
+                  const next = !isDiscoverable;
+                  setIsDiscoverable(next);
+                  try {
+                    await fetch("/api/discogs/toggle-discovery", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ discoverable: next }),
+                    });
+                  } catch { setIsDiscoverable(!next); }
+                }}
+                className={`w-11 h-6 rounded-full border transition-colors relative ${isDiscoverable ? "bg-amber-700/60 border-amber-600/60" : "bg-stone-800 border-stone-700"}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white/90 transition-all shadow ${isDiscoverable ? "left-5" : "left-0.5"}`} />
+              </button>
+            </div>
+          </div>
+
+          {!isDiscoverable ? (
+            <div className="text-center py-12">
+              <div className="text-stone-600 text-sm">Enable discovery above to find similar crates</div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="text-stone-500 text-xs uppercase tracking-wider">Similar Crates</div>
+                <button
+                  onClick={async () => {
+                    setDiscoverLoading(true);
+                    try {
+                      const res = await fetch("/api/discover");
+                      const data = await res.json();
+                      setDiscoverResults(Array.isArray(data) ? data : []);
+                    } catch { setDiscoverResults([]); }
+                    finally { setDiscoverLoading(false); }
+                  }}
+                  disabled={discoverLoading}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-500 hover:text-amber-300 hover:border-amber-900/50 transition-all disabled:opacity-40"
+                >
+                  {discoverLoading ? "Loading…" : "↻ Refresh"}
+                </button>
+              </div>
+
+              {discoverResults === null && !discoverLoading && (
+                <div className="text-center py-8">
+                  <div className="text-stone-600 text-sm">Hit Refresh to find users with similar taste</div>
+                </div>
+              )}
+              {discoverLoading && (
+                <div className="text-center py-8 text-stone-600 text-sm">Finding similar crates…</div>
+              )}
+              {discoverResults !== null && !discoverLoading && discoverResults.length === 0 && (
+                <div className="text-center py-8">
+                  <div className="text-stone-600 text-sm">No other discoverable users yet — spread the word</div>
+                </div>
+              )}
+              {discoverResults && discoverResults.length > 0 && (
+                <div className="space-y-1">
+                  {discoverResults.map((u) => (
+                    <button
+                      key={u.username}
+                      onClick={() => window.open(`/crate/${u.username}`, "_blank")}
+                      className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left hover:bg-white/[0.04] transition-colors border border-transparent hover:border-white/[0.06]"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-stone-200 text-sm truncate">@{u.username}</div>
+                        <div className="text-stone-600 text-xs mt-0.5">
+                          {u.shared_artists} shared artists · {u.record_count} records
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-amber-400 text-xs font-medium">{u.similarity_pct}%</div>
+                        <div className="text-stone-700 text-xs">match</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {selected && (
         <DetailSheet
           record={selected}
@@ -2839,6 +3226,16 @@ export default function VinylCrate() {
         />
       )}
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
+
+      {playToast && (
+        <div
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] px-4 py-2 rounded-full bg-stone-900/90 backdrop-blur-sm border border-stone-700/60 text-stone-200 text-sm flex items-center gap-2 shadow-lg"
+          style={{ pointerEvents: "none" }}
+        >
+          <span className="text-amber-400">▶</span>
+          <span>Logged — {playToast}</span>
+        </div>
+      )}
     </div>
   );
 }
