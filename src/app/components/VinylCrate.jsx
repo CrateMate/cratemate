@@ -2030,6 +2030,9 @@ export default function VinylCrate() {
   const [isDiscoverable, setIsDiscoverable] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null);
   const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [selectedDiscoverUser, setSelectedDiscoverUser] = useState(null);
+  const [overlapData, setOverlapData] = useState(null);
+  const [overlapLoading, setOverlapLoading] = useState(false);
 
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
@@ -2059,6 +2062,8 @@ export default function VinylCrate() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/spotify/features").then(r => r.ok ? r.json() : {}).then(d => setSpotifyFeatures(d || {})).catch(() => {});
+
     fetch("/api/discogs/status")
       .then((r) => r.json())
       .then((d) => {
@@ -3435,6 +3440,53 @@ export default function VinylCrate() {
                   );
                 })()}
 
+                {/* Sound Profile */}
+                {(() => {
+                  const myIds = new Set(myRecords.map(r => r.id));
+                  const relevant = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
+                  const n = relevant.length;
+                  if (n === 0) return (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
+                        <div className="text-stone-700 text-xs">0 / {myRecords.length} analyzed</div>
+                      </div>
+                      <div className="text-stone-700 text-xs">Start a Play Trail on any record to begin building your sound profile.</div>
+                    </div>
+                  );
+                  const avg = (key) => relevant.reduce((s, f) => s + (f[key] || 0), 0) / n;
+                  const energy = avg("energy");
+                  const valence = avg("valence");
+                  const danceability = avg("danceability");
+                  const acousticness = avg("acousticness");
+                  const tempo = avg("tempo");
+                  const bars = [
+                    { label: "Energy", value: energy, color: "bg-amber-600/70" },
+                    { label: "Mood", value: valence, color: "bg-rose-600/60", hint: valence > 0.6 ? "upbeat" : valence < 0.4 ? "melancholic" : "balanced" },
+                    { label: "Danceability", value: danceability, color: "bg-emerald-700/60" },
+                    { label: "Acoustic", value: acousticness, color: "bg-stone-500/70" },
+                  ];
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
+                        <div className="text-stone-600 text-xs">{n} / {myRecords.length} analyzed · {Math.round(tempo)} BPM avg</div>
+                      </div>
+                      <div className="space-y-2">
+                        {bars.map(({ label, value, color, hint }) => (
+                          <div key={label} className="flex items-center gap-3">
+                            <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
+                            <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden">
+                              <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${Math.round(value * 100)}%` }} />
+                            </div>
+                            <div className="text-stone-600 text-xs w-8 text-right">{Math.round(value * 100)}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* By Format */}
                 {formatEntries.length > 0 && (
                   <div>
@@ -3610,24 +3662,92 @@ export default function VinylCrate() {
               )}
               {discoverResults && discoverResults.length > 0 && (
                 <div className="space-y-1">
-                  {discoverResults.map((u) => (
-                    <button
-                      key={u.username}
-                      onClick={() => window.open(`/crate/${u.username}`, "_blank")}
-                      className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left hover:bg-white/[0.04] transition-colors border border-transparent hover:border-white/[0.06]"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-stone-200 text-sm truncate">@{u.username}</div>
-                        <div className="text-stone-600 text-xs mt-0.5">
-                          {u.shared_artists} shared artists · {u.record_count} records
-                        </div>
+                  {discoverResults.map((u) => {
+                    const isSelected = selectedDiscoverUser === u.username;
+                    return (
+                      <div key={u.username}>
+                        <button
+                          onClick={async () => {
+                            if (isSelected) { setSelectedDiscoverUser(null); setOverlapData(null); return; }
+                            setSelectedDiscoverUser(u.username);
+                            setOverlapData(null);
+                            setOverlapLoading(true);
+                            try {
+                              const res = await fetch(`/api/discover/overlap?username=${encodeURIComponent(u.username)}`);
+                              if (res.ok) setOverlapData(await res.json());
+                            } catch {}
+                            setOverlapLoading(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-colors border ${isSelected ? "bg-white/[0.06] border-white/[0.08]" : "hover:bg-white/[0.04] border-transparent hover:border-white/[0.06]"}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="text-stone-200 text-sm truncate">@{u.username}</div>
+                            <div className="text-stone-600 text-xs mt-0.5">
+                              {u.shared_artists} shared artists · {u.record_count} records
+                            </div>
+                          </div>
+                          <div className="shrink-0 flex items-center gap-3">
+                            <div className="text-right">
+                              <div className="text-amber-400 text-xs font-medium">{u.similarity_pct}%</div>
+                              <div className="text-stone-700 text-xs">match</div>
+                            </div>
+                            <div className={`text-stone-600 text-xs transition-transform ${isSelected ? "rotate-90" : ""}`}>›</div>
+                          </div>
+                        </button>
+
+                        {/* Overlap panel */}
+                        {isSelected && (
+                          <div className="mx-2 mb-2 rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-hidden">
+                            {overlapLoading && (
+                              <div className="text-stone-600 text-xs text-center py-4">Loading overlap…</div>
+                            )}
+                            {!overlapLoading && overlapData && (
+                              <>
+                                {overlapData.sharedArtists.length === 0 ? (
+                                  <div className="text-stone-600 text-xs text-center py-4">No shared artists found.</div>
+                                ) : (
+                                  <div className="divide-y divide-white/[0.04]">
+                                    <div className="px-3 py-2 flex items-center justify-between">
+                                      <span className="text-stone-500 text-xs uppercase tracking-wider">Shared Artists</span>
+                                      <span className="text-stone-700 text-xs">{overlapData.sharedArtists.length} in common</span>
+                                    </div>
+                                    {overlapData.sharedArtists.slice(0, 12).map((entry) => (
+                                      <div key={entry.artist} className="px-3 py-2.5 flex items-start gap-3">
+                                        {entry.thumb && (
+                                          <img src={entry.thumb} alt="" className="w-8 h-8 rounded object-cover shrink-0 opacity-80" />
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-stone-300 text-xs font-medium truncate">{entry.artist}</div>
+                                          <div className="text-stone-600 text-xs mt-0.5">
+                                            You: {entry.myTitles.length} · Them: {entry.theirTitles.length}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {overlapData.sharedArtists.length > 12 && (
+                                      <div className="px-3 py-2 text-stone-700 text-xs text-center">
+                                        +{overlapData.sharedArtists.length - 12} more shared artists
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="px-3 py-2.5 border-t border-white/[0.04] flex justify-end">
+                                  <a
+                                    href={`/crate/${u.username}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-stone-500 hover:text-amber-400 text-xs transition-colors"
+                                  >
+                                    View full crate →
+                                  </a>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-amber-400 text-xs font-medium">{u.similarity_pct}%</div>
-                        <div className="text-stone-700 text-xs">match</div>
-                      </div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
