@@ -2251,6 +2251,64 @@ function GenreBubbleMap({ items, styleItems, onBubbleClick, onStyleClick }) {
   );
 }
 
+function RadarChart({ myData, theirData, myLabel, theirLabel }) {
+  const cx = 100, cy = 105, R = 68;
+  const keys  = ["energy", "valence", "danceability", "acousticness", "loudness"];
+  const labels = ["Energy", "Mood", "Dance", "Acoustic", "Loudness"];
+  const n = keys.length;
+  const angle = (k) => -Math.PI / 2 + (k * 2 * Math.PI) / n;
+  const pt = (k, v) => [cx + v * R * Math.cos(angle(k)), cy + v * R * Math.sin(angle(k))];
+  const poly = (data) => keys.map((key, k) => pt(k, data?.[key] ?? 0).join(",")).join(" ");
+  const gridLevels = [0.25, 0.5, 0.75, 1.0];
+
+  return (
+    <svg viewBox="0 0 200 210" className="w-full max-w-[200px] mx-auto">
+      {/* Background grid */}
+      {gridLevels.map(level => (
+        <polygon key={level}
+          points={keys.map((_, k) => pt(k, level).join(",")).join(" ")}
+          fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1"
+        />
+      ))}
+      {/* Axis lines */}
+      {keys.map((_, k) => (
+        <line key={k}
+          x1={cx} y1={cy}
+          x2={pt(k, 1)[0]} y2={pt(k, 1)[1]}
+          stroke="rgba(255,255,255,0.07)" strokeWidth="1"
+        />
+      ))}
+      {/* Their polygon */}
+      {theirData && (
+        <polygon points={poly(theirData)}
+          fill="rgba(14,165,233,0.12)" stroke="rgba(14,165,233,0.55)" strokeWidth="1.5"
+        />
+      )}
+      {/* My polygon */}
+      {myData && (
+        <polygon points={poly(myData)}
+          fill="rgba(217,119,6,0.12)" stroke="rgba(217,119,6,0.55)" strokeWidth="1.5"
+        />
+      )}
+      {/* Axis labels */}
+      {labels.map((label, k) => {
+        const [x, y] = pt(k, 1.28);
+        return (
+          <text key={k} x={x} y={y}
+            textAnchor="middle" dominantBaseline="middle"
+            fill="rgba(120,113,108,0.9)" fontSize="8.5"
+          >{label}</text>
+        );
+      })}
+      {/* Legend */}
+      <circle cx={18} cy={200} r={3} fill="rgba(217,119,6,0.7)" />
+      <text x={24} y={200} dominantBaseline="middle" fill="rgba(120,113,108,0.8)" fontSize="7.5">{myLabel}</text>
+      <circle cx={90} cy={200} r={3} fill="rgba(14,165,233,0.7)" />
+      <text x={96} y={200} dominantBaseline="middle" fill="rgba(120,113,108,0.8)" fontSize="7.5">{theirLabel}</text>
+    </svg>
+  );
+}
+
 const SESSION_GAP_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 function groupPlaySessions(playSessions, collection) {
@@ -2386,6 +2444,7 @@ export default function VinylCrate() {
   const [selectedDiscoverUser, setSelectedDiscoverUser] = useState(null);
   const [overlapData, setOverlapData] = useState(null);
   const [overlapLoading, setOverlapLoading] = useState(false);
+  const [showAllSharedArtists, setShowAllSharedArtists] = useState(false);
 
   const [discogsConnected, setDiscogsConnected] = useState(false);
   const [discogsUsername, setDiscogsUsername] = useState(null);
@@ -3721,7 +3780,7 @@ export default function VinylCrate() {
                                   {session.topGenre}
                                 </span>
                               )}
-                              <span className="text-stone-600 text-xs">{isExpanded ? "▲" : "▼"}</span>
+                              <span className={`text-stone-600 text-xs transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>›</span>
                             </div>
                           </div>
                           {/* Expanded record list */}
@@ -3729,6 +3788,8 @@ export default function VinylCrate() {
                             <div className="ml-4 mb-1 space-y-0.5">
                               {session.records.map(rec => {
                                 const count = playCounts2[String(rec.id)] || 1;
+                                // Find the most recent play for this record in this session
+                                const mostRecentPlay = session.plays.find(p => String(p.record_id) === String(rec.id));
                                 return (
                                   <div key={rec.id}
                                     onClick={() => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
@@ -3738,9 +3799,31 @@ export default function VinylCrate() {
                                       <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
                                       <div className="text-stone-500 text-[10px] truncate">{rec.artist}</div>
                                     </div>
-                                    {count > 1 && (
-                                      <span className="text-stone-500 text-[10px] shrink-0">×{count}</span>
-                                    )}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {count > 1 && (
+                                        <span className="text-stone-500 text-[10px]">×{count}</span>
+                                      )}
+                                      {mostRecentPlay && (
+                                        <button
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            await fetch(`/api/plays/${mostRecentPlay.id}`, { method: "DELETE" });
+                                            setPlaySessions(prev => prev.filter(s => s.id !== mostRecentPlay.id));
+                                            setPlayCounts(prev => ({ ...prev, [rec.id]: Math.max((prev[rec.id] || 0) - 1, 0) }));
+                                            setLastPlayedDates(prev => {
+                                              const remaining = playSessions.filter(s => s.id !== mostRecentPlay.id && s.record_id === rec.id);
+                                              const nd = { ...prev };
+                                              if (remaining.length > 0) nd[rec.id] = remaining[0].played_at;
+                                              else delete nd[rec.id];
+                                              return nd;
+                                            });
+                                          }}
+                                          className="text-stone-700 hover:text-stone-400 transition-colors text-base w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/[0.06]"
+                                        >
+                                          ×
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -4140,9 +4223,10 @@ export default function VinylCrate() {
                       <div key={u.username}>
                         <button
                           onClick={async () => {
-                            if (isSelected) { setSelectedDiscoverUser(null); setOverlapData(null); return; }
+                            if (isSelected) { setSelectedDiscoverUser(null); setOverlapData(null); setShowAllSharedArtists(false); return; }
                             setSelectedDiscoverUser(u.username);
                             setOverlapData(null);
+                            setShowAllSharedArtists(false);
                             setOverlapLoading(true);
                             try {
                               const res = await fetch(`/api/discover/overlap?username=${encodeURIComponent(u.username)}`);
@@ -4173,48 +4257,100 @@ export default function VinylCrate() {
                             {overlapLoading && (
                               <div className="text-stone-600 text-xs text-center py-4">Loading overlap…</div>
                             )}
-                            {!overlapLoading && overlapData && (
-                              <>
-                                {overlapData.sharedArtists.length === 0 ? (
-                                  <div className="text-stone-600 text-xs text-center py-4">No shared artists found.</div>
-                                ) : (
-                                  <div className="divide-y divide-white/[0.04]">
-                                    <div className="px-3 py-2 flex items-center justify-between">
-                                      <span className="text-stone-500 text-xs uppercase tracking-wider">Shared Artists</span>
-                                      <span className="text-stone-700 text-xs">{overlapData.sharedArtists.length} in common</span>
+                            {!overlapLoading && overlapData && (() => {
+                              const artists = overlapData.sharedArtists || [];
+                              const maxCount = Math.max(...artists.map(e => Math.max(e.myTitles.length, e.theirTitles.length)), 1);
+                              const visibleArtists = showAllSharedArtists ? artists : artists.slice(0, 15);
+
+                              // Compute my profile client-side (mirrors stats tab logic)
+                              const myIds = new Set(myRecords.map(r => String(r.id)));
+                              const spotifyData = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
+                              const featureSrc = spotifyData.length > 0 ? spotifyData : myRecords.map(r => estimateFeaturesFromRecord(r));
+                              const avgF = key => featureSrc.length ? featureSrc.reduce((s, f) => s + (f[key] || 0), 0) / featureSrc.length : 0;
+                              const myProfile = { energy: avgF("energy"), valence: avgF("valence"), danceability: avgF("danceability"), acousticness: avgF("acousticness"), loudness: avgF("loudness") };
+
+                              return (
+                                <>
+                                  {/* Spider chart */}
+                                  {overlapData.theirProfile && (
+                                    <div className="px-3 pt-3 pb-1">
+                                      <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Sound Comparison</div>
+                                      <RadarChart
+                                        myData={myProfile}
+                                        theirData={overlapData.theirProfile}
+                                        myLabel="me"
+                                        theirLabel={`@${u.username}`}
+                                      />
                                     </div>
-                                    {overlapData.sharedArtists.slice(0, 12).map((entry) => (
-                                      <div key={entry.artist} className="px-3 py-2.5 flex items-start gap-3">
-                                        {entry.thumb && (
-                                          <img src={entry.thumb} alt="" className="w-8 h-8 rounded object-cover shrink-0 opacity-80" />
-                                        )}
-                                        <div className="flex-1 min-w-0">
-                                          <div className="text-stone-300 text-xs font-medium truncate">{entry.artist}</div>
-                                          <div className="text-stone-600 text-xs mt-0.5">
-                                            You: {entry.myTitles.length} · Them: {entry.theirTitles.length}
-                                          </div>
+                                  )}
+
+                                  {/* Shared artists bar chart */}
+                                  {artists.length === 0 ? (
+                                    <div className="text-stone-600 text-xs text-center py-4">No shared artists found.</div>
+                                  ) : (
+                                    <div className="divide-y divide-white/[0.04]">
+                                      <div className="px-3 py-2 flex items-center justify-between">
+                                        <span className="text-stone-500 text-xs uppercase tracking-wider">Shared Artists</span>
+                                        <div className="flex items-center gap-3 text-[10px]">
+                                          <span className="text-amber-700/70">me</span>
+                                          <span className="text-stone-700">|</span>
+                                          <span className="text-sky-700/70">@{u.username}</span>
+                                          <span className="text-stone-700 ml-1">{artists.length} in common</span>
                                         </div>
                                       </div>
-                                    ))}
-                                    {overlapData.sharedArtists.length > 12 && (
-                                      <div className="px-3 py-2 text-stone-700 text-xs text-center">
-                                        +{overlapData.sharedArtists.length - 12} more shared artists
-                                      </div>
-                                    )}
+                                      {visibleArtists.map((entry) => (
+                                        <div key={entry.artist} className="px-3 py-2.5">
+                                          <div className="flex items-center gap-2 mb-1.5">
+                                            {entry.thumb && (
+                                              <img src={entry.thumb} alt="" className="w-5 h-5 rounded object-cover shrink-0 opacity-70" />
+                                            )}
+                                            <div className="text-stone-300 text-xs font-medium truncate flex-1">{entry.artist}</div>
+                                          </div>
+                                          {/* Bidirectional bar */}
+                                          <div className="flex items-center gap-1">
+                                            {/* My side — bar grows right-to-left */}
+                                            <div className="flex-1 flex items-center justify-end gap-1">
+                                              <span className="text-[9px] text-amber-700/60 shrink-0 w-3 text-right">{entry.myTitles.length}</span>
+                                              <div className="flex-1 flex justify-end">
+                                                <div className="h-1.5 rounded-l-full bg-amber-700/50"
+                                                  style={{ width: `${(entry.myTitles.length / maxCount) * 100}%`, minWidth: 3 }} />
+                                              </div>
+                                            </div>
+                                            {/* Center divider */}
+                                            <div className="w-px h-3 bg-white/15 shrink-0" />
+                                            {/* Their side — bar grows left-to-right */}
+                                            <div className="flex-1 flex items-center gap-1">
+                                              <div className="h-1.5 rounded-r-full bg-sky-900/60"
+                                                style={{ width: `${(entry.theirTitles.length / maxCount) * 100}%`, minWidth: 3 }} />
+                                              <span className="text-[9px] text-sky-700/60 shrink-0 w-3">{entry.theirTitles.length}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      {artists.length > 15 && (
+                                        <button
+                                          onClick={() => setShowAllSharedArtists(s => !s)}
+                                          className="w-full px-3 py-2 text-stone-600 hover:text-stone-400 text-xs text-center transition-colors"
+                                        >
+                                          {showAllSharedArtists ? "Show less" : `Show all ${artists.length} artists`}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div className="px-3 py-2.5 border-t border-white/[0.04] flex justify-end">
+                                    <a
+                                      href={`/crate/${u.username}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-stone-500 hover:text-amber-400 text-xs transition-colors"
+                                    >
+                                      View full crate →
+                                    </a>
                                   </div>
-                                )}
-                                <div className="px-3 py-2.5 border-t border-white/[0.04] flex justify-end">
-                                  <a
-                                    href={`/crate/${u.username}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-stone-500 hover:text-amber-400 text-xs transition-colors"
-                                  >
-                                    View full crate →
-                                  </a>
-                                </div>
-                              </>
-                            )}
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
