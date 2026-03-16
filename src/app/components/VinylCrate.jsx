@@ -2223,7 +2223,6 @@ export default function VinylCrate() {
   const [trailSearch, setTrailSearch] = useState("");
   const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
   const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
-  const [spotifyDeprecated, setSpotifyDeprecated] = useState(false);
 
   // legacy playToast kept as null so nothing breaks — pill replaces it
   const [playToast] = useState(null);
@@ -3687,7 +3686,7 @@ export default function VinylCrate() {
                   ];
 
                   const analyzeCollection = async () => {
-                    if (spotifyAnalyzing || spotifyDeprecated) return;
+                    if (spotifyAnalyzing) return;
                     setSpotifyAnalyzing(true);
                     const uncached = myRecords.filter(r => !spotifyFeatures[r.id]).slice(0, 25);
                     for (const record of uncached) {
@@ -3699,7 +3698,6 @@ export default function VinylCrate() {
                         });
                         if (res.ok) {
                           const data = await res.json();
-                          if (data?.error === "audio_features_deprecated") { setSpotifyDeprecated(true); break; }
                           if (data && data.energy != null) setSpotifyFeatures(prev => ({ ...prev, [record.id]: data }));
                         }
                       } catch {}
@@ -3728,9 +3726,7 @@ export default function VinylCrate() {
                           </div>
                         ))}
                       </div>
-                      {spotifyDeprecated ? (
-                        <div className="text-stone-700 text-xs">Spotify audio analysis isn't available for this app — showing genre-based estimates.</div>
-                      ) : !usingSpotify ? (
+                      {!usingSpotify ? (
                         <button
                           onClick={analyzeCollection}
                           disabled={spotifyAnalyzing}

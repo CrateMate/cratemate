@@ -1,7 +1,9 @@
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID!;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET!;
 
-// In-memory token cache (reused across requests within the same server instance)
+const RECCOBEATS_BASE = "https://api.reccobeats.com";
+
+// In-memory token cache
 let _tokenCache: { token: string; expiresAt: number } = { token: "", expiresAt: 0 };
 
 async function getToken(): Promise<string> {
@@ -43,7 +45,7 @@ export async function fetchAlbumFeatures(
   artist: string,
   title: string
 ): Promise<SpotifyFeatures | null> {
-  // Search for the album
+  // Step 1: Search Spotify for the album to get track IDs
   const q = encodeURIComponent(`album:${title} artist:${artist}`);
   const searchRes = await spotifyGet(`/search?q=${q}&type=album&limit=3`);
   if (!searchRes.ok) return null;
@@ -54,23 +56,19 @@ export async function fetchAlbumFeatures(
 
   const albumId = albums[0].id;
 
-  // Get all tracks from the album
+  // Step 2: Get track IDs from the album
   const tracksRes = await spotifyGet(`/albums/${albumId}/tracks?limit=50`);
   if (!tracksRes.ok) return null;
   const tracksData = await tracksRes.json();
   const trackIds: string[] = (tracksData.items || []).map((t: { id: string }) => t.id).filter(Boolean);
   if (trackIds.length === 0) return null;
 
-  // Batch fetch audio features (max 100 per request)
-  // NOTE: /audio-features was deprecated by Spotify on Nov 27 2024 for new apps (returns 403)
+  // Step 3: Fetch audio features from ReccoBeats using Spotify track IDs
+  // ReccoBeats accepts Spotify track IDs directly at /v1/audio-features?ids=...
   const ids = trackIds.slice(0, 100).join(",");
-  const featuresRes = await spotifyGet(`/audio-features?ids=${ids}`);
-  if (!featuresRes.ok) {
-    if (featuresRes.status === 403) {
-      throw new Error("SPOTIFY_AUDIO_FEATURES_DEPRECATED");
-    }
-    return null;
-  }
+  const featuresRes = await fetch(`${RECCOBEATS_BASE}/v1/audio-features?ids=${ids}`);
+  if (!featuresRes.ok) return null;
+
   const featuresData = await featuresRes.json();
   const features: Array<{
     energy: number;
@@ -79,7 +77,7 @@ export async function fetchAlbumFeatures(
     danceability: number;
     acousticness: number;
     loudness: number;
-  } | null> = featuresData.audio_features || [];
+  } | null> = featuresData.content || [];
 
   const valid = features.filter(Boolean) as Array<{
     energy: number;
@@ -91,7 +89,6 @@ export async function fetchAlbumFeatures(
   }>;
   if (valid.length === 0) return null;
 
-  // Average all track features
   const avg = (key: keyof typeof valid[0]) =>
     valid.reduce((sum, f) => sum + f[key], 0) / valid.length;
 
