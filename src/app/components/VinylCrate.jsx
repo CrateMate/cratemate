@@ -1435,7 +1435,7 @@ function getSeason(month) {
   return "fall";
 }
 
-function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures = {}) {
+function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures = {}, artistMembers = {}) {
   const today = new Date();
   const todayMonth = today.getMonth() + 1;
   const todayDay   = today.getDate();
@@ -1451,9 +1451,9 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     return (now - new Date(last).getTime()) / (1000 * 60 * 60 * 24) >= RECENT_DAYS;
   };
 
-  // Priority 1: Release anniversaries (date-specific — always feels intentional)
+  // Priority 1: Release anniversaries — month-level (fires much more often than day-exact)
   const anniversaryCandidates = myRecords.filter(
-    (r) => r.release_month === todayMonth && r.release_day === todayDay
+    (r) => r.release_month === todayMonth
   );
   if (anniversaryCandidates.length > 0) {
     const pick = anniversaryCandidates[Math.floor(Math.random() * anniversaryCandidates.length)];
@@ -1463,41 +1463,87 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       type: "anniversary",
       record: pick,
       fact: years
-        ? `"${pick.title}" by ${pick.artist} was released exactly ${years} year${years === 1 ? "" : "s"} ago today.`
-        : `"${pick.title}" by ${pick.artist} was released on this date.`,
+        ? `"${pick.title}" by ${pick.artist} was released ${years} year${years === 1 ? "" : "s"} ago this month.`
+        : `"${pick.title}" by ${pick.artist} was released this month.`,
     };
   }
 
-  // Priority 2a: Artist born today
-  const birthdayCandidates = myRecords.filter(
-    (r) => !r.is_compilation && r.artist_birth_month === todayMonth && r.artist_birth_day === todayDay
-  );
-  if (birthdayCandidates.length > 0) {
-    const pick = birthdayCandidates[Math.floor(Math.random() * birthdayCandidates.length)];
-    const years = pick.artist_birth_year ? todayYear - pick.artist_birth_year : null;
-    return {
-      type: "birthday",
-      record: pick,
-      fact: years
-        ? `${pick.artist} was born ${years} years ago today in ${pick.artist_birth_year}.`
-        : `${pick.artist} was born on this day.`,
-    };
+  // Priority 2a: Artist or band member born today
+  {
+    // Solo artist birthday
+    const soloBirthday = myRecords.filter(
+      (r) => !r.is_compilation && r.artist_birth_month === todayMonth && r.artist_birth_day === todayDay
+    );
+    // Band member birthday
+    const memberBirthday = myRecords.filter((r) => {
+      const members = artistMembers[r.artist] || [];
+      return members.some((m) => m.birth_month === todayMonth && m.birth_day === todayDay);
+    });
+    const allBirthday = [...soloBirthday, ...memberBirthday];
+    if (allBirthday.length > 0) {
+      const pick = allBirthday[Math.floor(Math.random() * allBirthday.length)];
+      const isSolo = soloBirthday.includes(pick);
+      if (isSolo) {
+        const years = pick.artist_birth_year ? todayYear - pick.artist_birth_year : null;
+        return {
+          type: "birthday",
+          record: pick,
+          fact: years
+            ? `${pick.artist} was born ${years} years ago today in ${pick.artist_birth_year}.`
+            : `${pick.artist} was born on this day.`,
+        };
+      } else {
+        const member = (artistMembers[pick.artist] || []).find(
+          (m) => m.birth_month === todayMonth && m.birth_day === todayDay
+        );
+        const years = member?.birth_year ? todayYear - member.birth_year : null;
+        return {
+          type: "birthday",
+          record: pick,
+          fact: years
+            ? `${member.name} of ${pick.artist} was born ${years} years ago today in ${member.birth_year}.`
+            : `${member.name} of ${pick.artist} was born on this day.`,
+        };
+      }
+    }
   }
 
-  // Priority 2b: Artist died today
-  const deathCandidates = myRecords.filter(
-    (r) => !r.is_compilation && r.artist_death_month === todayMonth && r.artist_death_day === todayDay
-  );
-  if (deathCandidates.length > 0) {
-    const pick = deathCandidates[Math.floor(Math.random() * deathCandidates.length)];
-    const years = pick.artist_death_year ? todayYear - pick.artist_death_year : null;
-    return {
-      type: "death",
-      record: pick,
-      fact: years
-        ? `${pick.artist} passed away ${years} years ago today in ${pick.artist_death_year}.`
-        : `${pick.artist} passed away on this day.`,
-    };
+  // Priority 2b: Artist or band member died today
+  {
+    const soloDeath = myRecords.filter(
+      (r) => !r.is_compilation && r.artist_death_month === todayMonth && r.artist_death_day === todayDay
+    );
+    const memberDeath = myRecords.filter((r) => {
+      const members = artistMembers[r.artist] || [];
+      return members.some((m) => m.death_month === todayMonth && m.death_day === todayDay);
+    });
+    const allDeath = [...soloDeath, ...memberDeath];
+    if (allDeath.length > 0) {
+      const pick = allDeath[Math.floor(Math.random() * allDeath.length)];
+      const isSolo = soloDeath.includes(pick);
+      if (isSolo) {
+        const years = pick.artist_death_year ? todayYear - pick.artist_death_year : null;
+        return {
+          type: "death",
+          record: pick,
+          fact: years
+            ? `${pick.artist} passed away ${years} years ago today in ${pick.artist_death_year}.`
+            : `${pick.artist} passed away on this day.`,
+        };
+      } else {
+        const member = (artistMembers[pick.artist] || []).find(
+          (m) => m.death_month === todayMonth && m.death_day === todayDay
+        );
+        const years = member?.death_year ? todayYear - member.death_year : null;
+        return {
+          type: "death",
+          record: pick,
+          fact: years
+            ? `${member.name} of ${pick.artist} passed away ${years} years ago today in ${member.death_year}.`
+            : `${member.name} of ${pick.artist} passed away on this day.`,
+        };
+      }
+    }
   }
 
   // Priority 3: Round-year anniversary (5/10/25/50-year milestones — works for bands too)
@@ -2348,7 +2394,18 @@ export default function VinylCrate() {
         let fallbackPool = myRecords;
 
         if (type === "daily") {
-          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures);
+          // Fetch band member birth/death data from MusicBrainz (cached in Supabase)
+          let artistMembers = {};
+          try {
+            const uniqueArtists = [...new Set(myRecords.filter(r => !r.is_compilation).map(r => r.artist).filter(Boolean))];
+            const res = await fetch("/api/artist/members", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ artists: uniqueArtists }),
+            });
+            if (res.ok) artistMembers = await res.json();
+          } catch {}
+          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers);
           if (hook) {
             const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
             const text = await callClaude(
