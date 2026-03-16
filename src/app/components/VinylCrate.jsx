@@ -8,13 +8,17 @@ function mapSearchResult(r) {
   const artist = dash > -1 ? r.title.slice(0, dash) : "Unknown";
   const title = dash > -1 ? r.title.slice(dash + 3) : r.title;
   const year = parseInt(r.year) || null;
+  const styles = r.style || [];
+  const genres = r.genre || [];
   return {
     artist,
     title,
     label: r.label?.[0] || "",
     year_pressed: year,
     year_original: year,
-    genre: ((r.style || []).length > 0 ? (r.style || []).slice(0, 3) : (r.genre || []).slice(0, 2)).join(", "),
+    genre: (styles.length > 0 ? styles.slice(0, 3) : genres.slice(0, 2)).join(", "),
+    genres: genres.slice(0, 3).join(", "),
+    styles: styles.slice(0, 5).join(", "),
     condition: "",
     for_sale: false,
     format: (r.format || []).join(", "),
@@ -29,20 +33,28 @@ function AddRecordModal({ onClose, onAdd }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(null);
+  const [searchError, setSearchError] = useState("");
   const debounce = useRef(null);
 
   useEffect(() => {
     if (!q.trim()) {
       setResults([]);
+      setSearchError("");
       return;
     }
     clearTimeout(debounce.current);
     debounce.current = setTimeout(async () => {
       setLoading(true);
+      setSearchError("");
       try {
         const res = await fetch(`/api/discogs/search?q=${encodeURIComponent(q)}`);
-        setResults(await res.json());
+        if (!res.ok) { setSearchError("Search failed — try again."); setResults([]); return; }
+        const data = await res.json();
+        if (!Array.isArray(data)) { setSearchError("Unexpected response from search."); setResults([]); return; }
+        setResults(data);
+        if (data.length === 0) setSearchError("");
       } catch {
+        setSearchError("Couldn't reach Discogs — check your connection.");
         setResults([]);
       } finally {
         setLoading(false);
@@ -95,6 +107,7 @@ function AddRecordModal({ onClose, onAdd }) {
           className="w-full bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60 mb-3"
         />
         {loading && <div className="text-stone-600 text-sm text-center py-4">Searching...</div>}
+        {searchError && <div className="text-red-400/80 text-xs text-center py-2">{searchError}</div>}
         <div className="space-y-1 max-h-72 overflow-y-auto">
           {results.map((r) => (
             <button
@@ -517,11 +530,10 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
 
   function handlePointerDown() {
     didLongPress.current = false;
-    if (!onLogPlay) return;
+    if (!onShowToast) return;
     longPressTimer.current = setTimeout(() => {
       didLongPress.current = true;
-      onLogPlay(record.id);
-      onShowToast?.(record.title);
+      onShowToast(record); // shows action pill — user chooses log vs trail
     }, 500);
   }
   function handlePointerUp() {
@@ -532,9 +544,8 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   function handlePointerLeave() { clearTimeout(longPressTimer.current); }
   function handleDoubleClick(e) {
     e.stopPropagation();
-    if (!onLogPlay) return;
-    onLogPlay(record.id);
-    onShowToast?.(record.title);
+    if (!onShowToast) return;
+    onShowToast(record);
   }
 
   return (
@@ -1149,21 +1160,19 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                 zIndex,
               }}
               onMouseDown={(e) => {
-                if (!onLogPlay) return;
+                if (!onShowToast) return;
                 hexLongPressDidFire.current = false;
                 hexLongPressTimer.current = setTimeout(() => {
                   hexLongPressDidFire.current = true;
-                  onLogPlay(record.id);
-                  onShowToast?.(record.title);
+                  onShowToast(record);
                 }, 500);
               }}
               onTouchStart={(e) => {
-                if (!onLogPlay) return;
+                if (!onShowToast) return;
                 hexLongPressDidFire.current = false;
                 hexLongPressTimer.current = setTimeout(() => {
                   hexLongPressDidFire.current = true;
-                  onLogPlay(record.id);
-                  onShowToast?.(record.title);
+                  onShowToast(record);
                 }, 500);
               }}
               onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
@@ -1511,6 +1520,177 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts) {
   return null; // → smart fallback
 }
 
+function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, playCounts }) {
+  const CENTER = 140;
+  const SLOT = 100;
+  const GAP = 18;
+
+  const directions = [
+    { key: "windDown", label: "wind down", offsetX: -(SLOT + GAP), offsetY: (CENTER - SLOT) / 2, color: "#60a5fa" },
+    { key: "liftUp",  label: "lift up",   offsetX: CENTER + GAP,    offsetY: (CENTER - SLOT) / 2, color: "#f87171" },
+    { key: "sideways",label: "detour",    offsetX: (CENTER - SLOT) / 2, offsetY: -(SLOT + GAP),  color: "#a78bfa" },
+  ];
+
+  const filteredSearch = searchQuery
+    ? collection.filter(r =>
+        (r.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.artist || "").toLowerCase().includes(searchQuery.toLowerCase())
+      ).slice(0, 8)
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-[300] flex flex-col" style={{ background: "rgba(0,0,0,0.96)" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-10 pb-4 shrink-0">
+        <button onClick={onClose} className="text-stone-500 hover:text-stone-300 text-sm flex items-center gap-1.5 transition-colors">
+          ← Close
+        </button>
+        <span className="text-stone-600 text-xs uppercase tracking-widest">Listening Trail</span>
+        <div className="w-12" />
+      </div>
+
+      {/* History strip */}
+      {history.length > 1 && (
+        <div className="px-4 pb-3 shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            {history.map((r, i) => (
+              <div key={`${r.id}-${i}`} className="flex items-center gap-1.5 shrink-0">
+                {i > 0 && <span className="text-stone-700 text-xs">→</span>}
+                <div
+                  className={`rounded-lg overflow-hidden border-2 transition-colors ${i === history.length - 1 ? "border-amber-500/70" : "border-stone-700/50"}`}
+                  style={{ width: 32, height: 32 }}
+                >
+                  <CoverArt record={r} size={32} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Trail map */}
+      <div className="flex-1 relative flex items-center justify-center">
+        {/* Error */}
+        {error && (
+          <div className="text-red-400/70 text-sm text-center px-8">{error}</div>
+        )}
+
+        {!error && (
+          <div className="relative" style={{ width: CENTER, height: CENTER }}>
+            {/* Center record */}
+            <div className="rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-2xl"
+              style={{ width: CENTER, height: CENTER, boxShadow: "0 0 40px rgba(180,120,30,0.3)" }}>
+              <CoverArt record={centerRecord} size={CENTER} />
+              <div style={{
+                position: "absolute", inset: 0,
+                background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)",
+                display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 8,
+              }}>
+                <p style={{ color: "#fef3c7", fontSize: 10, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{centerRecord.title}</p>
+                <p style={{ color: "#a8a29e", fontSize: 9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{centerRecord.artist}</p>
+              </div>
+            </div>
+
+            {/* Directional slots */}
+            {directions.map(({ key, label, offsetX, offsetY, color }) => {
+              const rec = suggestions?.[key];
+              const isLoading = loading && !suggestions;
+              return (
+                <div
+                  key={key}
+                  style={{ position: "absolute", left: offsetX, top: offsetY, width: SLOT, height: SLOT }}
+                >
+                  {/* Direction label */}
+                  <div style={{
+                    position: "absolute",
+                    fontSize: 9,
+                    color: color,
+                    opacity: 0.7,
+                    whiteSpace: "nowrap",
+                    ...(key === "windDown" ? { right: "calc(100% + 4px)", top: "50%", transform: "translateY(-50%)" } : {}),
+                    ...(key === "liftUp"   ? { left:  "calc(100% + 4px)", top: "50%", transform: "translateY(-50%)" } : {}),
+                    ...(key === "sideways" ? { bottom: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)" } : {}),
+                  }}>
+                    {label}
+                  </div>
+
+                  {isLoading ? (
+                    <div className="rounded-xl w-full h-full animate-pulse" style={{ background: "#1c1917" }} />
+                  ) : rec ? (
+                    <button
+                      onClick={() => onNavigate(rec)}
+                      className="rounded-xl overflow-hidden w-full h-full relative transition-transform hover:scale-105 active:scale-95"
+                      style={{ border: `1.5px solid ${color}40`, boxShadow: `0 4px 20px rgba(0,0,0,0.6)` }}
+                    >
+                      <CoverArt record={rec} size={SLOT} />
+                      <div style={{
+                        position: "absolute", inset: 0,
+                        background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 55%)",
+                        display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 5,
+                      }}>
+                        <p style={{ color: "#fef3c7", fontSize: 8, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
+                        <p style={{ color: "#a8a29e", fontSize: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.artist}</p>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="rounded-xl w-full h-full flex items-center justify-center" style={{ background: "#1c1917", border: "1px dashed #3c3532" }}>
+                      <span className="text-stone-700 text-xs">?</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* DOWN slot — custom pick */}
+            <div style={{ position: "absolute", left: (CENTER - SLOT) / 2, top: CENTER + GAP, width: SLOT }}>
+              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)", fontSize: 9, color: "#78716c", whiteSpace: "nowrap" }}>
+                your pick
+              </div>
+              {searchOpen ? (
+                <div className="absolute z-10" style={{ bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)", width: 220 }}>
+                  <input
+                    autoFocus
+                    value={searchQuery}
+                    onChange={e => onSearchChange(e.target.value)}
+                    placeholder="Search your crate..."
+                    className="w-full bg-stone-900 border border-stone-600 rounded-xl px-3 py-2 text-sm text-stone-200 placeholder-stone-600 outline-none mb-1"
+                  />
+                  <div className="bg-stone-900 rounded-xl overflow-hidden border border-stone-800">
+                    {filteredSearch.map(r => (
+                      <button key={r.id} onClick={() => onNavigate(r)}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/[0.05] text-left transition-colors">
+                        <CoverArt record={r} size={28} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-stone-200 text-xs truncate">{r.title}</div>
+                          <div className="text-stone-600 text-[10px] truncate">{r.artist}</div>
+                        </div>
+                      </button>
+                    ))}
+                    {searchQuery && filteredSearch.length === 0 && (
+                      <div className="text-stone-700 text-xs text-center py-3">No matches</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+              <button
+                onClick={onToggleSearch}
+                className="rounded-xl w-full flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 active:scale-95"
+                style={{ height: SLOT, background: "#1c1917", border: "1.5px dashed #44403c" }}
+              >
+                <span className="text-stone-500 text-2xl leading-none">+</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {loading && (
+        <div className="text-center pb-6 text-stone-600 text-xs">Finding next records…</div>
+      )}
+    </div>
+  );
+}
+
 const GENRE_PROXIMITY = {
   "Rock": ["Alternative Rock", "Indie Rock", "Metal", "Punk", "Pop Rock", "Folk Rock"],
   "Jazz": ["Blues", "Soul", "Funk", "R&B", "Bossa Nova", "Latin Jazz"],
@@ -1736,7 +1916,23 @@ export default function VinylCrate() {
   const PAGE_SIZE = 25;
   const sentinelRef = useRef(null);
 
-  const [playToast, setPlayToast] = useState(null);
+  // Long-press action pill (replaces old playToast)
+  const [actionPill, setActionPill] = useState(null); // { record }
+  const actionPillTimer = useRef(null);
+
+  // Play Trail
+  const [trailActive, setTrailActive] = useState(false);
+  const [trailCenter, setTrailCenter] = useState(null);
+  const [trailHistory, setTrailHistory] = useState([]);
+  const [trailSuggestions, setTrailSuggestions] = useState(null); // { windDown, liftUp, sideways } each { record, score }
+  const [trailLoading, setTrailLoading] = useState(false);
+  const [trailError, setTrailError] = useState("");
+  const [trailSearchOpen, setTrailSearchOpen] = useState(false);
+  const [trailSearch, setTrailSearch] = useState("");
+  const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
+
+  // legacy playToast kept as null so nothing breaks — pill replaces it
+  const [playToast] = useState(null);
   const playToastTimer = useRef(null);
 
   const [expandedHearts, setExpandedHearts] = useState(new Set());
@@ -1813,11 +2009,14 @@ export default function VinylCrate() {
     } catch {}
   }
 
-  function showPlayToast(title) {
-    clearTimeout(playToastTimer.current);
-    setPlayToast(title);
-    playToastTimer.current = setTimeout(() => setPlayToast(null), 1500);
+  function showActionPill(record) {
+    clearTimeout(actionPillTimer.current);
+    setActionPill({ record });
+    actionPillTimer.current = setTimeout(() => setActionPill(null), 4000);
   }
+
+  // kept for backwards compat signature — RecordRow/HoneycombView call onShowToast(record)
+  const showPlayToast = showActionPill;
 
   useEffect(() => {
     refreshRecords();
@@ -2142,6 +2341,123 @@ export default function VinylCrate() {
     setActiveDecade(new Set()); setActiveFormat(null); setActiveGenres(new Set()); setStatFilterLabel(null);
     setPreviousTab(null);
   }
+
+  // ── Play Trail ──────────────────────────────────────────────────────────────
+
+  async function loadSpotifyFeatures() {
+    try {
+      const res = await fetch("/api/spotify/features");
+      if (res.ok) setSpotifyFeatures(await res.json());
+    } catch {}
+  }
+
+  async function fetchAndCacheFeatures(record) {
+    if (spotifyFeatures[record.id]) return spotifyFeatures[record.id];
+    try {
+      const res = await fetch("/api/spotify/features", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record_id: record.id, artist: record.artist, title: record.title }),
+      });
+      if (!res.ok) return null;
+      const f = await res.json();
+      if (f) setSpotifyFeatures(prev => ({ ...prev, [record.id]: f }));
+      return f;
+    } catch { return null; }
+  }
+
+  function computeTrailSuggestions(centerRecord, features) {
+    const cf = features[centerRecord.id];
+    const candidates = myRecords.filter(r => r.id !== centerRecord.id);
+
+    function score(r, direction) {
+      const rf = features[r.id];
+      if (cf && rf) {
+        const eDiff = rf.energy - cf.energy;
+        const tDiff = rf.tempo - cf.tempo;
+        if (direction === "windDown") {
+          // Want lower energy + lower tempo
+          return eDiff < 0 ? Math.abs(eDiff) * 2 + Math.max(0, -tDiff / 150) : eDiff - 1;
+        }
+        if (direction === "liftUp") {
+          // Want higher energy + higher tempo
+          return eDiff > 0 ? eDiff * 2 + Math.max(0, tDiff / 150) : eDiff - 1;
+        }
+        // sideways: similar energy but different genre or very different valence
+        const energyClose = 1 - Math.abs(eDiff);
+        const valenceDiff = Math.abs(rf.valence - cf.valence);
+        const diffGenre = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.6 : 0;
+        return energyClose * 0.4 + valenceDiff * 0.3 + diffGenre;
+      }
+      // Fallback: genre/decade heuristics only
+      const sameGenre = getGenres(r).some(g => getGenres(centerRecord).includes(g));
+      const sameDec = getDecade(r) === getDecade(centerRecord);
+      if (direction === "windDown") return sameGenre && !sameDec ? 0.4 : sameGenre ? 0.3 : 0.1;
+      if (direction === "liftUp") return sameGenre && !sameDec ? 0.4 : sameGenre ? 0.3 : 0.1;
+      return !sameGenre ? 0.6 : sameDec ? 0.1 : 0.3;
+    }
+
+    const sorted = (dir) => [...candidates].sort((a, b) => score(b, dir) - score(a, dir));
+    const pickedIds = new Set();
+
+    function pick(dir) {
+      const best = sorted(dir).find(r => !pickedIds.has(r.id));
+      if (best) pickedIds.add(best.id);
+      return best || null;
+    }
+
+    return {
+      windDown: pick("windDown"),
+      liftUp: pick("liftUp"),
+      sideways: pick("sideways"),
+    };
+  }
+
+  async function enterTrail(record) {
+    setTrailCenter(record);
+    setTrailHistory([record]);
+    setTrailSuggestions(null);
+    setTrailSearch("");
+    setTrailSearchOpen(false);
+    setTrailError("");
+    setTrailActive(true);
+    setTrailLoading(true);
+    try {
+      // Load all cached features + fetch center record's features
+      const [, centerFeatures] = await Promise.all([
+        loadSpotifyFeatures(),
+        fetchAndCacheFeatures(record),
+      ]);
+      const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [record.id]: centerFeatures } : {}) };
+      setTrailSuggestions(computeTrailSuggestions(record, allFeatures));
+    } catch {
+      setTrailError("Couldn't load suggestions — try again.");
+    } finally {
+      setTrailLoading(false);
+    }
+  }
+
+  async function navigateTrail(record) {
+    await logPlay(record.id);
+    setTrailCenter(record);
+    setTrailHistory(prev => [...prev, record]);
+    setTrailSuggestions(null);
+    setTrailSearch("");
+    setTrailSearchOpen(false);
+    setTrailError("");
+    setTrailLoading(true);
+    try {
+      const centerFeatures = await fetchAndCacheFeatures(record);
+      const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [record.id]: centerFeatures } : {}) };
+      setTrailSuggestions(computeTrailSuggestions(record, allFeatures));
+    } catch {
+      setTrailError("Couldn't load suggestions — try again.");
+    } finally {
+      setTrailLoading(false);
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   async function handleDelete(record) {
     try {
@@ -3238,14 +3554,59 @@ export default function VinylCrate() {
       )}
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
 
-      {playToast && (
-        <div
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] px-4 py-2 rounded-full bg-stone-900/90 backdrop-blur-sm border border-stone-700/60 text-stone-200 text-sm flex items-center gap-2 shadow-lg"
-          style={{ pointerEvents: "none" }}
-        >
-          <span className="text-amber-400">▶</span>
-          <span>Logged — {playToast}</span>
+      {/* Long-press action pill */}
+      {actionPill && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] shadow-2xl" style={{ pointerEvents: "auto", minWidth: 270 }}>
+          <div className="bg-stone-950 border border-stone-700/60 rounded-2xl px-4 pt-3 pb-3 backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-stone-400 text-sm truncate flex-1">{actionPill.record.title}</span>
+              <button onClick={() => { clearTimeout(actionPillTimer.current); setActionPill(null); }}
+                className="text-stone-700 hover:text-stone-400 text-lg leading-none shrink-0">×</button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  logPlay(actionPill.record.id);
+                  clearTimeout(actionPillTimer.current);
+                  setActionPill(null);
+                }}
+                className="flex-1 py-2 rounded-xl border border-stone-700 text-stone-300 text-xs hover:border-amber-900/50 hover:text-amber-200 transition-colors"
+              >
+                ▶ Log play
+              </button>
+              <button
+                onClick={() => {
+                  const rec = actionPill.record;
+                  clearTimeout(actionPillTimer.current);
+                  setActionPill(null);
+                  enterTrail(rec);
+                }}
+                className="flex-1 py-2 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-xs hover:bg-amber-900/40 transition-colors"
+              >
+                ⬡ Play Trail
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* Play Trail overlay */}
+      {trailActive && (
+        <PlayTrailView
+          centerRecord={trailCenter}
+          suggestions={trailSuggestions}
+          loading={trailLoading}
+          error={trailError}
+          history={trailHistory}
+          collection={myRecords}
+          searchOpen={trailSearchOpen}
+          searchQuery={trailSearch}
+          onNavigate={navigateTrail}
+          onSearchChange={setTrailSearch}
+          onToggleSearch={() => setTrailSearchOpen(o => !o)}
+          onClose={() => { setTrailActive(false); setTrailSearchOpen(false); }}
+          playCounts={playCounts}
+        />
       )}
     </div>
   );
