@@ -1844,7 +1844,7 @@ function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, f
             const sr = (fullscreen ? 14 : 9) + (fullscreen ? 18 : 12) * Math.sqrt(s.count / maxSCount);
             const { fill: sf, stroke: ss, text: st } = genreSvgColor(s.label);
             return (
-              <g key={s.label} onClick={(e) => { e.stopPropagation(); onStyleClick?.(s.label); }} style={{ cursor: "pointer" }}>
+              <g key={s.label} onClick={(e) => { e.stopPropagation(); onStyleClick?.(s.label, expandedGenre); }} style={{ cursor: "pointer" }}>
                 <circle cx={scx} cy={scy} r={sr} fill={sf} stroke={ss} strokeWidth={1} opacity={0.9} />
                 <text x={scx} y={scy} textAnchor="middle" dominantBaseline="middle"
                   fill={st} fontSize={Math.max(8, sr * 0.38)}
@@ -1950,7 +1950,7 @@ function GenreBubbleMap({ items, styleItems, onBubbleClick, onStyleClick }) {
               items={items}
               styleItems={styleItems}
               onBubbleClick={(g) => { onBubbleClick(g); setFullscreen(false); }}
-              onStyleClick={(s) => { onStyleClick(s); setFullscreen(false); }}
+              onStyleClick={(s, parentGenre) => { onStyleClick(s, parentGenre); setFullscreen(false); }}
               fullscreen
             />
           </div>
@@ -2417,13 +2417,18 @@ export default function VinylCrate() {
     setActiveStyles(new Set([style])); setActiveGenres(new Set()); setActiveDecade(new Set()); setActiveFormat(null);
     setStatFilterLabel(style); setViewMode("drift"); setTab("crate");
   }
+  function drillByGenreAndStyle(genre, style) {
+    setPreviousTab(tab);
+    setActiveGenres(new Set([genre])); setActiveStyles(new Set([style])); setActiveDecade(new Set()); setActiveFormat(null);
+    setStatFilterLabel(`${genre} · ${style}`); setViewMode("drift"); setTab("crate");
+  }
   function drillByFormat(fmt) {
     setPreviousTab(tab);
     setActiveFormat(fmt); setActiveDecade(new Set()); setActiveGenres(new Set());
     setStatFilterLabel(fmt); setViewMode("drift"); setTab("crate");
   }
   function clearStatFilter() {
-    setActiveDecade(new Set()); setActiveFormat(null); setActiveGenres(new Set()); setStatFilterLabel(null);
+    setActiveDecade(new Set()); setActiveFormat(null); setActiveGenres(new Set()); setActiveStyles(new Set()); setStatFilterLabel(null);
     setPreviousTab(null);
   }
 
@@ -3422,7 +3427,9 @@ export default function VinylCrate() {
                           .filter(i => i.label)}
                         styleItems={bubbleView === "genres" ? styleItems : {}}
                         onBubbleClick={bubbleView === "genres" ? drillByGenre : drillByStyle}
-                        onStyleClick={drillByStyle}
+                        onStyleClick={(style, parentGenre) =>
+                          parentGenre ? drillByGenreAndStyle(parentGenre, style) : drillByStyle(style)
+                        }
                       />
                     </div>
                   );
