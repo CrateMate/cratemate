@@ -1172,8 +1172,15 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
       const nx = x + vx;
       const ny = y + vy;
       const clamped = clampOffset(nx, ny, vw, vh);
-      if (Math.abs(clamped.x - nx) > 0.1) screensaverVel.current.x *= -1;
-      if (Math.abs(clamped.y - ny) > 0.1) screensaverVel.current.y *= -1;
+      let bounced = false;
+      if (Math.abs(clamped.x - nx) > 0.1) { screensaverVel.current.x *= -1; bounced = true; }
+      if (Math.abs(clamped.y - ny) > 0.1) { screensaverVel.current.y *= -1; bounced = true; }
+      if (bounced) {
+        const { x: bvx, y: bvy } = screensaverVel.current;
+        const angle = Math.atan2(bvy, bvx) + (Math.random() - 0.5) * 0.5;
+        const speed = Math.hypot(bvx, bvy);
+        screensaverVel.current = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+      }
       offsetRef.current = clamped;
       applyTransform(clamped.x, clamped.y);
       if (!scaleRafRef.current) {
