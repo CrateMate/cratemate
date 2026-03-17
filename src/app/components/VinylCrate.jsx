@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UserButton, useUser } from "@clerk/nextjs";
+import { useTheme } from "./ThemeProvider";
 
 function mapSearchResult(r) {
   const dash = (r.title || "").indexOf(" - ");
@@ -1369,16 +1370,6 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
           );
         })}
       </div>
-      {/* Screensaver toggle — bottom-left corner */}
-      <button
-        onClick={(e) => { e.stopPropagation(); toggleScreensaver(); }}
-        title={screensaverEnabled ? "Disable auto-pan" : "Enable auto-pan"}
-        className={`absolute bottom-3 left-3 z-50 px-3 py-1.5 text-xs rounded-full bg-black/60 backdrop-blur-sm border border-white/10 transition-colors ${
-          screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-300"
-        }`}
-      >
-        ⟳ Auto-pan
-      </button>
     </div>
   );
 }
@@ -2565,6 +2556,7 @@ function sessionDurationLabel(durationMins, playCount, listeningSecs) {
 
 export default function VinylCrate() {
   const { user } = useUser();
+  const { theme, setTheme } = useTheme();
   const [collection, setCollection] = useState(null);
   const [collectionError, setCollectionError] = useState("");
   const [tab, setTab] = useState("crate");
@@ -2654,6 +2646,7 @@ export default function VinylCrate() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [enrichLoading, setEnrichLoading] = useState(false);
+  const [showDiscogsMenu, setShowDiscogsMenu] = useState(false);
 
   const refreshRecords = useCallback(async () => {
     setCollectionError("");
@@ -2880,6 +2873,42 @@ export default function VinylCrate() {
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
   const pool = showForSale ? forSaleRecords : myRecords;
+
+  const personalTheme = useMemo(() => {
+    if (theme !== "personal" || !myRecords.length) return null;
+    const genreCounts = {};
+    myRecords.forEach(r => getGenres(r).forEach(g => {
+      genreCounts[g.toLowerCase()] = (genreCounts[g.toLowerCase()] || 0) + 1;
+    }));
+    const sorted = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
+    const primaryHex  = getGenrePalette(sorted[0]?.[0] ?? "").hex;
+    const secondaryHex = getGenrePalette(sorted[1]?.[0] ?? "").hex;
+    const decadeCounts = {};
+    myRecords.forEach(r => {
+      const yr = Number(r.year_original || r.year_pressed);
+      if (yr) { const d = Math.floor(yr / 10) * 10; decadeCounts[d] = (decadeCounts[d] || 0) + 1; }
+    });
+    const dominantDecade = Number(Object.entries(decadeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 1980);
+    const played = myRecords.filter(r => (playCounts[r.id] || 0) > 0);
+    const avgPlays = played.length ? played.reduce((s, r) => s + (playCounts[r.id] || 0), 0) / played.length : 0;
+    return { primaryHex, secondaryHex, dominantDecade, engaged: avgPlays > 3, sorted };
+  }, [theme, myRecords, playCounts]);
+
+  useEffect(() => {
+    if (theme !== "personal" || !personalTheme) return;
+    const root = document.documentElement;
+    root.style.setProperty("--accent-personal", personalTheme.primaryHex);
+    root.style.setProperty("--accent-personal-2", personalTheme.secondaryHex);
+    root.style.setProperty("--accent-personal-bg", personalTheme.engaged ? "0.30" : "0.22");
+    if (personalTheme.dominantDecade <= 1975)
+      root.style.setProperty("--bg-app", "linear-gradient(160deg,#1c1208 0%,#0c0804 100%)");
+    else if (personalTheme.dominantDecade >= 1990)
+      root.style.setProperty("--bg-app", "linear-gradient(160deg,#0e1218 0%,#080c12 100%)");
+    return () => {
+      ["--accent-personal", "--accent-personal-2", "--accent-personal-bg", "--bg-app"]
+        .forEach(v => root.style.removeProperty(v));
+    };
+  }, [theme, personalTheme]);
 
   const sorted = [...pool].sort((a, b) => {
     let cmp = 0;
@@ -3416,7 +3445,7 @@ export default function VinylCrate() {
   return (
     <div
       className="min-h-screen flex flex-col max-w-md mx-auto"
-      style={{ background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)", fontFamily: "'DM Sans',sans-serif", color: "#e8ddd0" }}
+      style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
       {viewMode !== "drift" && (
         <div className="px-5 pt-7 pb-2 flex items-start justify-between">
@@ -3431,13 +3460,25 @@ export default function VinylCrate() {
               {myRecords.length} records · {forSaleRecords.length} for sale
             </div>
           </div>
-          <div className="pt-1">
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => {
+                const next = theme === "dark" ? "light" : theme === "light" ? "system" : theme === "system" ? "personal" : "dark";
+                setTheme(next);
+              }}
+              title={theme === "personal" && personalTheme
+                ? `Personal theme · ${personalTheme.sorted[0]?.[0] ?? ""} × ${personalTheme.sorted[1]?.[0] ?? ""}`
+                : `Theme: ${theme}`}
+              className="text-stone-600 hover:text-stone-400 text-base transition-colors leading-none"
+            >
+              {theme === "dark" ? "🌑" : theme === "light" ? "☀" : theme === "system" ? "⊙" : "🎵"}
+            </button>
             <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
           </div>
         </div>
       )}
 
-      <div className={`flex px-4 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "relative z-[60]" : ""}`}>
+      <div className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${viewMode === "drift" ? "relative z-[60]" : ""}`}>
         {[
           ["crate", "⏺ Crate"],
           ["hearts", "♥ Hearts"],
@@ -3449,7 +3490,7 @@ export default function VinylCrate() {
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-all ${
+            className={`flex-1 py-1 rounded-xl text-xs font-medium transition-all shrink-0 ${
               tab === id
                 ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
                 : viewMode === "drift" ? "text-stone-600 hover:text-stone-400 bg-black/40" : "text-stone-500 hover:text-stone-300"
@@ -3467,7 +3508,7 @@ export default function VinylCrate() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search artist, title, genre, song..."
-              className="w-full bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
+              className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60" style={{ backgroundColor: "var(--bg-input)" }}
             />
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
@@ -3553,50 +3594,61 @@ export default function VinylCrate() {
               </button>
               <div className="flex-1" />
 
-              {discogsConnected ? (
-                <>
-                  <button
-                    onClick={handleDiscogsImport}
-                    disabled={importLoading}
-                    title={discogsUsername ? `Linked as @${discogsUsername}` : "Discogs linked"}
-                    className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all disabled:opacity-40"
-                  >
-                    {importLoading ? "Importing..." : `↓ ${discogsUsername ? `@${discogsUsername}` : "Discogs"}`}
-                  </button>
-                  <a
-                    href="/api/discogs/auth"
-                    title="Connect a different Discogs account"
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      await fetch("/api/discogs/disconnect", { method: "POST" });
-                      setDiscogsConnected(false);
-                      setDiscogsUsername(null);
-                      window.location.href = "/api/discogs/auth";
-                    }}
-                    className="text-xs px-2 py-1 rounded-lg text-stone-700 hover:text-amber-500 transition-colors"
-                    title="Re-link a different Discogs account"
-                  >
-                    ↺
-                  </a>
-                  {hasUnlinked && (
-                    <button
-                      onClick={handleCleanupSeeded}
-                      disabled={cleanupLoading}
-                      title="Removes records without discogs_id (legacy seed/manual rows)"
-                      className="text-xs px-2.5 py-1 rounded-lg border border-stone-800 text-stone-500 hover:text-amber-300 hover:border-amber-900/50 transition-all disabled:opacity-40"
-                    >
-                      {cleanupLoading ? "Cleaning..." : "Cleanup"}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <a
-                  href="/api/discogs/auth"
-                  className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-500 hover:text-amber-300 hover:border-amber-900/50 transition-all"
+              <div className="relative">
+                <button
+                  onClick={() => setShowDiscogsMenu(s => !s)}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all"
                 >
-                  Link Discogs
-                </a>
-              )}
+                  ⊙ Discogs
+                </button>
+                {showDiscogsMenu && (
+                  <div
+                    className="absolute right-0 bottom-full mb-1 z-50 rounded-xl border border-stone-700 bg-stone-900 shadow-lg overflow-hidden"
+                    style={{ minWidth: 140 }}
+                  >
+                    {discogsConnected ? (
+                      <>
+                        <button
+                          onClick={() => { setShowDiscogsMenu(false); handleDiscogsImport(); }}
+                          disabled={importLoading}
+                          className="w-full text-left text-xs px-3 py-2 text-stone-400 hover:text-amber-300 hover:bg-stone-800 transition-colors disabled:opacity-40"
+                        >
+                          {importLoading ? "Importing..." : `↓ Import${discogsUsername ? ` @${discogsUsername}` : ""}`}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            setShowDiscogsMenu(false);
+                            await fetch("/api/discogs/disconnect", { method: "POST" });
+                            setDiscogsConnected(false);
+                            setDiscogsUsername(null);
+                            window.location.href = "/api/discogs/auth";
+                          }}
+                          className="w-full text-left text-xs px-3 py-2 text-stone-400 hover:text-amber-300 hover:bg-stone-800 transition-colors"
+                        >
+                          ↺ Re-link
+                        </button>
+                        {hasUnlinked && (
+                          <button
+                            onClick={() => { setShowDiscogsMenu(false); handleCleanupSeeded(); }}
+                            disabled={cleanupLoading}
+                            className="w-full text-left text-xs px-3 py-2 text-stone-500 hover:text-amber-300 hover:bg-stone-800 transition-colors disabled:opacity-40"
+                          >
+                            {cleanupLoading ? "Cleaning..." : "Cleanup"}
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <a
+                        href="/api/discogs/auth"
+                        onClick={() => setShowDiscogsMenu(false)}
+                        className="block text-xs px-3 py-2 text-stone-400 hover:text-amber-300 hover:bg-stone-800 transition-colors"
+                      >
+                        Link Discogs
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={() => setShowAddModal(true)}
@@ -3746,17 +3798,19 @@ export default function VinylCrate() {
                   )}
                 </div>
               )}
-              {/* Genre filter strip — bottom */}
+              {/* Unified genre + decade filter strip — bottom */}
               {(() => {
                 const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
-                if (genres.length === 0) return null;
+                const hasGenres = genres.length > 0;
+                const hasDecades = decades.length > 0;
+                if (!hasGenres && !hasDecades) return null;
                 return (
-                  <div className="absolute bottom-20 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                  <div className="absolute bottom-2 left-0 right-0 z-50 flex justify-center pointer-events-none">
                     <div
-                      className="flex gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
                       style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
                     >
-                      {genres.map((g) => (
+                      {hasGenres && genres.map((g) => (
                         <GenreTag
                           key={g}
                           genre={g}
@@ -3768,35 +3822,32 @@ export default function VinylCrate() {
                           active={activeGenres.has(g)}
                         />
                       ))}
+                      {hasGenres && hasDecades && (
+                        <span className="text-stone-700 text-xs shrink-0 px-1">|</span>
+                      )}
+                      {hasDecades && (
+                        <>
+                          <button
+                            onClick={() => setActiveDecade(new Set())}
+                            className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${!activeDecade.size ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                          >All</button>
+                          {decades.map(d => (
+                            <button key={d} onClick={() => setActiveDecade(prev => {
+                              const s = new Set(prev);
+                              s.has(d) ? s.delete(d) : s.add(d);
+                              return s;
+                            })}
+                              className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${activeDecade.has(d) ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                            >{d}</button>
+                          ))}
+                        </>
+                      )}
                     </div>
                   </div>
                 );
               })()}
-              {/* Decade picker strip — above genre */}
-              {decades.length > 0 && (
-                <div className="absolute bottom-32 left-0 right-0 z-50 flex justify-center pointer-events-none">
-                  <div
-                    className="flex gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
-                    style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
-                  >
-                    <button
-                      onClick={() => setActiveDecade(new Set())}
-                      className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${!activeDecade.size ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-                    >All</button>
-                    {decades.map(d => (
-                      <button key={d} onClick={() => setActiveDecade(prev => {
-                        const s = new Set(prev);
-                        s.has(d) ? s.delete(d) : s.add(d);
-                        return s;
-                      })}
-                        className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${activeDecade.has(d) ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-                      >{d}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Bottom-center: zoom — above decade */}
-              <div className="absolute bottom-44 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+              {/* Bottom-center: zoom + screensaver */}
+              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                 <button
                   onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
                   className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
@@ -3809,6 +3860,14 @@ export default function VinylCrate() {
                   className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
                 >
                   +
+                </button>
+                <div className="w-px h-3 bg-white/10" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleScreensaver(); }}
+                  title={screensaverEnabled ? "Disable auto-pan" : "Enable auto-pan"}
+                  className={`px-3 py-1.5 text-xs transition-colors ${screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-300"}`}
+                >
+                  ⟳
                 </button>
               </div>
             </div>
@@ -4217,6 +4276,11 @@ export default function VinylCrate() {
 
             return (
               <div className="space-y-6 pt-2">
+                {/* Section: Listening */}
+                <div className="flex items-center gap-3">
+                  <div className="text-xs uppercase tracking-widest text-stone-600">Listening</div>
+                  <div className="flex-1 border-t border-stone-800/50" />
+                </div>
                 {/* Identity labels */}
                 {totalPlays >= 5 && (
                   <div className="flex gap-2">
@@ -4249,6 +4313,11 @@ export default function VinylCrate() {
                   </div>
                 )}
 
+                {/* Section: Collection */}
+                <div className="flex items-center gap-3">
+                  <div className="text-xs uppercase tracking-widest text-stone-600">Collection</div>
+                  <div className="flex-1 border-t border-stone-800/50" />
+                </div>
                 {/* By Decade */}
                 {sortedDecades.length > 0 && (
                   <div>

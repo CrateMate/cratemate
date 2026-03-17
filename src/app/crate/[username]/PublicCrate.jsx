@@ -13,7 +13,7 @@ function PublicDetailCard({ record, onClose }) {
     >
       <div
         className="w-full max-w-md rounded-t-3xl p-5 pb-8 border border-stone-800/60"
-        style={{ background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)" }}
+        style={{ background: "var(--bg-surface)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-4">
@@ -53,11 +53,7 @@ export default function PublicCrate({ records, username }) {
   return (
     <div
       className="min-h-screen flex flex-col"
-      style={{
-        background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)",
-        fontFamily: "'DM Sans',sans-serif",
-        color: "#e8ddd0",
-      }}
+      style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
       {/* GTM bar */}
       <div className="w-full flex items-center justify-between px-4 py-2.5 border-b border-stone-800/60 bg-black/30">

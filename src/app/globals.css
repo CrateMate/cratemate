@@ -1,1 +1,60 @@
 @import "tailwindcss";
+
+:root {
+  --bg-app:      linear-gradient(160deg, #1c1610 0%, #0c0b09 100%);
+  --bg-surface:  #1c1917;
+  --bg-surface2: #0c0a09;
+  --bg-input:    rgba(28,25,23,0.7);
+  --bg-card:     rgba(255,255,255,0.04);
+  --text-primary:   #e8ddd0;
+  --text-heading:   #fef3c7;
+  --text-secondary: #a8a29e;
+  --text-muted:     #78716c;
+  --border:         rgba(255,255,255,0.07);
+  --border-subtle:  rgba(255,255,255,0.10);
+}
+
+[data-theme="light"] {
+  --bg-app:      linear-gradient(160deg, #f5f0ea 0%, #ede8e2 100%);
+  --bg-surface:  #ede8e2;
+  --bg-surface2: #f5f0ea;
+  --bg-input:    rgba(237,232,226,0.80);
+  --bg-card:     rgba(0,0,0,0.03);
+  --text-primary:   #1c1610;
+  --text-heading:   #1c1610;
+  --text-secondary: #6b5e53;
+  --text-muted:     #8a7a6e;
+  --border:         rgba(0,0,0,0.08);
+  --border-subtle:  rgba(0,0,0,0.10);
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+/* Light mode — global class overrides */
+[data-theme="light"] .bg-stone-900  { background-color: var(--bg-surface) !important; }
+[data-theme="light"] .bg-stone-950  { background-color: var(--bg-surface2) !important; }
+[data-theme="light"] .bg-stone-900\/70 { background-color: var(--bg-input) !important; }
+[data-theme="light"] .text-amber-50  { color: var(--text-heading) !important; }
+[data-theme="light"] .text-stone-400 { color: var(--text-secondary) !important; }
+[data-theme="light"] .text-stone-500 { color: var(--text-muted) !important; }
+[data-theme="light"] .text-stone-600 { color: var(--text-muted) !important; }
+[data-theme="light"] .text-stone-700 { color: var(--text-muted) !important; }
+[data-theme="light"] .border-stone-800 { border-color: var(--border) !important; }
+[data-theme="light"] .border-stone-700 { border-color: var(--border) !important; }
+[data-theme="light"] .bg-white\/\[0\.04\] { background-color: var(--bg-card) !important; }
+[data-theme="light"] .border-white\/\[0\.07\] { border-color: var(--border) !important; }
+[data-theme="light"] .border-white\/10 { border-color: var(--border-subtle) !important; }
+
+/* Personal theme — accent overrides */
+[data-theme="personal"] .text-amber-300,
+[data-theme="personal"] .text-amber-400  { color: var(--accent-personal) !important; }
+[data-theme="personal"] .text-amber-900  { color: var(--accent-personal-2) !important; }
+[data-theme="personal"] .bg-amber-900\/25 {
+  background-color: color-mix(in srgb, var(--accent-personal) 25%, transparent) !important; }
+[data-theme="personal"] .border-amber-800\/35 {
+  border-color: color-mix(in srgb, var(--accent-personal) 35%, transparent) !important; }
+[data-theme="personal"] .hover\:text-amber-300:hover { color: var(--accent-personal) !important; }
+[data-theme="personal"] .text-amber-200  { color: var(--accent-personal) !important; }

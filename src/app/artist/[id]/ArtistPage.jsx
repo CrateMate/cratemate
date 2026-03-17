@@ -182,7 +182,7 @@ export default function ArtistPage({ releaseId }) {
   return (
     <div
       className="min-h-screen flex flex-col max-w-md mx-auto pb-10"
-      style={{ background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)", fontFamily: "'DM Sans',sans-serif", color: "#e8ddd0" }}
+      style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
       {/* Header */}
       <div className="relative h-56 overflow-hidden">

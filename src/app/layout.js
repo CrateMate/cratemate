@@ -1,5 +1,6 @@
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
+import ThemeProvider from "./components/ThemeProvider";
 
 export const metadata = {
   title: "CrateMate",
@@ -16,7 +17,9 @@ export default function RootLayout({ children }) {
             rel="stylesheet"
           />
         </head>
-        <body>{children}</body>
+        <body>
+          <ThemeProvider>{children}</ThemeProvider>
+        </body>
       </html>
     </ClerkProvider>
   );
