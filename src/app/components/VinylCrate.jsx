@@ -2255,6 +2255,7 @@ function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, f
   const MAX_R = fullscreen ? Math.min(width * 0.12, 80) : Math.min(width * 0.18, 60);
   const MIN_R = fullscreen ? 22 : 16;
 
+  // Genre bubbles
   const bubbles = useMemo(() => {
     return [...items]
       .sort((a, b) => b.count - a.count)
@@ -2268,67 +2269,84 @@ function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, f
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bubbles]);
 
-  // When a genre is expanded, position it at SVG center for maximum orbit room
-  const cx = width / 2;
-  const cy = height / 2;
+  // Style bubbles — same force layout as genres, computed when a genre is expanded
+  const currentStyleList = expandedGenre ? (styleItems?.[expandedGenre] || []) : [];
+  const styleMaxCount = Math.max(...currentStyleList.map(i => i.count), 1);
 
-  function renderBubbles() {
+  const styleBubbles = useMemo(() => {
+    if (!expandedGenre || currentStyleList.length === 0) return [];
+    return [...currentStyleList]
+      .sort((a, b) => b.count - a.count)
+      .map(item => ({ ...item, r: MIN_R + (MAX_R - MIN_R) * Math.sqrt(item.count / styleMaxCount) }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedGenre, currentStyleList.length, width, fullscreen]);
+
+  const stylePlaced = useMemo(() => {
+    if (styleBubbles.length === 0) return [];
+    return computeForceLayout(styleBubbles, width, height);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styleBubbles]);
+
+  function renderGenreBubbles() {
     return placed.map(b => {
       const { fill, stroke, text } = genreSvgColor(b.label);
-      const isExpanded = expandedGenre === b.label;
-      const isHidden = expandedGenre !== null && !isExpanded;
-      const styleList = styleItems?.[b.label] || [];
-
-      // In expanded mode the genre moves to center
-      const bx = isExpanded ? cx : b.cx;
-      const by = isExpanded ? cy : b.cy;
-      const br = isExpanded ? (fullscreen ? b.r * 1.4 : b.r * 1.2) : b.r;
-      const showLabel = br >= 22;
-      const showCount = br >= 18;
-
-      const styleNodes = isExpanded ? computeStyleLayout(styleList, bx, by, br, fullscreen) : [];
-
+      const showLabel = b.r >= 22;
+      const showCount = b.r >= 18;
+      const hasStyles = (styleItems?.[b.label] || []).length > 0;
       return (
-        <g key={b.label} style={{ transition: "opacity 0.25s", opacity: isHidden ? 0 : 1, pointerEvents: isHidden ? "none" : "auto" }}>
-          {/* Style sub-bubbles — force-laid-out cluster around genre */}
-          {isExpanded && styleNodes.map((s) => {
-            const { fill: sf, stroke: ss, text: st } = genreSvgColor(s.label);
-            return (
-              <g key={s.label} onClick={(e) => { e.stopPropagation(); onStyleClick?.(s.label, expandedGenre); }} style={{ cursor: "pointer" }}>
-                <circle cx={s.cx} cy={s.cy} r={s.sr} fill={sf} stroke={ss} strokeWidth={1} opacity={0.9} />
-                <text x={s.cx} y={s.cy} textAnchor="middle" dominantBaseline="middle"
-                  fill={st} fontSize={Math.max(8, s.sr * 0.38)}
-                  style={{ pointerEvents: "none", userSelect: "none" }}>
-                  {s.label.length > 10 ? s.label.slice(0, 9) + "…" : s.label}
-                </text>
-              </g>
-            );
-          })}
-          {/* Main genre bubble */}
-          <g
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isExpanded) { onBubbleClick(b.label); setExpandedGenre(null); }
-              else setExpandedGenre(b.label);
-            }}
-            style={{ cursor: "pointer", transition: "transform 0.25s" }}
-          >
-            <circle cx={bx} cy={by} r={br} fill={fill} stroke={isExpanded ? "#fbbf24" : stroke} strokeWidth={isExpanded ? 2.5 : 1.5} />
-            {showLabel && (
-              <text x={bx} y={by - (showCount ? 7 : 0)} textAnchor="middle"
-                dominantBaseline="middle" fill={text} fontSize={Math.max(9, br * 0.32)}
-                style={{ pointerEvents: "none", userSelect: "none" }}>
-                {b.label.length > 12 ? b.label.slice(0, 11) + "…" : b.label}
-              </text>
-            )}
-            {showCount && (
-              <text x={bx} y={by + (showLabel ? 11 : 0)} textAnchor="middle"
-                dominantBaseline="middle" fill={text} fontSize={Math.max(8, br * 0.26)}
-                opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
-                {b.count}
-              </text>
-            )}
-          </g>
+        <g key={b.label}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (hasStyles) setExpandedGenre(b.label);
+            else onBubbleClick(b.label);
+          }}
+          style={{ cursor: "pointer" }}
+        >
+          <circle cx={b.cx} cy={b.cy} r={b.r} fill={fill} stroke={stroke} strokeWidth={1.5} />
+          {showLabel && (
+            <text x={b.cx} y={b.cy - (showCount ? 7 : 0)} textAnchor="middle"
+              dominantBaseline="middle" fill={text} fontSize={Math.max(9, b.r * 0.32)}
+              style={{ pointerEvents: "none", userSelect: "none" }}>
+              {b.label.length > 12 ? b.label.slice(0, 11) + "…" : b.label}
+            </text>
+          )}
+          {showCount && (
+            <text x={b.cx} y={b.cy + (showLabel ? 11 : 0)} textAnchor="middle"
+              dominantBaseline="middle" fill={text} fontSize={Math.max(8, b.r * 0.26)}
+              opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
+              {b.count}
+            </text>
+          )}
+        </g>
+      );
+    });
+  }
+
+  function renderStyleBubbles() {
+    return stylePlaced.map(b => {
+      const { fill, stroke, text } = genreSvgColor(b.label);
+      const showLabel = b.r >= 22;
+      const showCount = b.r >= 18;
+      return (
+        <g key={b.label}
+          onClick={(e) => { e.stopPropagation(); onStyleClick?.(b.label, expandedGenre); }}
+          style={{ cursor: "pointer" }}
+        >
+          <circle cx={b.cx} cy={b.cy} r={b.r} fill={fill} stroke={stroke} strokeWidth={1.5} />
+          {showLabel && (
+            <text x={b.cx} y={b.cy - (showCount ? 7 : 0)} textAnchor="middle"
+              dominantBaseline="middle" fill={text} fontSize={Math.max(9, b.r * 0.32)}
+              style={{ pointerEvents: "none", userSelect: "none" }}>
+              {b.label.length > 12 ? b.label.slice(0, 11) + "…" : b.label}
+            </text>
+          )}
+          {showCount && (
+            <text x={b.cx} y={b.cy + (showLabel ? 11 : 0)} textAnchor="middle"
+              dominantBaseline="middle" fill={text} fontSize={Math.max(8, b.r * 0.26)}
+              opacity={0.7} style={{ pointerEvents: "none", userSelect: "none" }}>
+              {b.count}
+            </text>
+          )}
         </g>
       );
     });
@@ -2336,14 +2354,20 @@ function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, f
 
   return (
     <div ref={ref} className="w-full h-full relative">
-      <svg width={width} height={height} onClick={() => setExpandedGenre(null)} style={{ display: "block" }}>
-        {renderBubbles()}
-      </svg>
       {expandedGenre && (
-        <div className="text-center text-stone-600 text-xs mt-1 absolute bottom-0 w-full">
-          Tap genre again to filter · tap a style to drill in
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            onClick={() => setExpandedGenre(null)}
+            className="text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-400 hover:text-amber-300 transition-colors"
+          >
+            ← {expandedGenre}
+          </button>
+          <span className="text-stone-600 text-xs">{currentStyleList.length} styles · tap to filter</span>
         </div>
       )}
+      <svg width={width} height={height} onClick={() => expandedGenre && setExpandedGenre(null)} style={{ display: "block" }}>
+        {expandedGenre ? renderStyleBubbles() : renderGenreBubbles()}
+      </svg>
     </div>
   );
 }
@@ -3734,7 +3758,7 @@ export default function VinylCrate() {
                 onShowToast={showPlayToast}
               />
               {/* Top-left: back to list + share */}
-              <div className="absolute top-16 left-4 z-50 flex items-center gap-2">
+              <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
                 <button
                   onClick={() => {
                     setViewMode("list");
@@ -3805,7 +3829,7 @@ export default function VinylCrate() {
                 const hasDecades = decades.length > 0;
                 if (!hasGenres && !hasDecades) return null;
                 return (
-                  <div className="absolute bottom-2 left-0 right-0 z-50 flex justify-center pointer-events-none">
+                  <div className="absolute left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}>
                     <div
                       className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
                       style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
@@ -3847,7 +3871,7 @@ export default function VinylCrate() {
                 );
               })()}
               {/* Bottom-center: zoom + screensaver */}
-              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+              <div className="absolute left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 3.5rem)" }}>
                 <button
                   onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
                   className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
@@ -4174,15 +4198,8 @@ export default function VinylCrate() {
                               </div>
                               <div className="text-stone-500 text-xs">{sessionDurationLabel(session.durationMins, session.playCount, session.listeningSecs)}</div>
                             </div>
-                            {/* Genre pill + chevron */}
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {session.topGenre && (
-                                <span className="text-amber-700/80 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-900/40 bg-amber-900/10 truncate inline-block" style={{ maxWidth: 72 }}>
-                                  {session.topGenre}
-                                </span>
-                              )}
-                              <span className={`text-stone-600 text-xs transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>›</span>
-                            </div>
+                            {/* Chevron */}
+                            <span className={`text-stone-600 text-xs transition-transform inline-block shrink-0 ${isExpanded ? "rotate-90" : ""}`}>›</span>
                           </div>
                           {/* Expanded record list */}
                           {isExpanded && (
