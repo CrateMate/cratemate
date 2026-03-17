@@ -1,14 +1,17 @@
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import ThemeProvider from "./components/ThemeProvider";
+import ServiceWorkerRegistration from "./components/ServiceWorkerRegistration";
 
 export const metadata = {
   title: "CrateMate",
   description: "Your vinyl record companion",
+  manifest: "/manifest.json",
 };
 
 export const viewport = {
   viewportFit: "cover",
+  themeColor: "#0c0b09",
 };
 
 export default function RootLayout({ children }) {
@@ -23,6 +26,7 @@ export default function RootLayout({ children }) {
         </head>
         <body>
           <ThemeProvider>{children}</ThemeProvider>
+          <ServiceWorkerRegistration />
         </body>
       </html>
     </ClerkProvider>

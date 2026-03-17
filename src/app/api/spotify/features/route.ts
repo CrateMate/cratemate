@@ -2,6 +2,12 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { fetchAlbumFeatures } from "@/lib/spotify";
+import {
+  getSpotifyFeaturesCache,
+  upsertSpotifyFeaturesCache,
+  isSpotifyFeaturesCacheFresh,
+  spotifyFeaturesKey,
+} from "@/lib/discogs/cache";
 
 // POST: fetch + cache features for one record
 export async function POST(request: Request) {
@@ -13,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing record_id, artist, or title" }, { status: 400 });
   }
 
-  // Check cache first
+  // 1. Check per-record cache (spotify_features table)
   const { data: cached } = await supabase
     .from("spotify_features")
     .select("*")
@@ -22,13 +28,41 @@ export async function POST(request: Request) {
 
   if (cached) return NextResponse.json(cached);
 
-  // Fetch features (Spotify search → ReccoBeats audio features)
+  // 2. Check shared features cache (spotify_features_cache) by artist|title key
+  const cacheKey = spotifyFeaturesKey(artist, title);
+  const sharedCached = await getSpotifyFeaturesCache(cacheKey);
+  if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
+    // Populate per-record cache and return
+    const row = {
+      record_id,
+      energy: sharedCached.energy,
+      valence: sharedCached.valence,
+      danceability: sharedCached.danceability,
+      acousticness: sharedCached.acousticness,
+      tempo: sharedCached.tempo,
+      loudness: sharedCached.loudness,
+    };
+    await supabase.from("spotify_features").upsert(row);
+    return NextResponse.json(row);
+  }
+
+  // 3. Fetch features from Spotify (search → ReccoBeats audio features)
   const features = await fetchAlbumFeatures(artist, title).catch(() => null);
   if (!features) return NextResponse.json(null);
 
-  // Store in cache
+  // Store in per-record cache
   const row = { record_id, ...features };
   await supabase.from("spotify_features").upsert(row);
+
+  // Store in shared features cache
+  await upsertSpotifyFeaturesCache(cacheKey, {
+    energy: features.energy,
+    valence: features.valence,
+    danceability: features.danceability,
+    acousticness: features.acousticness,
+    tempo: features.tempo,
+    loudness: features.loudness,
+  });
 
   return NextResponse.json(row);
 }

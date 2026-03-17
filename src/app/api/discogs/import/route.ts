@@ -8,9 +8,13 @@ function stripThumb<T extends Record<string, unknown>>(row: T): Omit<T, "thumb">
   return rest;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const url = new URL(request.url);
+  const bareMode = url.searchParams.get("mode") === "bare";
+  // In bare mode: fetch up to 5 pages (500 records), set import_stage=0, return immediately without enrichment.
 
   const { data: tokenData, error: tokenError } = await supabase
     .from("discogs_tokens")
@@ -132,14 +136,15 @@ export async function POST() {
     });
   }
 
-  // Fetch all collection pages (max 10 pages = 1000 records)
+  // Fetch collection pages (max 10 pages normally; max 5 in bare mode for speed)
+  const maxPages = bareMode ? 5 : 10;
   const releases: Record<string, unknown>[] = [];
   let page = 1;
   let totalPages = 1;
 
   do {
-    const url = `${DISCOGS_API}/users/${encodeURIComponent(discogs_username)}/collection/folders/0/releases?per_page=100&page=${page}`;
-    const res = await fetchCollectionPage(url);
+    const pageUrl = `${DISCOGS_API}/users/${encodeURIComponent(discogs_username)}/collection/folders/0/releases?per_page=100&page=${page}`;
+    const res = await fetchCollectionPage(pageUrl);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       console.error("Discogs collection fetch error:", res.status, text);
@@ -159,7 +164,7 @@ export async function POST() {
     totalPages = data.pagination?.pages || 1;
     releases.push(...(data.releases || []));
     page++;
-  } while (page <= totalPages && page <= 10);
+  } while (page <= totalPages && page <= maxPages);
 
   const mapped = releases.map((r) => mapCollectionRelease(r, mediaFieldId, sleeveFieldId));
 
@@ -240,7 +245,7 @@ export async function POST() {
       if (!updateError) { manualByKey.delete(key); updatedExisting++; continue; }
     }
 
-    toInsert.push({ ...record, user_id: userId });
+    toInsert.push({ ...record, user_id: userId, import_stage: 0 });
   }
 
   // Backfill missing conditions on existing records — one update per unique condition value
@@ -307,5 +312,13 @@ export async function POST() {
     if (!orphanError) deduped = orphanIds.length;
   }
 
-  return NextResponse.json({ imported, updated: updatedExisting, total: releases.length, deleted, deduped });
+  return NextResponse.json({
+    imported,
+    updated: updatedExisting,
+    total: releases.length,
+    deleted,
+    deduped,
+    bare_mode: bareMode,
+    has_more: bareMode && totalPages > maxPages,
+  });
 }

@@ -1,6 +1,13 @@
 import { supabase } from "@/lib/supabase";
 import { DISCOGS_API, USER_AGENT, discogsRequest } from "@/lib/discogs";
-import { getReleaseCache, upsertReleaseCache } from "@/lib/discogs/cache";
+import {
+  getReleaseCache,
+  upsertReleaseCache,
+  getItunesArtCache,
+  upsertItunesArtCache,
+  isItunesArtCacheFresh,
+  itunesArtKey,
+} from "@/lib/discogs/cache";
 import { fetchArtistDates } from "@/lib/musicbrainz";
 
 // Discogs allows 60 authenticated requests/min. We pace at ~40/min to stay safe.
@@ -150,6 +157,13 @@ async function iTunesArtworkFallback(record: DbRecord): Promise<string> {
   const title = record.title || "";
   if (!artist && !title) return "";
 
+  // Check shared iTunes art cache first
+  const cacheKey = itunesArtKey(artist, title);
+  const cached = await getItunesArtCache(cacheKey);
+  if (cached && isItunesArtCacheFresh(cached)) {
+    return cached.art_url || "";
+  }
+
   const term = [artist, title].filter(Boolean).join(" ");
   const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&limit=10`;
 
@@ -172,11 +186,15 @@ async function iTunesArtworkFallback(record: DbRecord): Promise<string> {
       const s = scoreSearch(record, fakeRecord);
       if (s > bestScore) { bestScore = s; best = r; }
     }
-    if (!best || bestScore < 4) return "";
 
-    // Upgrade artwork URL from 100px to 600px.
-    const raw = (best as { artworkUrl100?: string }).artworkUrl100 || "";
-    return raw.replace(/\d+x\d+bb(\.(jpg|png|webp))?$/i, "1000x1000bb.jpg");
+    // Upgrade artwork URL from 100px to 1000px.
+    const raw = best && bestScore >= 4 ? ((best as { artworkUrl100?: string }).artworkUrl100 || "") : "";
+    const artUrl = raw ? raw.replace(/\d+x\d+bb(\.(jpg|png|webp))?$/i, "1000x1000bb.jpg") : "";
+
+    // Cache result (including "not found" = null) so we don't re-query
+    await upsertItunesArtCache(cacheKey, artUrl || null);
+
+    return artUrl;
   } catch {
     return "";
   }

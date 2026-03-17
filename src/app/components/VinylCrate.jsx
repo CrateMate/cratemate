@@ -544,6 +544,159 @@ function ArtistTag({ artist, discogsId }) {
   );
 }
 
+// Feature 1: Wantlist components
+function WantReleaseRow({ release, onRemove }) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 bg-stone-900/40 rounded-xl border border-stone-800/40">
+      <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+        {release.thumb ? (
+          <img src={release.thumb} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-stone-700 text-xs">◇</div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-stone-400 truncate">
+          {[release.year_pressed, release.label, release.format, release.notes].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      {onRemove && (
+        <button
+          onClick={() => onRemove(release.release_id)}
+          className="text-stone-700 hover:text-rose-500 text-sm shrink-0 transition-colors"
+          title="Remove"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+function WantGroupRow({ group, expanded, onToggle, onRemove }) {
+  const rep = group.representative;
+  const genres = (rep?.genres || "").split(",").map((g) => g.trim()).filter(Boolean);
+
+  return (
+    <div className="border border-stone-800/50 rounded-2xl overflow-hidden mb-2">
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-900/30 transition-colors"
+        onClick={onToggle}
+      >
+        <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-stone-800">
+          {rep?.thumb ? (
+            <img src={rep.thumb} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-stone-700">◇</div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-amber-50 truncate font-medium">{rep?.title || "Unknown"}</div>
+          <div className="text-xs text-stone-500 truncate">{rep?.artist}</div>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            {group.year_range && <span className="text-[10px] text-stone-600">{group.year_range}</span>}
+            {genres.slice(0, 2).map((g) => (
+              <span key={g} className={`text-[10px] px-1 py-0.5 rounded-full border ${genreColor(g)}`}>{g}</span>
+            ))}
+            {group.found && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/30 border border-emerald-800/40 text-emerald-400">
+                Found ✓
+              </span>
+            )}
+            {group.edition_count > 1 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-800/50 border border-stone-700/40 text-stone-500">
+                {group.edition_count} editions
+              </span>
+            )}
+          </div>
+        </div>
+        <span className="text-stone-600 text-xs shrink-0">{expanded ? "▲" : "▼"}</span>
+      </div>
+      {expanded && group.releases.length > 0 && (
+        <div className="px-3 pb-3 space-y-1.5 border-t border-stone-800/40 pt-2">
+          {group.releases.map((r) => (
+            <WantReleaseRow key={r.release_id} release={r} onRemove={onRemove} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove }) {
+  const isImporting = wantlistImportJob?.status === "pending" || wantlistImportJob?.status === "running";
+  const progress = isImporting && wantlistImportJob?.total > 0
+    ? Math.round((wantlistImportJob.imported / wantlistImportJob.total) * 100)
+    : null;
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="px-4 py-2 flex items-center gap-2">
+        <button
+          onClick={onStartImport}
+          disabled={isImporting}
+          className="text-xs px-3 py-1.5 rounded-lg border border-stone-700 text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all disabled:opacity-40"
+        >
+          {isImporting ? "Importing…" : "↓ Import Wantlist"}
+        </button>
+        {isImporting && progress !== null && (
+          <span className="text-[10px] text-stone-500">{progress}%</span>
+        )}
+        {wantlistImportJob?.status === "failed" && (
+          <span className="text-[10px] text-red-400">{wantlistImportJob.error || "Import failed"}</span>
+        )}
+      </div>
+
+      {isImporting && (
+        <div className="px-4 mb-2">
+          <div className="h-1 bg-stone-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-amber-700/60 rounded-full transition-all duration-500"
+              style={{ width: `${progress ?? 0}%` }}
+            />
+          </div>
+          <div className="text-[10px] text-stone-600 mt-1">
+            {wantlistImportJob.imported || 0} of {wantlistImportJob.total || "?"} wants imported
+          </div>
+        </div>
+      )}
+
+      {!wantlist || wantlist.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24 }} className="text-amber-100 mb-2">
+            Your wantlist is empty
+          </div>
+          <div className="text-stone-600 text-sm max-w-xs">
+            Import your Discogs wantlist to see albums you&apos;re looking for.
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 pb-8">
+          {wantlist.map((group) => {
+            const key = group.master_id ? `master_${group.master_id}` : `release_${group.representative?.release_id}`;
+            return (
+              <WantGroupRow
+                key={key}
+                group={group}
+                expanded={expandedMasters.has(key)}
+                onToggle={() => {
+                  setExpandedMasters((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  });
+                }}
+                onRemove={onRemove}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, onLogPlay, onShowToast }) {
   const longPressTimer = useRef(null);
   const didLongPress = useRef(false);
@@ -1407,6 +1560,43 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
       </div>
       {reason && (
         <div className="border-t border-white/[0.06] pt-3 text-stone-300 text-sm leading-relaxed italic">{reason}</div>
+      )}
+    </div>
+  );
+}
+
+// Feature 2: Import progress bar showing 3 stages
+function ImportProgressBar({ importResult, enrichLoading }) {
+  const stage = importResult?.stage;
+  const recordCount = (importResult?.imported || 0) + (importResult?.updated || 0);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <span className="text-emerald-400">✓</span>
+        <span className="text-emerald-400/80">
+          Collection loaded{recordCount > 0 ? ` (${recordCount} records)` : ""}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        {stage === "enriching" || enrichLoading ? (
+          <>
+            <span className="text-amber-500 animate-spin inline-block">⟳</span>
+            <span className="text-amber-500/70">Enriching metadata…</span>
+          </>
+        ) : stage === "done" && importResult?.meta ? (
+          <>
+            <span className="text-emerald-400">✓</span>
+            <span className="text-emerald-400/70">
+              Metadata updated ({importResult.meta.updated || 0} of {importResult.meta.considered || 0})
+            </span>
+          </>
+        ) : (
+          <span className="text-stone-600">· Metadata pending</span>
+        )}
+      </div>
+      {importResult?.has_more && (
+        <div className="text-stone-500 text-[10px]">More pages will be imported in the background.</div>
       )}
     </div>
   );
@@ -2672,6 +2862,15 @@ export default function VinylCrate() {
   const [enrichLoading, setEnrichLoading] = useState(false);
   const [showDiscogsMenu, setShowDiscogsMenu] = useState(false);
 
+  // Feature 1 — Wantlist
+  const [wantlist, setWantlist] = useState(null);
+  const [wantlistImportJob, setWantlistImportJob] = useState(null);
+  const [expandedMasters, setExpandedMasters] = useState(new Set());
+
+  // Feature 4 — Offline
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [pendingPlays, setPendingPlays] = useState(0);
+
   const refreshRecords = useCallback(async () => {
     setCollectionError("");
     try {
@@ -2773,6 +2972,15 @@ export default function VinylCrate() {
   }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
 
   useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, showForSale]);
+
+  // Feature 1 — Load wantlist when Wants tab is first opened
+  useEffect(() => {
+    if (tab !== "wants" || wantlist !== null) return;
+    fetch("/api/discogs/wantlist")
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => setWantlist(Array.isArray(data) ? data : []))
+      .catch(() => setWantlist([]));
+  }, [tab, wantlist]);
 
   useEffect(() => {
     if (!infiniteScroll) return;
@@ -2893,6 +3101,72 @@ export default function VinylCrate() {
 
     runDurationQueue();
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Feature 4 — Online/offline detection
+  useEffect(() => {
+    async function flushOfflinePlays() {
+      try {
+        const { getOfflinePlays, clearOfflinePlays } = await import("@/lib/offlineQueue");
+        const plays = await getOfflinePlays();
+        if (!plays || plays.length === 0) return;
+        const results = await Promise.allSettled(
+          plays.map((p) =>
+            fetch("/api/plays", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ record_id: p.record_id }),
+            })
+          )
+        );
+        const allOk = results.every((r) => r.status === "fulfilled" && r.value.ok);
+        if (allOk) await clearOfflinePlays();
+      } catch { /* ignore */ }
+    }
+
+    async function goOnline() {
+      setIsOnline(true);
+      setPendingPlays(0);
+      try {
+        const reg = await navigator.serviceWorker?.ready;
+        if (reg?.sync) {
+          await reg.sync.register("sync-plays");
+        } else {
+          await flushOfflinePlays();
+        }
+      } catch { await flushOfflinePlays(); }
+    }
+
+    function goOffline() { setIsOnline(false); }
+
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Feature 1 — Poll wantlist import job
+  useEffect(() => {
+    if (!wantlistImportJob?.job_id) return;
+    if (wantlistImportJob.status === "completed" || wantlistImportJob.status === "failed") return;
+
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/discogs/wantlist/import/${encodeURIComponent(wantlistImportJob.job_id)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setWantlistImportJob((prev) => ({ ...prev, ...data }));
+        if (data.status === "completed") {
+          // Reload wantlist on completion
+          const wRes = await fetch("/api/discogs/wantlist");
+          if (wRes.ok) setWantlist(await wRes.json());
+        }
+      } catch { /* ignore */ }
+    }, 1500);
+
+    return () => clearInterval(timer);
+  }, [wantlistImportJob]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
@@ -3112,26 +3386,41 @@ export default function VinylCrate() {
     setImportLoading(true);
     setImportResult(null);
     try {
-      const res = await fetch("/api/discogs/import", { method: "POST" });
-      const data = await readJsonOrText(res);
-      if (!res.ok) throw new Error(data?.error || `Import failed (${res.status})`);
-      setImportResult({ ...data, syncing_meta: true });
-      await refreshRecords();
+      // Step 1 — Bare import: fetch up to 5 pages, return immediately
+      const res = await fetch("/api/discogs/import?mode=bare", { method: "POST" });
+      const bareData = await readJsonOrText(res);
+      if (!res.ok) throw new Error(bareData?.error || `Import failed (${res.status})`);
 
-      // After a sync, run metadata enrich — failures here don't undo the import success.
-      setEnrichLoading(true);
-      try {
-        const meta = await runEnrichAll("full");
-        setImportResult({ ...data, meta });
-      } catch (enrichErr) {
-        // Import succeeded; enrichment failed. Show import counts without meta stats.
-        console.error("Post-import enrich failed:", enrichErr);
-        setImportResult({ ...data });
-      }
+      // Show collection immediately
       await refreshRecords();
+      setImportLoading(false);
+      setImportResult({ ...bareData, stage: "bare" });
+
+      // Step 2 — Background enrichment (non-blocking)
+      try {
+        const enrichRes = await fetch("/api/discogs/enrich/job?mode=full", { method: "POST" });
+        const enrichData = await readJsonOrText(enrichRes);
+        if (enrichRes.ok && enrichData?.job_id) {
+          setImportResult((prev) => ({ ...prev, enrichJobId: enrichData.job_id, stage: "enriching" }));
+          setEnrichLoading(true);
+          // Poll enrichment in background
+          runEnrichAll("full")
+            .then((meta) => {
+              setImportResult((prev) => ({ ...prev, meta, stage: "done" }));
+              refreshRecords();
+            })
+            .catch((enrichErr) => {
+              console.error("Post-import enrich failed:", enrichErr);
+              setImportResult((prev) => ({ ...prev, stage: "done" }));
+            })
+            .finally(() => setEnrichLoading(false));
+        }
+      } catch (enrichErr) {
+        console.error("Post-import enrich failed:", enrichErr);
+        setEnrichLoading(false);
+      }
     } catch (e) {
       setImportResult({ error: e instanceof Error ? e.message : "Discogs import failed." });
-    } finally {
       setImportLoading(false);
       setEnrichLoading(false);
     }
@@ -3410,6 +3699,20 @@ export default function VinylCrate() {
   }
 
   async function logPlay(recordId) {
+    // Offline path: queue in IndexedDB and update local state optimistically
+    if (!isOnline) {
+      try {
+        const { queueOfflinePlay } = await import("@/lib/offlineQueue");
+        await queueOfflinePlay(user?.id || "unknown", recordId);
+      } catch { /* ignore */ }
+      const playedAt = new Date().toISOString();
+      setPlayCounts((prev) => ({ ...prev, [recordId]: (prev[recordId] || 0) + 1 }));
+      setLastPlayedDates((prev) => ({ ...prev, [recordId]: playedAt }));
+      setPlaySessions((prev) => [{ id: crypto.randomUUID(), record_id: recordId, played_at: playedAt }, ...prev]);
+      setPendingPlays((c) => c + 1);
+      return;
+    }
+
     const res = await fetch("/api/plays", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3485,6 +3788,12 @@ export default function VinylCrate() {
             </div>
           </div>
           <div className="flex items-center gap-2 pt-1">
+            {!isOnline && (
+              <div className="text-[10px] text-amber-700/80 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-700 animate-pulse inline-block" />
+                {pendingPlays > 0 ? `${pendingPlays} queued` : "offline"}
+              </div>
+            )}
             <button
               onClick={() => {
                 const next = theme === "dark" ? "light" : theme === "light" ? "system" : theme === "system" ? "personal" : "dark";
@@ -3505,6 +3814,7 @@ export default function VinylCrate() {
       <div className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${viewMode === "drift" ? "relative z-[60]" : ""}`}>
         {[
           ["crate", "⏺ Crate"],
+          ["wants", "◇ Wants"],
           ["hearts", "♥ Hearts"],
           ["history", "▷ History"],
           ["reco", "✦ Reco"],
@@ -3685,24 +3995,16 @@ export default function VinylCrate() {
             {importResult && (
               <div
                 className={`text-xs px-3 py-1.5 rounded-lg ${
-                  importResult.error ? "text-red-400 bg-red-900/20" : "text-emerald-400 bg-emerald-900/20"
+                  importResult.error ? "text-red-400 bg-red-900/20" : "text-emerald-400/80 bg-emerald-900/10"
                 }`}
               >
-                {importResult.error
-                  ? typeof importResult.error === "string"
-                    ? importResult.error
-                    : "Action failed — try again"
-                  : importResult.syncing_meta
-                    ? <CrateSyncAnimation />
-                  : importResult.meta
-                    ? `Metadata: updated ${importResult.meta.updated || 0} of ${importResult.meta.considered || 0}`
-                  : importResult.cleanup
-                    ? `Removed ${importResult.deleted} unlinked records`
-                    : [
-                      importResult.imported > 0 && `${importResult.imported} new`,
-                      importResult.deleted > 0 && `${importResult.deleted} removed`,
-                      importResult.deduped > 0 && `${importResult.deduped} dupes cleaned`,
-                    ].filter(Boolean).join(" · ") || "Collection already up to date"}
+                {importResult.error ? (
+                  typeof importResult.error === "string" ? importResult.error : "Action failed — try again"
+                ) : importResult.cleanup ? (
+                  `Removed ${importResult.deleted} unlinked records`
+                ) : (
+                  <ImportProgressBar importResult={importResult} enrichLoading={enrichLoading} />
+                )}
                 {!importResult.error && importResult.meta?.warning ? (
                   <span className="block text-stone-500 mt-1">{importResult.meta.warning}</span>
                 ) : null}
@@ -4256,6 +4558,34 @@ export default function VinylCrate() {
             );
           })()}
         </div>
+      )}
+
+      {tab === "wants" && (
+        <WantlistTab
+          wantlist={wantlist}
+          wantlistImportJob={wantlistImportJob}
+          expandedMasters={expandedMasters}
+          setExpandedMasters={setExpandedMasters}
+          onStartImport={async () => {
+            if (!wantlist) {
+              // Load wantlist if not yet loaded
+              const res = await fetch("/api/discogs/wantlist");
+              if (res.ok) setWantlist(await res.json());
+            }
+            const res = await fetch("/api/discogs/wantlist/import", { method: "POST" });
+            const data = await res.json();
+            setWantlistImportJob({ job_id: data.job_id, status: data.status, imported: 0, total: 0 });
+          }}
+          onRemove={async (releaseId) => {
+            await fetch("/api/discogs/wantlist", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ release_id: releaseId }),
+            });
+            const res = await fetch("/api/discogs/wantlist");
+            if (res.ok) setWantlist(await res.json());
+          }}
+        />
       )}
 
       {tab === "stats" && (
