@@ -1006,6 +1006,17 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   const hexLongPressTimer = useRef(null);
   const hexLongPressDidFire = useRef(false);
 
+  // Screensaver (idle auto-pan)
+  const [screensaverEnabled, setScreensaverEnabled] = useState(
+    () => localStorage.getItem("cratemate_screensaver") !== "0"
+  );
+  const screensaverEnabledRef = useRef(screensaverEnabled);
+  useEffect(() => { screensaverEnabledRef.current = screensaverEnabled; }, [screensaverEnabled]);
+  const idleTimerRef = useRef(null);
+  const screensaverActive = useRef(false);
+  const screensaverRafRef = useRef(null);
+  const screensaverVel = useRef({ x: 0, y: 0 });
+
   const BASE_SIZE = Math.round(180 * zoom);
   const COL_STEP = BASE_SIZE * 0.76;
   const ROW_STEP = BASE_SIZE * 0.88;
@@ -1053,6 +1064,11 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
       worldRef.current.style.transform = `translate(${initX}px, ${initY}px)`;
     }
     recalcScales(initX, initY, vw, vh);
+    resetIdleTimer();
+    return () => {
+      stopScreensaver();
+      clearTimeout(idleTimerRef.current);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [records.length, zoom]);
 
@@ -1136,7 +1152,69 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
     rafRef.current = requestAnimationFrame(tick);
   }
 
+  const SCREENSAVER_SPEED = 1.8;
+  const IDLE_DELAY = 10000;
+
+  function startScreensaver() {
+    if (dragging.current) return;
+    screensaverActive.current = true;
+    const sign = () => (Math.random() < 0.5 ? 1 : -1);
+    const s = SCREENSAVER_SPEED * Math.SQRT1_2;
+    screensaverVel.current = { x: sign() * s, y: sign() * s };
+    function tick() {
+      if (!screensaverActive.current) return;
+      const container = containerRef.current;
+      if (!container) return;
+      const vw = container.clientWidth;
+      const vh = container.clientHeight;
+      const { x, y } = offsetRef.current;
+      const { x: vx, y: vy } = screensaverVel.current;
+      const nx = x + vx;
+      const ny = y + vy;
+      const clamped = clampOffset(nx, ny, vw, vh);
+      if (Math.abs(clamped.x - nx) > 0.1) screensaverVel.current.x *= -1;
+      if (Math.abs(clamped.y - ny) > 0.1) screensaverVel.current.y *= -1;
+      offsetRef.current = clamped;
+      applyTransform(clamped.x, clamped.y);
+      if (!scaleRafRef.current) {
+        scaleRafRef.current = requestAnimationFrame(() => {
+          scaleRafRef.current = null;
+          recalcScales(offsetRef.current.x, offsetRef.current.y);
+        });
+      }
+      screensaverRafRef.current = requestAnimationFrame(tick);
+    }
+    screensaverRafRef.current = requestAnimationFrame(tick);
+  }
+
+  function stopScreensaver() {
+    screensaverActive.current = false;
+    if (screensaverRafRef.current) {
+      cancelAnimationFrame(screensaverRafRef.current);
+      screensaverRafRef.current = null;
+    }
+  }
+
+  function resetIdleTimer() {
+    clearTimeout(idleTimerRef.current);
+    if (screensaverEnabledRef.current) {
+      idleTimerRef.current = setTimeout(startScreensaver, IDLE_DELAY);
+    }
+  }
+
+  function toggleScreensaver() {
+    setScreensaverEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
+      if (!next) stopScreensaver();
+      else resetIdleTimer();
+      return next;
+    });
+  }
+
   function onPointerDown(e) {
+    stopScreensaver();
+    resetIdleTimer();
     dragging.current = true;
     moveDistance.current = 0;
     velocity.current = { x: 0, y: 0 };
@@ -1146,6 +1224,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   }
 
   function onPointerMove(e) {
+    if (!dragging.current) resetIdleTimer();
     if (!dragging.current) return;
     const pos = e.touches ? e.touches[0] : e;
     const dx = pos.clientX - lastPos.current.x;
@@ -1173,6 +1252,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
     } else {
       startMomentum();
     }
+    resetIdleTimer();
   }
 
   if (records.length === 0) {
@@ -1278,6 +1358,16 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
           );
         })}
       </div>
+      {/* Screensaver toggle — bottom-left corner */}
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleScreensaver(); }}
+        title={screensaverEnabled ? "Disable auto-pan" : "Enable auto-pan"}
+        className={`absolute bottom-3 left-3 z-50 px-3 py-1.5 text-xs rounded-full bg-black/60 backdrop-blur-sm border border-white/10 transition-colors ${
+          screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-300"
+        }`}
+      >
+        ⟳ Auto-pan
+      </button>
     </div>
   );
 }
