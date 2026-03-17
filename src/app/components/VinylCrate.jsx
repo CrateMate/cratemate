@@ -1153,14 +1153,14 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   }
 
   const SCREENSAVER_SPEED = 1.8;
-  const IDLE_DELAY = 10000;
+  const IDLE_DELAY = 6000;
+  const lastBounceRef = useRef(0);
 
   function startScreensaver() {
     if (dragging.current) return;
     screensaverActive.current = true;
-    const sign = () => (Math.random() < 0.5 ? 1 : -1);
-    const s = SCREENSAVER_SPEED * Math.SQRT1_2;
-    screensaverVel.current = { x: sign() * s, y: sign() * s };
+    const angle = Math.random() * Math.PI * 2;
+    screensaverVel.current = { x: Math.cos(angle) * SCREENSAVER_SPEED, y: Math.sin(angle) * SCREENSAVER_SPEED };
     function tick() {
       if (!screensaverActive.current) return;
       const container = containerRef.current;
@@ -1176,10 +1176,14 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
       if (Math.abs(clamped.x - nx) > 0.1) { screensaverVel.current.x *= -1; bounced = true; }
       if (Math.abs(clamped.y - ny) > 0.1) { screensaverVel.current.y *= -1; bounced = true; }
       if (bounced) {
-        const { x: bvx, y: bvy } = screensaverVel.current;
-        const angle = Math.atan2(bvy, bvx) + (Math.random() - 0.5) * 0.5;
-        const speed = Math.hypot(bvx, bvy);
-        screensaverVel.current = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+        const now = Date.now();
+        if (now - lastBounceRef.current > 300) {
+          lastBounceRef.current = now;
+          const { x: bvx, y: bvy } = screensaverVel.current;
+          const newAngle = Math.atan2(bvy, bvx) + (Math.random() - 0.5) * 1.4;
+          const speed = Math.hypot(bvx, bvy);
+          screensaverVel.current = { x: Math.cos(newAngle) * speed, y: Math.sin(newAngle) * speed };
+        }
       }
       offsetRef.current = clamped;
       applyTransform(clamped.x, clamped.y);
@@ -2189,6 +2193,54 @@ function computeForceLayout(bubbles, width, height) {
   return nodes;
 }
 
+function computeStyleLayout(styleList, cx, cy, genreR, fullscreen) {
+  if (styleList.length === 0) return [];
+  const maxSCount = Math.max(...styleList.map(x => x.count), 1);
+  const nodes = styleList.map((s, i) => {
+    const sr = (fullscreen ? 14 : 9) + (fullscreen ? 18 : 12) * Math.sqrt(s.count / maxSCount);
+    const angle = (i / styleList.length) * Math.PI * 2;
+    const initR = genreR + sr + (fullscreen ? 40 : 26);
+    return { ...s, sr, cx: cx + initR * Math.cos(angle), cy: cy + initR * Math.sin(angle), vx: 0, vy: 0 };
+  });
+  for (let iter = 0; iter < 60; iter++) {
+    for (const n of nodes) { n.vx = 0; n.vy = 0; }
+    // Repulsion between style bubbles
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = a.cx - b.cx, dy = a.cy - b.cy;
+        const dist = Math.max(Math.hypot(dx, dy), 0.1);
+        const minDist = a.sr + b.sr + 6;
+        if (dist < minDist) {
+          const force = (minDist - dist) * 0.4;
+          const nx = dx / dist, ny = dy / dist;
+          a.vx += nx * force; a.vy += ny * force;
+          b.vx -= nx * force; b.vy -= ny * force;
+        } else {
+          const force = 300 / (dist * dist);
+          const nx = dx / dist, ny = dy / dist;
+          a.vx += nx * force; a.vy += ny * force;
+          b.vx -= nx * force; b.vy -= ny * force;
+        }
+      }
+    }
+    // Orbital attraction — each style settles at a ring proportional to its size
+    for (const n of nodes) {
+      const dx = n.cx - cx, dy = n.cy - cy;
+      const dist = Math.max(Math.hypot(dx, dy), 0.1);
+      const targetR = genreR + n.sr + (fullscreen ? 28 : 18);
+      const diff = dist - targetR;
+      n.vx -= (dx / dist) * diff * 0.07;
+      n.vy -= (dy / dist) * diff * 0.07;
+    }
+    for (const n of nodes) {
+      n.cx += n.vx * 0.4;
+      n.cy += n.vy * 0.4;
+    }
+  }
+  return nodes;
+}
+
 function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, fullscreen = false }) {
   const [containerWidth, setContainerWidth] = useState(fullscreen ? window.innerWidth : 320);
   const [expandedGenre, setExpandedGenre] = useState(null);
@@ -2243,24 +2295,18 @@ function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, f
       const showLabel = br >= 22;
       const showCount = br >= 18;
 
-      // Orbit radius scales with available space
-      const orbitR = br + (fullscreen ? 60 : 36);
-      const maxSCount = Math.max(...styleList.map(x => x.count), 1);
+      const styleNodes = isExpanded ? computeStyleLayout(styleList, bx, by, br, fullscreen) : [];
 
       return (
         <g key={b.label} style={{ transition: "opacity 0.25s", opacity: isHidden ? 0 : 1, pointerEvents: isHidden ? "none" : "auto" }}>
-          {/* Style sub-bubbles orbit center when expanded */}
-          {isExpanded && styleList.map((s, idx) => {
-            const angle = (idx / Math.max(styleList.length, 1)) * Math.PI * 2 - Math.PI / 2;
-            const scx = bx + orbitR * Math.cos(angle);
-            const scy = by + orbitR * Math.sin(angle);
-            const sr = (fullscreen ? 14 : 9) + (fullscreen ? 18 : 12) * Math.sqrt(s.count / maxSCount);
+          {/* Style sub-bubbles — force-laid-out cluster around genre */}
+          {isExpanded && styleNodes.map((s) => {
             const { fill: sf, stroke: ss, text: st } = genreSvgColor(s.label);
             return (
               <g key={s.label} onClick={(e) => { e.stopPropagation(); onStyleClick?.(s.label, expandedGenre); }} style={{ cursor: "pointer" }}>
-                <circle cx={scx} cy={scy} r={sr} fill={sf} stroke={ss} strokeWidth={1} opacity={0.9} />
-                <text x={scx} y={scy} textAnchor="middle" dominantBaseline="middle"
-                  fill={st} fontSize={Math.max(8, sr * 0.38)}
+                <circle cx={s.cx} cy={s.cy} r={s.sr} fill={sf} stroke={ss} strokeWidth={1} opacity={0.9} />
+                <text x={s.cx} y={s.cy} textAnchor="middle" dominantBaseline="middle"
+                  fill={st} fontSize={Math.max(8, s.sr * 0.38)}
                   style={{ pointerEvents: "none", userSelect: "none" }}>
                   {s.label.length > 10 ? s.label.slice(0, 9) + "…" : s.label}
                 </text>
