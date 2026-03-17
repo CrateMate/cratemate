@@ -3387,10 +3387,18 @@ export default function VinylCrate() {
               </div>
               {activeGenres.size > 0 && (
                 <button
-                  onClick={() => setActiveGenres(new Set())}
+                  onClick={clearStatFilter}
                   className="text-xs px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 text-amber-400"
                 >
                   {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
+                </button>
+              )}
+              {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
+                <button
+                  onClick={clearStatFilter}
+                  className="text-xs px-2 py-0.5 rounded-full border border-stone-700 text-stone-500 hover:text-rose-400 hover:border-rose-900/50 transition-colors"
+                >
+                  Clear all ×
                 </button>
               )}
               <button
@@ -3573,16 +3581,26 @@ export default function VinylCrate() {
                   </button>
                 ))}
               </div>
-              {/* Stat filter badge */}
-              {statFilterLabel && (
-                <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50">
-                  <button
-                    onClick={clearStatFilter}
-                    className="px-3 py-1.5 rounded-full bg-amber-900/70 backdrop-blur-sm border border-amber-700/50 text-amber-200 text-xs flex items-center gap-2"
-                  >
-                    <span>Filtered: {statFilterLabel}</span>
-                    <span className="text-amber-400 font-bold">×</span>
-                  </button>
+              {/* Stat filter badge + Clear all */}
+              {(statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
+                <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2">
+                  {statFilterLabel && (
+                    <button
+                      onClick={clearStatFilter}
+                      className="px-3 py-1.5 rounded-full bg-amber-900/70 backdrop-blur-sm border border-amber-700/50 text-amber-200 text-xs flex items-center gap-2"
+                    >
+                      <span>Filtered: {statFilterLabel}</span>
+                      <span className="text-amber-400 font-bold">×</span>
+                    </button>
+                  )}
+                  {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
+                    <button
+                      onClick={clearStatFilter}
+                      className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-rose-400 hover:border-rose-900/40 text-xs transition-colors"
+                    >
+                      Clear all ×
+                    </button>
+                  )}
                 </div>
               )}
               {/* Genre filter strip — bottom */}
@@ -3599,7 +3617,11 @@ export default function VinylCrate() {
                         <GenreTag
                           key={g}
                           genre={g}
-                          onClick={() => toggleGenre(g)}
+                          onClick={() => {
+                            setStatFilterLabel(null);
+                            setActiveStyles(new Set());
+                            toggleGenre(g);
+                          }}
                           active={activeGenres.has(g)}
                         />
                       ))}
