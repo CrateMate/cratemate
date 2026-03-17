@@ -147,48 +147,70 @@ function AddRecordModal({ onClose, onAdd }) {
   );
 }
 
-const GENRE_COLORS = [
-  "bg-orange-900/40 text-orange-300 border-orange-800/40",
-  "bg-red-900/40 text-red-300 border-red-800/40",
-  "bg-sky-900/40 text-sky-300 border-sky-800/40",
-  "bg-teal-900/40 text-teal-300 border-teal-800/40",
-  "bg-yellow-900/40 text-yellow-300 border-yellow-800/40",
-  "bg-purple-900/40 text-purple-300 border-purple-800/40",
-  "bg-indigo-900/40 text-indigo-300 border-indigo-800/40",
-  "bg-rose-900/40 text-rose-300 border-rose-800/40",
-  "bg-lime-900/40 text-lime-300 border-lime-800/40",
-  "bg-cyan-900/40 text-cyan-300 border-cyan-800/40",
-  "bg-blue-900/40 text-blue-300 border-blue-800/40",
-  "bg-pink-900/40 text-pink-300 border-pink-800/40",
-  "bg-amber-900/40 text-amber-300 border-amber-800/40",
-  "bg-green-900/40 text-green-300 border-green-800/40",
-  "bg-emerald-900/40 text-emerald-300 border-emerald-800/40",
-  "bg-violet-900/40 text-violet-300 border-violet-800/40",
+const GENRE_PALETTE = {
+  // Cool / acoustic
+  "jazz":             { tw: "bg-sky-900/40 text-sky-300 border-sky-800/40",            hex: "#38bdf8" },
+  "blues":            { tw: "bg-blue-900/40 text-blue-300 border-blue-800/40",         hex: "#60a5fa" },
+  "classical":        { tw: "bg-slate-800/40 text-slate-300 border-slate-700/40",      hex: "#94a3b8" },
+  "ambient":          { tw: "bg-cyan-900/40 text-cyan-300 border-cyan-800/40",         hex: "#22d3ee" },
+  "folk":             { tw: "bg-lime-900/40 text-lime-300 border-lime-800/40",         hex: "#a3e635" },
+  "country":          { tw: "bg-yellow-900/40 text-yellow-300 border-yellow-800/40",   hex: "#fbbf24" },
+  "reggae":           { tw: "bg-green-900/40 text-green-300 border-green-800/40",      hex: "#4ade80" },
+  // Electronic / dance
+  "electronic":       { tw: "bg-violet-900/40 text-violet-300 border-violet-800/40",   hex: "#a78bfa" },
+  "house":            { tw: "bg-purple-900/40 text-purple-300 border-purple-800/40",   hex: "#c084fc" },
+  "techno":           { tw: "bg-indigo-900/40 text-indigo-300 border-indigo-800/40",   hex: "#818cf8" },
+  "dance":            { tw: "bg-violet-900/40 text-violet-300 border-violet-800/40",   hex: "#8b5cf6" },
+  "disco":            { tw: "bg-fuchsia-900/40 text-fuchsia-300 border-fuchsia-800/40",hex: "#e879f9" },
+  // Rock
+  "rock":             { tw: "bg-red-900/40 text-red-300 border-red-800/40",            hex: "#f87171" },
+  "alternative rock": { tw: "bg-orange-900/40 text-orange-300 border-orange-800/40",  hex: "#fb923c" },
+  "indie rock":       { tw: "bg-amber-900/40 text-amber-300 border-amber-800/40",     hex: "#fbbf24" },
+  "metal":            { tw: "bg-red-900/40 text-red-300 border-red-800/40",            hex: "#ef4444" },
+  "punk":             { tw: "bg-rose-900/40 text-rose-300 border-rose-800/40",        hex: "#fb7185" },
+  // Soul / urban
+  "pop":              { tw: "bg-pink-900/40 text-pink-300 border-pink-800/40",        hex: "#f472b6" },
+  "hip hop":          { tw: "bg-yellow-900/40 text-yellow-300 border-yellow-800/40",  hex: "#facc15" },
+  "r&b":              { tw: "bg-rose-900/40 text-rose-300 border-rose-800/40",        hex: "#fb7185" },
+  "soul":             { tw: "bg-amber-900/40 text-amber-300 border-amber-800/40",     hex: "#f59e0b" },
+  "funk":             { tw: "bg-orange-900/40 text-orange-300 border-orange-800/40",  hex: "#f97316" },
+  "latin":            { tw: "bg-orange-900/40 text-orange-300 border-orange-800/40",  hex: "#ea580c" },
+};
+
+const GENRE_FALLBACK = [
+  { tw: "bg-teal-900/40 text-teal-300 border-teal-800/40",          hex: "#2dd4bf" },
+  { tw: "bg-emerald-900/40 text-emerald-300 border-emerald-800/40", hex: "#34d399" },
+  { tw: "bg-cyan-900/40 text-cyan-300 border-cyan-800/40",          hex: "#22d3ee" },
+  { tw: "bg-sky-900/40 text-sky-300 border-sky-800/40",             hex: "#38bdf8" },
+  { tw: "bg-violet-900/40 text-violet-300 border-violet-800/40",    hex: "#a78bfa" },
+  { tw: "bg-fuchsia-900/40 text-fuchsia-300 border-fuchsia-800/40", hex: "#e879f9" },
+  { tw: "bg-rose-900/40 text-rose-300 border-rose-800/40",          hex: "#fb7185" },
+  { tw: "bg-amber-900/40 text-amber-300 border-amber-800/40",       hex: "#fbbf24" },
 ];
 
-function genreColor(genre) {
+function getGenrePalette(genre) {
+  const key = (genre || "").toLowerCase().trim();
+  if (GENRE_PALETTE[key]) return GENRE_PALETTE[key];
+  for (const [k, v] of Object.entries(GENRE_PALETTE)) {
+    if (key.includes(k)) return v;
+  }
   let hash = 0;
-  for (let i = 0; i < genre.length; i++) hash = (hash * 31 + genre.charCodeAt(i)) >>> 0;
-  return GENRE_COLORS[hash % GENRE_COLORS.length];
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return GENRE_FALLBACK[hash % GENRE_FALLBACK.length];
 }
 
-const GENRE_SVG_PALETTE = [
-  { fill: "#78350f44", stroke: "#d97706", text: "#fcd34d" },
-  { fill: "#1e3a5f44", stroke: "#60a5fa", text: "#93c5fd" },
-  { fill: "#14532d44", stroke: "#4ade80", text: "#86efac" },
-  { fill: "#4c1d9544", stroke: "#a78bfa", text: "#c4b5fd" },
-  { fill: "#7f1d1d44", stroke: "#f87171", text: "#fca5a5" },
-  { fill: "#164e6344", stroke: "#22d3ee", text: "#67e8f9" },
-  { fill: "#71350044", stroke: "#fb923c", text: "#fdba74" },
-  { fill: "#1e1b4b44", stroke: "#818cf8", text: "#a5b4fc" },
-  { fill: "#4a194244", stroke: "#e879f9", text: "#f0abfc" },
-  { fill: "#134e4a44", stroke: "#2dd4bf", text: "#5eead4" },
-];
+function genreColor(genre) { return getGenrePalette(genre).tw; }
 
 function genreSvgColor(genre) {
-  let hash = 0;
-  for (let i = 0; i < genre.length; i++) hash = (hash * 31 + genre.charCodeAt(i)) >>> 0;
-  return GENRE_SVG_PALETTE[hash % GENRE_SVG_PALETTE.length];
+  const { hex } = getGenrePalette(genre);
+  return { fill: hex + "2e", stroke: hex, text: hex };
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r},${g},${b}`;
 }
 
 const DISC_GRADIENT_PAIRS = [
@@ -1183,6 +1205,9 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
           const zIndex = Math.round(scale * 100);
           const plays = playCounts[record.id] || 0;
           const isFocused = scale > 1.2;
+          const primaryGenre = getGenres(record)[0] || "";
+          const genreHex = getGenrePalette(primaryGenre).hex;
+          const rgb = hexToRgb(genreHex);
 
           return (
             <div
@@ -1224,8 +1249,8 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                   borderRadius: 14,
                   overflow: "hidden",
                   boxShadow: isFocused
-                    ? "0 0 0 2px rgba(180,120,30,0.5), 0 8px 28px rgba(0,0,0,0.7)"
-                    : "0 3px 12px rgba(0,0,0,0.5)",
+                    ? `0 0 0 3px rgba(${rgb},0.55), 0 8px 28px rgba(0,0,0,0.7)`
+                    : `0 0 0 2px rgba(${rgb},0.28), 0 3px 12px rgba(0,0,0,0.5)`,
                   transition: "box-shadow 150ms ease-out",
                   position: "relative",
                 }}
