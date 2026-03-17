@@ -7,6 +7,10 @@ export const metadata = {
   description: "Your vinyl record companion",
 };
 
+export const viewport = {
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }) {
   return (
     <ClerkProvider>

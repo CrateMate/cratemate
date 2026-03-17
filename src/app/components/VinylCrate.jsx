@@ -3468,7 +3468,7 @@ export default function VinylCrate() {
 
   return (
     <div
-      className="min-h-screen flex flex-col max-w-md mx-auto"
+      className="h-dvh flex flex-col max-w-md mx-auto"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
       {viewMode !== "drift" && (
