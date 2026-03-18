@@ -623,15 +623,38 @@ function WantGroupRow({ group, expanded, onToggle, onRemove }) {
   );
 }
 
+const WANTS_PAGE_SIZE = 25;
+
 function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove }) {
+  const [wantsPage, setWantsPage] = useState(1);
+  const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(false);
+  const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
+  const wantsSentinelRef = useRef(null);
+
+  useEffect(() => {
+    if (!wantsInfiniteScroll) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setWantsVisible(c => c + WANTS_PAGE_SIZE);
+    }, { threshold: 0.1 });
+    if (wantsSentinelRef.current) observer.observe(wantsSentinelRef.current);
+    return () => observer.disconnect();
+  }, [wantsInfiniteScroll, wantsVisible]);
+
   const isImporting = wantlistImportJob?.status === "pending" || wantlistImportJob?.status === "running";
   const progress = isImporting && wantlistImportJob?.total > 0
     ? Math.round((wantlistImportJob.imported / wantlistImportJob.total) * 100)
     : null;
 
+  const allGroups = wantlist || [];
+  const wantsTotalPages = Math.ceil(allGroups.length / WANTS_PAGE_SIZE);
+  const visibleGroups = wantsInfiniteScroll
+    ? allGroups.slice(0, wantsVisible)
+    : allGroups.slice((wantsPage - 1) * WANTS_PAGE_SIZE, wantsPage * WANTS_PAGE_SIZE);
+  const wantsHasMore = wantsInfiniteScroll && wantsVisible < allGroups.length;
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-4 py-2 flex items-center gap-2">
+      <div className="px-4 py-2 flex items-center gap-2 flex-wrap">
         <button
           onClick={onStartImport}
           disabled={isImporting}
@@ -639,6 +662,14 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
         >
           {isImporting ? "Importing…" : "↓ Import Wantlist"}
         </button>
+        {allGroups.length > 0 && (
+          <button
+            onClick={() => { setWantsInfiniteScroll(s => !s); setWantsPage(1); setWantsVisible(WANTS_PAGE_SIZE); }}
+            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${wantsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+          >
+            {wantsInfiniteScroll ? "∞ scroll" : "pages"}
+          </button>
+        )}
         {isImporting && progress !== null && (
           <span className="text-[10px] text-stone-500">{progress}%</span>
         )}
@@ -661,7 +692,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
         </div>
       )}
 
-      {!wantlist || wantlist.length === 0 ? (
+      {allGroups.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
           <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24 }} className="text-amber-100 mb-2">
             Your wantlist is empty
@@ -672,7 +703,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto px-4 pb-8">
-          {wantlist.map((group) => {
+          {visibleGroups.map((group) => {
             const key = group.master_id ? `master_${group.master_id}` : `release_${group.representative?.release_id}`;
             return (
               <WantGroupRow
@@ -691,6 +722,22 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
               />
             );
           })}
+          {wantsInfiniteScroll
+            ? (wantsHasMore && <div ref={wantsSentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>)
+            : allGroups.length > WANTS_PAGE_SIZE && (
+              <div className="flex items-center justify-center gap-3 py-4">
+                <button onClick={() => setWantsPage(p => Math.max(1, p - 1))} disabled={wantsPage === 1}
+                  className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                  ← Prev
+                </button>
+                <span className="text-stone-600 text-xs">{wantsPage} / {wantsTotalPages}</span>
+                <button onClick={() => setWantsPage(p => Math.min(wantsTotalPages, p + 1))} disabled={wantsPage === wantsTotalPages}
+                  className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                  Next →
+                </button>
+              </div>
+            )
+          }
         </div>
       )}
     </div>
@@ -2841,6 +2888,12 @@ export default function VinylCrate() {
   const HEARTS_PAGE_SIZE = 20;
   const heartsSentinelRef = useRef(null);
 
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyInfiniteScroll, setHistoryInfiniteScroll] = useState(false);
+  const [historyVisible, setHistoryVisible] = useState(20);
+  const HISTORY_PAGE_SIZE = 20;
+  const historySentinelRef = useRef(null);
+
   const [isDiscoverable, setIsDiscoverable] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null);
   const [discoverLoading, setDiscoverLoading] = useState(false);
@@ -2999,6 +3052,15 @@ export default function VinylCrate() {
     if (heartsSentinelRef.current) observer.observe(heartsSentinelRef.current);
     return () => observer.disconnect();
   }, [heartsInfiniteScroll, heartsVisible]);
+
+  useEffect(() => {
+    if (!historyInfiniteScroll) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setHistoryVisible(c => c + HISTORY_PAGE_SIZE);
+    }, { threshold: 0.1 });
+    if (historySentinelRef.current) observer.observe(historySentinelRef.current);
+    return () => observer.disconnect();
+  }, [historyInfiniteScroll, historyVisible]);
 
   // Keep ref in sync for background loops that need fresh feature data without stale closures
   useEffect(() => { spotifyFeaturesRef.current = spotifyFeatures; }, [spotifyFeatures]);
@@ -4465,8 +4527,25 @@ export default function VinylCrate() {
                 {playSessions.length === 0 ? (
                   <div className="text-stone-600 text-sm text-center py-16">No plays logged yet.</div>
                 ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <button
+                        onClick={() => { setHistoryInfiniteScroll(s => !s); setHistoryPage(1); setHistoryVisible(HISTORY_PAGE_SIZE); }}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${historyInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                      >
+                        {historyInfiniteScroll ? "∞ scroll" : "pages"}
+                      </button>
+                    </div>
                   <div className="space-y-1">
-                    {groupPlaySessions(playSessions, collection).map((session) => {
+                    {(() => {
+                      const allSessions = groupPlaySessions(playSessions, collection);
+                      const historyTotalPages = Math.ceil(allSessions.length / HISTORY_PAGE_SIZE);
+                      const visibleSessions = historyInfiniteScroll
+                        ? allSessions.slice(0, historyVisible)
+                        : allSessions.slice((historyPage - 1) * HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE);
+                      const historyHasMore = historyInfiniteScroll && historyVisible < allSessions.length;
+                      return (<>
+                        {visibleSessions.map((session) => {
                       const isExpanded = expandedSessions.has(session.id);
                       const thumbs = session.records.slice(0, 3);
                       const playCounts2 = {};
@@ -4553,8 +4632,27 @@ export default function VinylCrate() {
                           )}
                         </div>
                       );
-                    })}
+                        })}
+                        {historyInfiniteScroll
+                          ? (historyHasMore && <div ref={historySentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>)
+                          : allSessions.length > HISTORY_PAGE_SIZE && (
+                            <div className="flex items-center justify-center gap-3 py-4">
+                              <button onClick={() => setHistoryPage(p => Math.max(1, p - 1))} disabled={historyPage === 1}
+                                className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                                ← Prev
+                              </button>
+                              <span className="text-stone-600 text-xs">{historyPage} / {historyTotalPages}</span>
+                              <button onClick={() => setHistoryPage(p => Math.min(historyTotalPages, p + 1))} disabled={historyPage === historyTotalPages}
+                                className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
+                                Next →
+                              </button>
+                            </div>
+                          )
+                        }
+                      </>);
+                    })()}
                   </div>
+                  </>
                 )}
               </>
             );
