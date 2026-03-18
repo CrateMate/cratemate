@@ -11,24 +11,40 @@ export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data, error } = await supabase
-    .from("records")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Paginate to handle collections > 1000 records (Supabase default max_rows)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any[] = [];
+  let from = 0;
+  const PAGE = 1000;
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from("records")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!batch || batch.length === 0) break;
+    data.push(...batch);
+    if (batch.length < PAGE) break;
+    from += PAGE;
+  }
 
   // Join tracklists from cache so the client can search by song title.
-  const discogsIds = (data || []).map((r) => r.discogs_id).filter(Boolean);
+  const discogsIds = data.map((r) => r.discogs_id).filter(Boolean);
   let tracklistMap: Map<number, string> = new Map();
   if (discogsIds.length > 0) {
-    const { data: cacheRows } = await supabase
-      .from("discogs_metadata_cache")
-      .select("release_id, tracklist")
-      .in("release_id", discogsIds)
-      .not("tracklist", "is", null);
-    tracklistMap = new Map((cacheRows || []).map((c) => [c.release_id, c.tracklist]));
+    // Paginate the cache join too — .in() with >1000 ids can fail
+    const cacheRows: { release_id: number; tracklist: string }[] = [];
+    for (let i = 0; i < discogsIds.length; i += PAGE) {
+      const { data: batch } = await supabase
+        .from("discogs_metadata_cache")
+        .select("release_id, tracklist")
+        .in("release_id", discogsIds.slice(i, i + PAGE))
+        .not("tracklist", "is", null);
+      if (batch) cacheRows.push(...batch);
+    }
+    tracklistMap = new Map(cacheRows.map((c) => [c.release_id, c.tracklist]));
   }
 
   const enriched = (data || []).map((r) => {
