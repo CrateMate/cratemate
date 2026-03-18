@@ -1010,7 +1010,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   const heroIsUpgraded = heroBase && heroHi && heroHi !== heroBase;
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
-    <div className="fixed inset-x-0 bottom-0 top-16 bg-black/80 backdrop-blur-sm z-50">
+    <div className="fixed inset-x-0 bottom-0 top-36 bg-black/80 backdrop-blur-sm z-50">
       <button className="absolute inset-0" onClick={onClose} aria-label="Close" />
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col">
         <div
@@ -3487,7 +3487,7 @@ export default function VinylCrate() {
           setReco({ record: picked, reason: parsed.reason, label: "Today's Pick" });
 
         } else if (type === "random") {
-          // Weighted random: less-played records get higher weight
+          // Weighted random: less-played records get higher weight. No Claude — instant result.
           const weights = myRecords.map(r => 1 / ((playCounts[r.id] || 0) + 1));
           const total = weights.reduce((a, b) => a + b, 0);
           let rand = Math.random() * total;
@@ -3496,13 +3496,11 @@ export default function VinylCrate() {
             rand -= weights[i];
             if (rand <= 0) { picked = myRecords[i]; break; }
           }
-          const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist} (${picked.year_original || picked.year_pressed || "?"}). The reason it was chosen: weighted random pick — less-played records had higher odds. Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
-          const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
-          let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
-          if (Array.isArray(parsed)) parsed = parsed[0];
-          if (!parsed?.reason) throw new Error("bad-schema");
-          setReco({ record: picked, reason: parsed.reason, label: "Random Pick" });
+          const plays = playCounts[picked.id] || 0;
+          const reason = plays === 0
+            ? "You haven't played this one yet — time to fix that."
+            : `Played ${plays} time${plays > 1 ? "s" : ""}. The wheel landed here.`;
+          setReco({ record: picked, reason, label: "Random Pick" });
 
         } else if (type === "next") {
           if (!lastPlayed) { setRecoError("Log a play first to get a Next pick."); return; }
