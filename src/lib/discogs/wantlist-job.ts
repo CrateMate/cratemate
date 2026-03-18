@@ -1,6 +1,5 @@
 import { supabase } from "@/lib/supabase";
 import { discogsRequest, DISCOGS_API } from "@/lib/discogs";
-import { getMasterCache, upsertMasterCache, isMasterCacheFresh } from "@/lib/discogs/cache";
 
 const JOB_TABLE = "wantlist_import_jobs";
 
@@ -45,6 +44,18 @@ export async function runWantlistImportJob(jobId: string) {
     const { access_token, access_token_secret, discogs_username } = tokenData;
     if (!discogs_username) throw new Error("Discogs username missing — re-link Discogs");
 
+    // Load all user's master_ids once upfront for cross-referencing
+    const { data: userRecords } = await supabase
+      .from("records")
+      .select("id, master_id")
+      .eq("user_id", job.user_id)
+      .not("master_id", "is", null);
+
+    const masterIdToRecordId = new Map<number, string>();
+    for (const r of userRecords || []) {
+      if (r.master_id) masterIdToRecordId.set(Number(r.master_id), r.id);
+    }
+
     let page = 1;
     let totalPages = 1;
     let imported = 0;
@@ -63,6 +74,8 @@ export async function runWantlistImportJob(jobId: string) {
       total = data.pagination?.items || 0;
       const wants = Array.isArray(data.wants) ? data.wants : [];
 
+      // Map all wants on this page into rows — no per-item DB calls
+      const rows = [];
       for (const want of wants) {
         const basic = want.basic_information || {};
         const releaseId = Number(basic.id || want.id);
@@ -71,61 +84,34 @@ export async function runWantlistImportJob(jobId: string) {
         const masterId = basic.master_id ? Number(basic.master_id) : null;
         const artists = Array.isArray(basic.artists) ? basic.artists : [];
         const artist = artists.map((a: { name?: string }) => a.name || "").filter(Boolean).join(", ");
-        const genres = Array.isArray(basic.genres) ? basic.genres.join(", ") : "";
-        const styles = Array.isArray(basic.styles) ? basic.styles.join(", ") : "";
         const formats = Array.isArray(basic.formats) ? basic.formats : [];
-        const format = formats.map((f: { name?: string }) => f.name || "").filter(Boolean).join(", ");
         const labels = Array.isArray(basic.labels) ? basic.labels : [];
-        const label = labels.map((l: { name?: string }) => l.name || "").filter(Boolean).join(", ");
 
-        const row = {
+        const foundRecordId = masterId ? (masterIdToRecordId.get(masterId) ?? null) : null;
+
+        rows.push({
           user_id: job.user_id,
           release_id: releaseId,
           master_id: masterId,
           artist,
           title: basic.title || "",
           year_pressed: basic.year ? Number(basic.year) : null,
-          label,
-          format,
+          label: labels.map((l: { name?: string }) => l.name || "").filter(Boolean).join(", "),
+          format: formats.map((f: { name?: string }) => f.name || "").filter(Boolean).join(", "),
           thumb: basic.thumb || basic.cover_image || "",
-          genres,
-          styles,
+          genres: Array.isArray(basic.genres) ? basic.genres.join(", ") : "",
+          styles: Array.isArray(basic.styles) ? basic.styles.join(", ") : "",
           notes: want.notes || "",
           added_at: want.date_added || null,
-        };
+          found: foundRecordId !== null,
+          found_record_id: foundRecordId,
+        });
+      }
 
-        await supabase.from("wantlist").upsert(row, { onConflict: "user_id,release_id" });
-        imported++;
-
-        // Cross-ref with user's records — mark found if master_id matches
-        if (masterId) {
-          const { data: match } = await supabase
-            .from("records")
-            .select("id")
-            .eq("user_id", job.user_id)
-            .eq("master_id", masterId)
-            .limit(1)
-            .single();
-
-          if (match) {
-            await supabase
-              .from("wantlist")
-              .update({ found: true, found_record_id: match.id })
-              .eq("user_id", job.user_id)
-              .eq("release_id", releaseId);
-          }
-
-          // Cache master if not already cached
-          const existingMaster = await getMasterCache(masterId);
-          if (!existingMaster || !isMasterCacheFresh(existingMaster)) {
-            await upsertMasterCache(masterId, {
-              canonical_title: basic.title || "",
-              canonical_artist: artist,
-              year_original: basic.year ? Number(basic.year) : null,
-              thumb: basic.thumb || basic.cover_image || "",
-            });
-          }
-        }
+      // One batch upsert for the entire page
+      if (rows.length > 0) {
+        await supabase.from("wantlist").upsert(rows, { onConflict: "user_id,release_id" });
+        imported += rows.length;
       }
 
       await supabase
