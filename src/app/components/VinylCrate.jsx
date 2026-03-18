@@ -3146,19 +3146,21 @@ export default function VinylCrate() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Feature 1 — Poll wantlist import job
+  // Feature 1 — Poll wantlist import job + refresh display as items come in
   useEffect(() => {
     if (!wantlistImportJob?.job_id) return;
     if (wantlistImportJob.status === "completed" || wantlistImportJob.status === "failed") return;
 
+    let pollCount = 0;
     const timer = setInterval(async () => {
       try {
         const res = await fetch(`/api/discogs/wantlist/import/${encodeURIComponent(wantlistImportJob.job_id)}`);
         if (!res.ok) return;
         const data = await res.json();
         setWantlistImportJob((prev) => ({ ...prev, ...data }));
-        if (data.status === "completed") {
-          // Reload wantlist on completion
+        pollCount++;
+        // Refresh wantlist display every 5 polls (~7.5s) and on completion
+        if (data.status === "completed" || pollCount % 5 === 0) {
           const wRes = await fetch("/api/discogs/wantlist");
           if (wRes.ok) setWantlist(await wRes.json());
         }
