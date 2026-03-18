@@ -707,10 +707,12 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
 
   const allGroups = wantlist || [];
   const wantsTotalPages = Math.ceil(allGroups.length / WANTS_PAGE_SIZE);
+  // In infinite scroll mode show everything — wantlists are small enough to render all at once
+  // and this ensures new items appear immediately as the import poll refreshes the data.
   const visibleGroups = wantsInfiniteScroll
-    ? allGroups.slice(0, wantsVisible)
+    ? allGroups
     : allGroups.slice((wantsPage - 1) * WANTS_PAGE_SIZE, wantsPage * WANTS_PAGE_SIZE);
-  const wantsHasMore = wantsInfiniteScroll && wantsVisible < allGroups.length;
+  const wantsHasMore = false;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
