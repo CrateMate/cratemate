@@ -57,6 +57,8 @@ export async function runWantlistImportJob(jobId: string) {
       if (r.master_id) masterIdToRecordId.set(Number(r.master_id), r.id);
     }
 
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
     let page = 1;
     let totalPages = 1;
     let imported = 0;
@@ -64,7 +66,19 @@ export async function runWantlistImportJob(jobId: string) {
 
     do {
       const url = `${DISCOGS_API}/users/${encodeURIComponent(discogs_username)}/wants?per_page=100&page=${page}`;
-      const res = await discogsRequest("GET", url, { tokenKey: access_token, tokenSecret: access_token_secret });
+
+      // Respect Discogs rate limit (60 req/min). Add delay between pages.
+      if (page > 1) await sleep(1100);
+
+      let res = await discogsRequest("GET", url, { tokenKey: access_token, tokenSecret: access_token_secret });
+
+      // Retry once on 429 after honoring Retry-After
+      if (res.status === 429) {
+        const retryAfter = parseInt(res.headers.get("Retry-After") || "60", 10);
+        await sleep(retryAfter * 1000);
+        res = await discogsRequest("GET", url, { tokenKey: access_token, tokenSecret: access_token_secret });
+      }
+
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(`Discogs wants fetch error ${res.status}${text ? `: ${text}` : ""}`);
