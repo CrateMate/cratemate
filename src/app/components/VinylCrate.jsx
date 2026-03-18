@@ -3271,33 +3271,39 @@ export default function VinylCrate() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Feature 1 — Poll wantlist import job status
+  // Feature 1 — Poll wantlist import job and refresh display while running
   useEffect(() => {
     const jobId = wantlistImportJob?.job_id;
     if (!jobId) return;
     if (wantlistImportJob.status === "completed" || wantlistImportJob.status === "failed") return;
 
-    const timer = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/discogs/wantlist/import/${encodeURIComponent(jobId)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setWantlistImportJob((prev) => ({ ...prev, ...data }));
-      } catch { /* ignore */ }
-    }, 1500);
+    let active = true;
 
-    return () => clearInterval(timer);
-  }, [wantlistImportJob?.job_id, wantlistImportJob?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+    async function poll() {
+      while (active) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (!active) break;
+        try {
+          const res = await fetch(`/api/discogs/wantlist/import/${encodeURIComponent(jobId)}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          setWantlistImportJob((prev) => ({ ...prev, ...data }));
 
-  // Feature 1 — Refresh wantlist display whenever import status changes (running → more data; completed → full list)
-  useEffect(() => {
-    const status = wantlistImportJob?.status;
-    if (!status || status === "failed") return;
-    fetch("/api/discogs/wantlist")
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (Array.isArray(data)) setWantlist(data); })
-      .catch(() => {});
-  }, [wantlistImportJob?.status, wantlistImportJob?.imported]); // fires on every imported count change + on completion
+          // Always refresh the wantlist list from DB — no-store bypasses any browser cache
+          const wRes = await fetch("/api/discogs/wantlist", { cache: "no-store" });
+          if (wRes.ok) {
+            const wData = await wRes.json();
+            if (Array.isArray(wData)) setWantlist(wData);
+          }
+
+          if (data.status === "completed" || data.status === "failed") break;
+        } catch { /* ignore */ }
+      }
+    }
+
+    poll();
+    return () => { active = false; };
+  }, [wantlistImportJob?.job_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
