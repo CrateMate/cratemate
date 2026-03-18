@@ -546,8 +546,14 @@ function ArtistTag({ artist, discogsId }) {
 
 // Feature 1: Wantlist components
 function WantReleaseRow({ release, onRemove }) {
+  const marketplaceUrl = `https://www.discogs.com/sell/release/${release.release_id}`;
   return (
-    <div className="flex items-center gap-3 px-3 py-2 bg-stone-900/40 rounded-xl border border-stone-800/40">
+    <a
+      href={marketplaceUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 px-3 py-2 bg-stone-900/40 rounded-xl border border-stone-800/40 hover:border-amber-900/40 hover:bg-stone-900/70 transition-colors cursor-pointer"
+    >
       <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
         {release.thumb ? (
           <img src={release.thumb} alt="" className="w-full h-full object-cover" />
@@ -559,29 +565,35 @@ function WantReleaseRow({ release, onRemove }) {
         <div className="text-xs text-stone-400 truncate">
           {[release.year_pressed, release.label, release.format, release.notes].filter(Boolean).join(" · ")}
         </div>
+        <div className="text-[10px] text-stone-600 mt-0.5">↗ Discogs Marketplace</div>
       </div>
       {onRemove && (
         <button
-          onClick={() => onRemove(release.release_id)}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(release.release_id); }}
           className="text-stone-700 hover:text-rose-500 text-sm shrink-0 transition-colors"
           title="Remove"
         >
           ×
         </button>
       )}
-    </div>
+    </a>
   );
 }
 
 function WantGroupRow({ group, expanded, onToggle, onRemove }) {
   const rep = group.representative;
   const genres = (rep?.genres || "").split(",").map((g) => g.trim()).filter(Boolean);
+  const marketplaceUrl = group.master_id
+    ? `https://www.discogs.com/sell/list?master_id=${group.master_id}&ev=mb`
+    : `https://www.discogs.com/sell/release/${rep?.release_id}`;
 
   return (
     <div className="border border-stone-800/50 rounded-2xl overflow-hidden mb-2">
-      <div
-        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-900/30 transition-colors"
-        onClick={onToggle}
+      <a
+        href={marketplaceUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 px-3 py-2.5 hover:bg-stone-900/40 transition-colors"
       >
         <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-stone-800">
           {rep?.thumb ? (
@@ -610,8 +622,15 @@ function WantGroupRow({ group, expanded, onToggle, onRemove }) {
             )}
           </div>
         </div>
-        <span className="text-stone-600 text-xs shrink-0">{expanded ? "▲" : "▼"}</span>
-      </div>
+        {/* Chevron: stops propagation so it only toggles, doesn't open marketplace */}
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
+          className="text-stone-600 hover:text-stone-300 text-xs shrink-0 p-2 -mr-1 transition-colors"
+          aria-label={expanded ? "Collapse" : "Expand pressings"}
+        >
+          {expanded ? "▲" : "▼"}
+        </button>
+      </a>
       {expanded && group.releases.length > 0 && (
         <div className="px-3 pb-3 space-y-1.5 border-t border-stone-800/40 pt-2">
           {group.releases.map((r) => (
