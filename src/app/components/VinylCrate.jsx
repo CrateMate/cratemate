@@ -687,7 +687,7 @@ const WANTS_PAGE_SIZE = 25;
 
 function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove }) {
   const [wantsPage, setWantsPage] = useState(1);
-  const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(false);
+  const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(true);
   const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
   const wantsSentinelRef = useRef(null);
 
