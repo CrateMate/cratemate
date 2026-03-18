@@ -50,7 +50,7 @@ export async function GET(
   try {
     const res = await discogsRequest(
       "GET",
-      `${DISCOGS_API}/marketplace/search?release_id=${releaseId}&sort=price&sort_order=asc&per_page=5`,
+      `${DISCOGS_API}/marketplace/price_suggestions/${releaseId}`,
       { tokenKey: access_token, tokenSecret: access_token_secret }
     );
 
@@ -61,19 +61,26 @@ export async function GET(
 
     const data = await res.json();
 
-    const listing = (data.listings as Array<{
-      price?: { value?: number; currency?: string };
-      media_condition?: string;
-      ships_from?: string;
-    }>)?.find((l) => CONDITIONS.has(l.media_condition ?? ""));
+    // Find lowest price among VG+ and above
+    const ORDERED = ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)"];
+    let minPrice: number | null = null;
+    let currency: string | null = null;
+    let condition: string | null = null;
 
-    const minPrice = listing?.price?.value ?? null;
-    const currency = listing?.price?.currency ?? null;
-    const condition = conditionLabel(listing?.media_condition);
-    const ships_from = listing?.ships_from ?? null;
+    for (const cond of ORDERED) {
+      const entry = data[cond];
+      if (entry && typeof entry.value === "number") {
+        if (minPrice === null || entry.value < minPrice) {
+          minPrice = entry.value;
+          currency = entry.currency || "USD";
+          condition = conditionLabel(cond);
+        }
+      }
+    }
 
-    await upsertPriceCache(releaseId, { min_price: minPrice, currency, condition, ships_from });
-    return NextResponse.json({ min_price: minPrice, currency, condition, ships_from });
+    // ships_from not available from price_suggestions — left null for future enhancement
+    await upsertPriceCache(releaseId, { min_price: minPrice, currency, condition, ships_from: null });
+    return NextResponse.json({ min_price: minPrice, currency, condition, ships_from: null });
   } catch {
     return NextResponse.json({ min_price: null });
   }
