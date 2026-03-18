@@ -6,14 +6,24 @@ export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: items, error } = await supabase
-    .from("wantlist")
-    .select("*")
-    .eq("user_id", userId)
-    .order("added_at", { ascending: false })
-    .limit(10000);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Paginate to bypass Supabase's server-side max_rows cap (default 1000)
+  const PAGE = 1000;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const items: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("wantlist")
+      .select("*")
+      .eq("user_id", userId)
+      .order("added_at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data || data.length === 0) break;
+    items.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
 
   // Group by master_id (items without a master_id get their own group keyed by release_id)
   const groups = new Map<string, { master_id: number | null; releases: typeof items }>();
