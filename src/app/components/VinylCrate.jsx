@@ -568,17 +568,22 @@ function ArtistTag({ artist, discogsId }) {
 }
 
 // Feature 1: Wantlist components
-function WantReleaseRow({ release }) {
+function WantReleaseRow({ release, onPriceLoaded }) {
   const [price, setPrice] = useState(null);
   const marketplaceUrl = `https://www.discogs.com/sell/release/${release.release_id}`;
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/discogs/wantlist/price/${release.release_id}`)
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (!cancelled && data?.min_price != null) setPrice(data); })
+      .then(data => {
+        if (!cancelled && data?.min_price != null) {
+          setPrice(data);
+          onPriceLoaded?.(release.release_id, data);
+        }
+      })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [release.release_id]);
+  }, [release.release_id]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <a
       href={marketplaceUrl}
@@ -616,6 +621,12 @@ function WantGroupRow({ group, expanded, onToggle }) {
     : `https://www.discogs.com/sell/release/${rep?.release_id}`;
   const longPressTimer = useRef(null);
   const didLongPress = useRef(false);
+  const [loadedPrices, setLoadedPrices] = useState({});
+
+  const minPrice = Object.values(loadedPrices).reduce((best, p) => {
+    if (!best || p.min_price < best.min_price) return p;
+    return best;
+  }, null);
 
   function handlePointerDown() {
     didLongPress.current = false;
@@ -665,6 +676,11 @@ function WantGroupRow({ group, expanded, onToggle }) {
                 {group.edition_count} editions
               </span>
             )}
+            {minPrice && (
+              <span className="text-[10px] text-emerald-700">
+                from ${minPrice.min_price.toFixed(2)} {minPrice.condition}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-center gap-0.5 shrink-0 px-1">
@@ -675,7 +691,13 @@ function WantGroupRow({ group, expanded, onToggle }) {
       {expanded && group.releases.length > 0 && (
         <div className="px-3 pb-3 space-y-1.5 border-t border-stone-800/40 pt-2">
           {group.releases.map((r) => (
-            <WantReleaseRow key={r.release_id} release={r} />
+            <WantReleaseRow
+              key={r.release_id}
+              release={r}
+              onPriceLoaded={(releaseId, data) =>
+                setLoadedPrices((prev) => ({ ...prev, [releaseId]: data }))
+              }
+            />
           ))}
         </div>
       )}
