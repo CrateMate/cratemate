@@ -194,6 +194,7 @@ type PriceCacheRow = {
   min_price?: number | null;
   currency?: string | null;
   condition?: string | null;
+  ships_from?: string | null;
   cached_at?: string | null;
   expires_at?: string | null;
 };

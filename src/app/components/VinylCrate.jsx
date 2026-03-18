@@ -568,6 +568,26 @@ function ArtistTag({ artist, discogsId }) {
 }
 
 // Feature 1: Wantlist components
+function countryToFlag(country) {
+  const map = {
+    "United States": "US", "Germany": "DE", "United Kingdom": "GB", "France": "FR",
+    "Japan": "JP", "Italy": "IT", "Netherlands": "NL", "Belgium": "BE",
+    "Canada": "CA", "Australia": "AU", "Sweden": "SE", "Spain": "ES",
+    "Brazil": "BR", "Argentina": "AR", "Mexico": "MX", "Poland": "PL",
+    "Czech Republic": "CZ", "Russia": "RU", "Greece": "GR", "Austria": "AT",
+    "Switzerland": "CH", "Denmark": "DK", "Norway": "NO", "Finland": "FI",
+    "Portugal": "PT", "Hungary": "HU", "Romania": "RO", "South Korea": "KR",
+    "New Zealand": "NZ", "Turkey": "TR", "Ireland": "IE", "Ukraine": "UA",
+    "Croatia": "HR", "Slovakia": "SK", "Serbia": "RS", "Lithuania": "LT",
+    "Latvia": "LV", "Estonia": "EE", "Iceland": "IS", "Taiwan": "TW",
+    "Hong Kong": "HK", "Singapore": "SG", "India": "IN", "Thailand": "TH",
+    "Chile": "CL", "Colombia": "CO", "Malaysia": "MY",
+  };
+  const code = map[country];
+  if (!code) return null;
+  return [...code].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
+}
+
 function WantReleaseRow({ release, onPriceLoaded }) {
   const [price, setPrice] = useState(null);
   const marketplaceUrl = `https://www.discogs.com/sell/release/${release.release_id}`;
@@ -605,7 +625,7 @@ function WantReleaseRow({ release, onPriceLoaded }) {
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-stone-600">↗ Discogs Marketplace</span>
           {price && (
-            <span className="text-[10px] text-emerald-700">from ${price.min_price.toFixed(2)} {price.condition}</span>
+            <span className="text-[10px] text-emerald-700">from ${price.min_price.toFixed(2)} {price.condition}{price.ships_from ? ` ${countryToFlag(price.ships_from) || price.ships_from}` : ''}</span>
           )}
         </div>
       </div>
@@ -678,7 +698,7 @@ function WantGroupRow({ group, expanded, onToggle }) {
             )}
             {minPrice && (
               <span className="text-[10px] text-emerald-700">
-                from ${minPrice.min_price.toFixed(2)} {minPrice.condition}
+                from ${minPrice.min_price.toFixed(2)} {minPrice.condition}{minPrice.ships_from ? ` ${countryToFlag(minPrice.ships_from) || minPrice.ships_from}` : ''}
               </span>
             )}
           </div>
