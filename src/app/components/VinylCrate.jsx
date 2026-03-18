@@ -689,6 +689,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
   const [wantsPage, setWantsPage] = useState(1);
   const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(true);
   const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
+  const [wantsSearch, setWantsSearch] = useState("");
   const wantsSentinelRef = useRef(null);
 
   useEffect(() => {
@@ -706,17 +707,36 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
     : null;
 
   const allGroups = wantlist || [];
-  const wantsTotalPages = Math.ceil(allGroups.length / WANTS_PAGE_SIZE);
-  // In infinite scroll mode show everything — wantlists are small enough to render all at once
-  // and this ensures new items appear immediately as the import poll refreshes the data.
+  const filteredGroups = wantsSearch.trim()
+    ? allGroups.filter((g) => {
+        const q = wantsSearch.toLowerCase();
+        const rep = g.representative;
+        return (
+          (rep?.title || "").toLowerCase().includes(q) ||
+          (rep?.artist || "").toLowerCase().includes(q) ||
+          (rep?.genres || "").toLowerCase().includes(q) ||
+          (rep?.label || "").toLowerCase().includes(q)
+        );
+      })
+    : allGroups;
+  const wantsTotalPages = Math.ceil(filteredGroups.length / WANTS_PAGE_SIZE);
   const visibleGroups = wantsInfiniteScroll
-    ? allGroups
-    : allGroups.slice((wantsPage - 1) * WANTS_PAGE_SIZE, wantsPage * WANTS_PAGE_SIZE);
+    ? filteredGroups
+    : filteredGroups.slice((wantsPage - 1) * WANTS_PAGE_SIZE, wantsPage * WANTS_PAGE_SIZE);
   const wantsHasMore = false;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="px-4 py-2 flex items-center gap-2 flex-wrap">
+      <div className="px-4 pt-2 pb-1">
+        <input
+          value={wantsSearch}
+          onChange={(e) => setWantsSearch(e.target.value)}
+          placeholder="Search artist, title, label, genre…"
+          className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
+          style={{ backgroundColor: "var(--bg-input)" }}
+        />
+      </div>
+      <div className="px-4 py-1 flex items-center gap-2 flex-wrap">
         <button
           onClick={onStartImport}
           disabled={isImporting}
@@ -751,6 +771,12 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           <div className="text-[10px] text-stone-600 mt-1">
             {wantlistImportJob.imported || 0} of {wantlistImportJob.total || "?"} wants imported
           </div>
+        </div>
+      )}
+
+      {wantsSearch && (
+        <div className="px-4 pb-1 text-[10px] text-stone-600">
+          {filteredGroups.length} of {allGroups.length} albums
         </div>
       )}
 
