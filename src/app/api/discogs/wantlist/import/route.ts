@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { createWantlistImportJob, runWantlistImportJob } from "@/lib/discogs/wantlist-job";
 
 export async function POST() {
@@ -8,8 +9,8 @@ export async function POST() {
 
   const job = await createWantlistImportJob(userId);
 
-  // Fire background job without awaiting
-  setTimeout(() => runWantlistImportJob(job.id), 0);
+  // Keep function alive until job completes, even after response is sent
+  waitUntil(runWantlistImportJob(job.id));
 
   return NextResponse.json({ job_id: job.id, status: "pending" }, { status: 202 });
 }

@@ -493,6 +493,29 @@ function buildTimeStats(sessions, records) {
   };
 }
 
+function computeStreak(sessions) {
+  if (!sessions.length) return 0;
+  const days = new Set(sessions.map(s => new Date(s.played_at).toLocaleDateString()));
+  const today = new Date().toLocaleDateString();
+  const yesterday = new Date(Date.now() - 86400000).toLocaleDateString();
+  if (!days.has(today) && !days.has(yesterday)) return 0;
+  let streak = 0;
+  let d = days.has(today) ? new Date() : new Date(Date.now() - 86400000);
+  while (days.has(d.toLocaleDateString())) {
+    streak++;
+    d = new Date(d.getTime() - 86400000);
+  }
+  return streak;
+}
+
+function streakBadge(streak) {
+  if (streak >= 30) return "True obsessive";
+  if (streak >= 14) return "Dedicated listener";
+  if (streak >= 7) return "Week warrior";
+  if (streak >= 3) return "On a roll";
+  return null;
+}
+
 function GenreTag({ genre, onClick, active }) {
   const cls = genreColor(genre || "");
   return (
@@ -545,8 +568,17 @@ function ArtistTag({ artist, discogsId }) {
 }
 
 // Feature 1: Wantlist components
-function WantReleaseRow({ release, onRemove }) {
+function WantReleaseRow({ release }) {
+  const [price, setPrice] = useState(null);
   const marketplaceUrl = `https://www.discogs.com/sell/release/${release.release_id}`;
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/discogs/wantlist/price/${release.release_id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled && data?.min_price != null) setPrice(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [release.release_id]);
   return (
     <a
       href={marketplaceUrl}
@@ -565,35 +597,48 @@ function WantReleaseRow({ release, onRemove }) {
         <div className="text-xs text-stone-400 truncate">
           {[release.year_pressed, release.label, release.format, release.notes].filter(Boolean).join(" · ")}
         </div>
-        <div className="text-[10px] text-stone-600 mt-0.5">↗ Discogs Marketplace</div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[10px] text-stone-600">↗ Discogs Marketplace</span>
+          {price && (
+            <span className="text-[10px] text-emerald-700">from ${price.min_price.toFixed(2)} {price.condition}</span>
+          )}
+        </div>
       </div>
-      {onRemove && (
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(release.release_id); }}
-          className="text-stone-700 hover:text-rose-500 text-sm shrink-0 transition-colors"
-          title="Remove"
-        >
-          ×
-        </button>
-      )}
     </a>
   );
 }
 
-function WantGroupRow({ group, expanded, onToggle, onRemove }) {
+function WantGroupRow({ group, expanded, onToggle }) {
   const rep = group.representative;
   const genres = (rep?.genres || "").split(",").map((g) => g.trim()).filter(Boolean);
   const marketplaceUrl = group.master_id
     ? `https://www.discogs.com/sell/list?master_id=${group.master_id}&ev=mb`
     : `https://www.discogs.com/sell/release/${rep?.release_id}`;
+  const longPressTimer = useRef(null);
+  const didLongPress = useRef(false);
+
+  function handlePointerDown() {
+    didLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      window.open(marketplaceUrl, "_blank");
+    }, 500);
+  }
+  function handlePointerUp() { clearTimeout(longPressTimer.current); }
+  function handlePointerLeave() { clearTimeout(longPressTimer.current); }
+  function handleClick() {
+    if (didLongPress.current) return;
+    onToggle();
+  }
 
   return (
     <div className="border border-stone-800/50 rounded-2xl overflow-hidden mb-2">
-      <a
-        href={marketplaceUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-3 px-3 py-2.5 hover:bg-stone-900/40 transition-colors"
+      <div
+        onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
+        className="flex items-center gap-3 px-3 py-2.5 hover:bg-stone-900/40 transition-colors cursor-pointer select-none"
       >
         <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-stone-800">
           {rep?.thumb ? (
@@ -622,19 +667,15 @@ function WantGroupRow({ group, expanded, onToggle, onRemove }) {
             )}
           </div>
         </div>
-        {/* Chevron: stops propagation so it only toggles, doesn't open marketplace */}
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
-          className="text-stone-600 hover:text-stone-300 text-xs shrink-0 p-2 -mr-1 transition-colors"
-          aria-label={expanded ? "Collapse" : "Expand pressings"}
-        >
-          {expanded ? "▲" : "▼"}
-        </button>
-      </a>
+        <div className="flex flex-col items-center gap-0.5 shrink-0 px-1">
+          <span className="text-stone-600 text-xs">{expanded ? "▲" : "▼"}</span>
+          <span className="text-stone-700 text-[9px]">↗</span>
+        </div>
+      </div>
       {expanded && group.releases.length > 0 && (
         <div className="px-3 pb-3 space-y-1.5 border-t border-stone-800/40 pt-2">
           {group.releases.map((r) => (
-            <WantReleaseRow key={r.release_id} release={r} onRemove={onRemove} />
+            <WantReleaseRow key={r.release_id} release={r} />
           ))}
         </div>
       )}
@@ -969,7 +1010,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   const heroIsUpgraded = heroBase && heroHi && heroHi !== heroBase;
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50">
+    <div className="fixed inset-x-0 bottom-0 top-16 bg-black/80 backdrop-blur-sm z-50">
       <button className="absolute inset-0" onClick={onClose} aria-label="Close" />
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col">
         <div
@@ -2866,6 +2907,7 @@ export default function VinylCrate() {
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
   const [activeDecade, setActiveDecade] = useState(new Set());
   const [activeFormat, setActiveFormat] = useState(null);
+  const [activeLabel, setActiveLabel] = useState(null);
   const [statFilterLabel, setStatFilterLabel] = useState(null);
   const [previousTab, setPreviousTab] = useState(null);
 
@@ -3043,7 +3085,7 @@ export default function VinylCrate() {
     }
   }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
 
-  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, showForSale]);
+  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, activeLabel, showForSale]);
 
   // Feature 1 — Load wantlist when Wants tab is first opened
   useEffect(() => {
@@ -3313,7 +3355,8 @@ export default function VinylCrate() {
     const matchesStyle = !activeStyles.size || getStyles(r).some((s) => activeStyles.has(s));
     const matchesDecade = !activeDecade.size || activeDecade.has(getDecade(r));
     const matchesFormat = !activeFormat || getFormat(r) === activeFormat;
-    return matchesSearch && matchesGenre && matchesStyle && matchesDecade && matchesFormat;
+    const matchesLabel = !activeLabel || (r.label || "").toLowerCase().includes(activeLabel.toLowerCase());
+    return matchesSearch && matchesGenre && matchesStyle && matchesDecade && matchesFormat && matchesLabel;
   });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -3352,20 +3395,37 @@ export default function VinylCrate() {
     return [...ds].sort();
   }, [pool]);
 
+  function scoreRecord(candidate, context) {
+    let score = 0;
+    const cGenres = getGenres(candidate);
+    const refGenres = context.refGenres || [];
+    score += cGenres.filter(g => refGenres.includes(g)).length * 2;
+    const cDecade = Math.floor((candidate.year_original || candidate.year_pressed || 0) / 10);
+    const refDecade = context.refDecade || 0;
+    if (cDecade && refDecade) {
+      if (cDecade === refDecade) score += 1;
+      else if (Math.abs(cDecade - refDecade) === 1) score += 0.5;
+    }
+    const cf = context.allFeatures?.[candidate.id];
+    const rf = context.refFeatures;
+    if (cf && rf) {
+      const energyDiff = Math.abs(cf.energy - rf.energy);
+      const tempoBucket = Math.abs((cf.tempo || 120) - (rf.tempo || 120)) / 60;
+      score += Math.max(0, 1 - energyDiff) * 1.5;
+      score += Math.max(0, 1 - tempoBucket) * 1.0;
+    }
+    if (context.recentlyPlayedIds?.has(candidate.id)) score *= 0.3;
+    return score;
+  }
+
   const getReco = useCallback(
     async (type) => {
       setRecoLoading(true);
       setRecoError("");
       setReco(null);
       try {
-        const today = new Date();
-        const month = today.toLocaleString("default", { month: "long" });
-        const day = today.getDate();
-        let ctx = "";
-        let fallbackPool = myRecords;
-
         if (type === "daily") {
-          // Fetch band member birth/death data from MusicBrainz (cached in Supabase)
+          // Try cultural/birthday hook first
           let artistMembers = {};
           try {
             const uniqueArtists = [...new Set(myRecords.filter(r => !r.is_compilation).map(r => r.artist).filter(Boolean))];
@@ -3384,7 +3444,7 @@ export default function VinylCrate() {
                 role: "user",
                 content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: "${hook.record.title}" by ${hook.record.artist} (${hook.record.year_original || hook.record.year_pressed || "?"}, ${(() => { const g = hook.record.genres || hook.record.genre || ""; const s = hook.record.styles || ""; return s ? `${g}/${s}` : g; })()}).\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}`,
               }],
-              120,
+              80,
               SYSTEM
             );
             const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
@@ -3400,69 +3460,114 @@ export default function VinylCrate() {
             return;
           }
 
-          // No hook fired — smart fallback: exclude recently played, cap at 60 records
+          // No hook — heuristic: score against recently played, exclude last 7 days
           const recentIds = new Set(
             Object.entries(lastPlayedDates)
               .filter(([, d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000)
               .map(([id]) => parseInt(id))
           );
-          fallbackPool = myRecords.filter((r) => !recentIds.has(r.id));
-          ctx = `Pick the record from this collection that most deserves a spin right now. Reason from the music itself — the artist, era, sound — not from the time of year.`;
+          const pool = myRecords.filter(r => !recentIds.has(r.id));
+          const refRecord = lastPlayed;
+          const context = {
+            refGenres: refRecord ? getGenres(refRecord) : [],
+            refDecade: refRecord ? Math.floor((refRecord.year_original || refRecord.year_pressed || 0) / 10) : 0,
+            refFeatures: refRecord ? spotifyFeatures[refRecord.id] : null,
+            allFeatures: spotifyFeatures,
+            recentlyPlayedIds: recentIds,
+          };
+          const scored = (pool.length ? pool : myRecords).map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
+          const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
+          const heuristicReason = `Chosen because it hasn't been played recently and fits the collection's sound.`;
+          const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
+          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist}. The reason it was chosen: ${heuristicReason}. Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
+          const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+          let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+          if (Array.isArray(parsed)) parsed = parsed[0];
+          if (!parsed?.reason) throw new Error("bad-schema");
+          setReco({ record: picked, reason: parsed.reason, label: "Today's Pick" });
+
         } else if (type === "random") {
-          ctx = "Pick one completely random record. Surprise me.";
-        } else if (type === "mood") {
-          ctx = `Pick the single best record for this mood: "${mood}"`;
-        } else {
-          const lpGenreStr = lastPlayed?.genres || lastPlayed?.genre || "";
-          const lpStyleStr = lastPlayed?.styles || "";
-          const lpDescriptor = lpStyleStr ? `${lpGenreStr}/${lpStyleStr}` : lpGenreStr;
-          ctx = `I just listened to "${lastPlayed?.title}" by ${lastPlayed?.artist} (${lastPlayed?.year_original || lastPlayed?.year_pressed}, ${lpDescriptor}). Pick the ideal next record.`;
+          // Weighted random: less-played records get higher weight
+          const weights = myRecords.map(r => 1 / ((playCounts[r.id] || 0) + 1));
+          const total = weights.reduce((a, b) => a + b, 0);
+          let rand = Math.random() * total;
+          let picked = myRecords[myRecords.length - 1];
+          for (let i = 0; i < myRecords.length; i++) {
+            rand -= weights[i];
+            if (rand <= 0) { picked = myRecords[i]; break; }
+          }
+          const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
+          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist} (${picked.year_original || picked.year_pressed || "?"}). The reason it was chosen: weighted random pick — less-played records had higher odds. Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
+          const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+          let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+          if (Array.isArray(parsed)) parsed = parsed[0];
+          if (!parsed?.reason) throw new Error("bad-schema");
+          setReco({ record: picked, reason: parsed.reason, label: "Random Pick" });
+
+        } else if (type === "next") {
+          if (!lastPlayed) { setRecoError("Log a play first to get a Next pick."); return; }
+          const context = {
+            refGenres: getGenres(lastPlayed),
+            refDecade: Math.floor((lastPlayed.year_original || lastPlayed.year_pressed || 0) / 10),
+            refFeatures: spotifyFeatures[lastPlayed.id],
+            allFeatures: spotifyFeatures,
+            recentlyPlayedIds: new Set(Object.entries(lastPlayedDates).filter(([,d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000).map(([id]) => parseInt(id))),
+          };
+          const candidates = myRecords.filter(r => r.id !== lastPlayed.id);
+          const scored = candidates.map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
+          const picked = scored[0]?.r || candidates[0];
+          if (!picked) { setRecoError("Not enough records to suggest a next pick."); return; }
+          const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
+          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist}. The reason it was chosen: it best matches the genre, era, and energy of the last played record ("${lastPlayed.title}" by ${lastPlayed.artist}). Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
+          const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+          let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+          if (Array.isArray(parsed)) parsed = parsed[0];
+          if (!parsed?.reason) throw new Error("bad-schema");
+          setReco({ record: picked, reason: parsed.reason, label: "Play Next" });
+
+        } else { // mood
+          // Parse mood into target features and score
+          const moodLower = (mood || "").toLowerCase();
+          const moodTargets = {
+            refGenres: [],
+            refDecade: 0,
+            refFeatures: null,
+            allFeatures: spotifyFeatures,
+            recentlyPlayedIds: new Set(),
+          };
+          // Genre hints from mood string
+          const genreKeywords = ["jazz", "rock", "folk", "classical", "electronic", "soul", "blues", "pop", "hip-hop", "metal", "country", "reggae", "funk"];
+          const matchedGenre = genreKeywords.find(g => moodLower.includes(g));
+          if (matchedGenre) moodTargets.refGenres = [matchedGenre.charAt(0).toUpperCase() + matchedGenre.slice(1)];
+          // Energy/valence hints
+          const energetic = ["energetic", "upbeat", "hype", "party", "dance", "fast"].some(k => moodLower.includes(k));
+          const mellow = ["mellow", "chill", "relax", "calm", "slow", "quiet", "peaceful"].some(k => moodLower.includes(k));
+          const melancholic = ["sad", "melancholic", "somber", "dark", "moody"].some(k => moodLower.includes(k));
+          if (energetic || mellow || melancholic) {
+            moodTargets.refFeatures = {
+              energy: energetic ? 0.8 : mellow ? 0.3 : 0.5,
+              valence: melancholic ? 0.25 : energetic ? 0.7 : 0.5,
+              tempo: energetic ? 140 : mellow ? 80 : 110,
+            };
+          }
+          const scored = myRecords.map(r => ({ r, s: scoreRecord(r, moodTargets) })).sort((a, b) => b.s - a.s);
+          const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
+          const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
+          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist}. The reason it was chosen: best match for the mood "${mood}" based on genre, energy, and feel. Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
+          const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+          let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+          if (Array.isArray(parsed)) parsed = parsed[0];
+          if (!parsed?.reason) throw new Error("bad-schema");
+          setReco({ record: picked, reason: parsed.reason, label: "Mood Match" });
         }
-
-        // Re-index to sequential 1-based IDs — prevents Claude from hallucinating a real DB ID.
-        const dailyPool = (type === "daily") ? fallbackPool : myRecords;
-        const sample = dailyPool.length > 60
-          ? [...dailyPool].sort(() => Math.random() - 0.5).slice(0, 60)
-          : dailyPool;
-        const indexMap = new Map();
-        const list = sample
-          .map((r, i) => {
-            indexMap.set(i + 1, r);
-            const genreStr = r.genres || r.genre || "";
-            const styleStr = r.styles || "";
-            const descriptor = styleStr ? `${genreStr}/${styleStr}` : genreStr;
-            return `id:${i + 1}|"${r.title}"|${r.artist}|${r.year_original || r.year_pressed || "?"}|${descriptor}${r.is_compilation ? " (comp)" : ""}`;
-          })
-          .join("\n");
-
-        const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-        const text = await callClaude(
-          [
-            {
-              role: "user",
-              content: `${ctx}\n\nCollection:\n${list}\n\nRespond ONLY with JSON: {"id":<number>,"reason":"<1-2 casual conversational sentences — why this record, why now>"}`,
-            },
-          ],
-          120,
-          SYSTEM
-        );
-        const parsed = extractJson(text);
-        const found = indexMap.get(parsed.id);
-        if (!found) throw new Error("not-found");
-        setReco({
-          record: found,
-          reason: parsed.reason,
-          label: { random: "Random Pick", daily: "Today's Pick", mood: "Mood Match", next: "Play Next" }[type],
-        });
       } catch (err) {
-        if (err.message === "not-found") setRecoError("Claude picked a record that isn't in your crate — try again.");
-        else if (err.message === "no-json" || err.message === "bad-schema") setRecoError("Got an unexpected response — try again.");
+        if (err.message === "bad-schema" || err.message === "no-json") setRecoError("Got an unexpected response — try again.");
         else setRecoError("Couldn't reach the AI — check your connection and try again.");
       } finally {
         setRecoLoading(false);
       }
     },
-    [myRecords, mood, lastPlayed, lastPlayedDates, playCounts]
+    [myRecords, mood, lastPlayed, lastPlayedDates, playCounts, spotifyFeatures]
   );
 
   async function handleDiscogsImport() {
@@ -3596,8 +3701,13 @@ export default function VinylCrate() {
     setActiveFormat(fmt); setActiveDecade(new Set()); setActiveGenres(new Set());
     setStatFilterLabel(fmt); setViewMode("drift"); setTab("crate");
   }
+  function drillByLabel(label) {
+    setPreviousTab(tab);
+    setActiveLabel(label); setActiveDecade(new Set()); setActiveGenres(new Set()); setActiveFormat(null);
+    setStatFilterLabel(label); setViewMode("drift"); setTab("crate");
+  }
   function clearStatFilter() {
-    setActiveDecade(new Set()); setActiveFormat(null); setActiveGenres(new Set()); setActiveStyles(new Set()); setStatFilterLabel(null);
+    setActiveDecade(new Set()); setActiveFormat(null); setActiveGenres(new Set()); setActiveStyles(new Set()); setActiveLabel(null); setStatFilterLabel(null);
     setPreviousTab(null);
   }
 
@@ -4525,8 +4635,19 @@ export default function VinylCrate() {
             const uniqueRecords = new Set(playSessions.map((s) => s.record_id)).size;
             const mostPlayedId = Object.entries(playCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
             const mostPlayed = mostPlayedId ? collection?.find((r) => String(r.id) === String(mostPlayedId)) : null;
+            const streak = computeStreak(playSessions);
+            const badge = streakBadge(streak);
             return (
               <>
+                {streak > 0 && (
+                  <div className="flex items-center gap-2 px-2.5 py-2 mb-3 rounded-xl bg-amber-900/15 border border-amber-900/25">
+                    <span className="text-lg">{streak >= 7 ? "🔥" : "⏺"}</span>
+                    <div>
+                      <span className="text-amber-300 text-sm font-medium">{streak} day streak</span>
+                      {badge && <span className="text-amber-900/80 text-xs ml-2">{badge}</span>}
+                    </div>
+                  </div>
+                )}
                 {totalPlays > 0 && (
                   <div className="grid grid-cols-3 gap-2 mb-4 mt-1">
                     <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
@@ -4805,6 +4926,38 @@ export default function VinylCrate() {
                     </div>
                   </div>
                 )}
+
+                {/* By Label */}
+                {(() => {
+                  const labels = {};
+                  myRecords.forEach(r => {
+                    const l = (r.label || "").trim();
+                    if (l) labels[l] = (labels[l] || 0) + 1;
+                  });
+                  const sortedLabels = Object.entries(labels).sort((a, b) => b[1] - a[1]).slice(0, 20);
+                  const maxLabelCount = Math.max(...sortedLabels.map(([,v]) => v), 1);
+                  if (sortedLabels.length === 0) return null;
+                  return (
+                    <div>
+                      <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">By Label</div>
+                      <div className="space-y-2">
+                        {sortedLabels.map(([label, count]) => (
+                          <button key={label} onClick={() => drillByLabel(label)} className="w-full flex items-center gap-3 group">
+                            <div className="text-stone-500 text-xs w-24 text-right shrink-0 truncate">{label}</div>
+                            <div className="flex-1 bg-stone-800/50 rounded-full h-5 overflow-hidden">
+                              <div
+                                className="h-full bg-stone-700/60 group-hover:bg-stone-600/80 rounded-full transition-all flex items-center justify-end pr-2"
+                                style={{ width: `${Math.max(8, (count / maxLabelCount) * 100)}%` }}
+                              >
+                                <span className="text-stone-300 text-xs">{count}</span>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Genre/Style Bubble Map */}
                 {(Object.keys(genres).length > 0 || Object.keys(styles).length > 0) && (() => {

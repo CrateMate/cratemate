@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { discogsRequest, mapCollectionRelease, DISCOGS_API } from "@/lib/discogs";
+import { logEvent } from "@/lib/analytics";
 
 function stripThumb<T extends Record<string, unknown>>(row: T): Omit<T, "thumb"> {
   const { thumb: _thumb, ...rest } = row as T & { thumb?: unknown };
@@ -311,6 +312,8 @@ export async function POST(request: Request) {
       .eq("user_id", userId);
     if (!orphanError) deduped = orphanIds.length;
   }
+
+  logEvent(userId, "import_complete", { imported, total: releases.length, bare_mode: bareMode });
 
   return NextResponse.json({
     imported,

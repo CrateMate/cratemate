@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { logEvent } from "@/lib/analytics";
 
 export async function GET() {
   const { userId } = await auth();
@@ -39,6 +40,8 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  logEvent(userId, "play_logged", { record_id });
 
   return NextResponse.json({ id: inserted?.id, played_at: inserted?.played_at || played_at });
 }

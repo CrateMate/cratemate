@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { discogsRequest, DISCOGS_API } from "@/lib/discogs";
+import { logEvent } from "@/lib/analytics";
 
 const JOB_TABLE = "wantlist_import_jobs";
 
@@ -126,6 +127,8 @@ export async function runWantlistImportJob(jobId: string) {
       .from(JOB_TABLE)
       .update({ status: "completed", updated_at: new Date().toISOString() })
       .eq("id", jobId);
+
+    logEvent(job.user_id, "wantlist_import_complete", { imported, total });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Wantlist import failed";
     await supabase

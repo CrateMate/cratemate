@@ -186,3 +186,41 @@ export async function upsertItunesArtCache(key: string, artUrl: string | null) {
 export function isItunesArtCacheFresh(row: ItunesArtCacheRow | null): boolean {
   return isFresh(row);
 }
+
+// ---------- Discogs price cache ----------
+
+type PriceCacheRow = {
+  release_id: number;
+  min_price?: number | null;
+  currency?: string | null;
+  condition?: string | null;
+  cached_at?: string | null;
+  expires_at?: string | null;
+};
+
+export async function getPriceCache(releaseId: number) {
+  const { data } = await supabase
+    .from("discogs_price_cache")
+    .select("*")
+    .eq("release_id", releaseId)
+    .single();
+  if (!data) return null;
+  return data as PriceCacheRow;
+}
+
+export async function upsertPriceCache(releaseId: number, payload: Omit<PriceCacheRow, "release_id" | "cached_at" | "expires_at">) {
+  const now = new Date().toISOString();
+  await supabase.from("discogs_price_cache").upsert(
+    {
+      ...payload,
+      release_id: releaseId,
+      cached_at: now,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    { onConflict: "release_id" }
+  );
+}
+
+export function isPriceCacheFresh(row: PriceCacheRow | null): boolean {
+  return isFresh(row);
+}
