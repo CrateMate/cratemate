@@ -3856,10 +3856,11 @@ export default function VinylCrate() {
     } catch { return null; }
   }
 
-  function computeTrailSuggestions(centerRecord, features) {
+  function computeTrailSuggestions(centerRecord, features, seenKeys = new Set()) {
     const centerKey = getCanonicalKey(centerRecord);
+    seenKeys.add(centerKey);
     const candidates = dedupeByAlbum(myRecords, playCounts)
-      .filter(r => getCanonicalKey(r) !== centerKey);
+      .filter(r => !seenKeys.has(getCanonicalKey(r)));
 
     // Resolve features: real Spotify data first, then genre-based estimate
     function resolveFeatures(r) {
@@ -3902,7 +3903,7 @@ export default function VinylCrate() {
     }
 
     const sorted = (dir) => [...candidates].sort((a, b) => score(b, dir) - score(a, dir));
-    const pickedKeys = new Set([centerKey]);
+    const pickedKeys = new Set(seenKeys);
 
     function pick(dir) {
       const best = sorted(dir).find(r => !pickedKeys.has(getCanonicalKey(r)));
@@ -3933,7 +3934,7 @@ export default function VinylCrate() {
         fetchAndCacheFeatures(record),
       ]);
       const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [record.id]: centerFeatures } : {}) };
-      setTrailSuggestions(computeTrailSuggestions(record, allFeatures));
+      setTrailSuggestions(computeTrailSuggestions(record, allFeatures, new Set([getCanonicalKey(record)])));
     } catch {
       setTrailError("Couldn't load suggestions — try again.");
     } finally {
@@ -3943,6 +3944,8 @@ export default function VinylCrate() {
 
   async function navigateTrail(record) {
     setTrailCenter(record);
+    // Compute the full history set synchronously before the state update applies
+    const nextSeenKeys = new Set([...trailHistory.map(r => getCanonicalKey(r)), getCanonicalKey(record)]);
     setTrailHistory(prev => [...prev, record]);
     setTrailSuggestions(null);
     setTrailSearch("");
@@ -3952,7 +3955,7 @@ export default function VinylCrate() {
     try {
       const centerFeatures = await fetchAndCacheFeatures(record);
       const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [record.id]: centerFeatures } : {}) };
-      setTrailSuggestions(computeTrailSuggestions(record, allFeatures));
+      setTrailSuggestions(computeTrailSuggestions(record, allFeatures, nextSeenKeys));
     } catch {
       setTrailError("Couldn't load suggestions — try again.");
     } finally {
