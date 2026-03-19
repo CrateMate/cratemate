@@ -450,6 +450,29 @@ function getFormat(record) {
   return "Other";
 }
 
+function getCanonicalKey(record) {
+  if (record.master_id) return `master:${record.master_id}`;
+  const title  = (record.title  || "").toLowerCase().trim().replace(/\s+/g, " ");
+  const artist = (record.artist || "").toLowerCase().trim().replace(/\s+/g, " ");
+  return `release:${title}||${artist}`;
+}
+
+function dedupeByAlbum(records, playCounts) {
+  const seen = new Map();
+  for (const r of records) {
+    const key = getCanonicalKey(r);
+    if (!seen.has(key)) {
+      seen.set(key, r);
+    } else {
+      // Keep the pressing with more plays as the representative
+      if ((playCounts[r.id] || 0) > (playCounts[seen.get(key).id] || 0)) {
+        seen.set(key, r);
+      }
+    }
+  }
+  return [...seen.values()];
+}
+
 function normFav(f) {
   return typeof f === "object" && f !== null ? f : { key: f, title: f };
 }
@@ -2016,20 +2039,32 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     return (now - new Date(last).getTime()) / (1000 * 60 * 60 * 24) >= RECENT_DAYS;
   };
 
-  // Priority 1: Release anniversaries — month-level (fires much more often than day-exact)
-  const anniversaryCandidates = myRecords.filter(
-    (r) => r.release_month === todayMonth
-  );
+  // Priority 1: Release anniversaries — month + milestone year only
+  const MILESTONE_YEARS = new Set([5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100]);
+  const anniversaryCandidates = myRecords.filter((r) => {
+    if (r.release_month !== todayMonth) return false;
+    const releaseYear = r.year_original || r.year_pressed;
+    if (!releaseYear) return false;
+    const age = todayYear - releaseYear;
+    return age > 0 && MILESTONE_YEARS.has(age);
+  });
   if (anniversaryCandidates.length > 0) {
-    const pick = anniversaryCandidates[Math.floor(Math.random() * anniversaryCandidates.length)];
-    const releaseYear = pick.year_original || pick.year_pressed;
-    const years = releaseYear ? todayYear - releaseYear : null;
+    // Prefer larger milestones (50 beats 10)
+    anniversaryCandidates.sort((a, b) => {
+      const ageA = todayYear - (a.year_original || a.year_pressed);
+      const ageB = todayYear - (b.year_original || b.year_pressed);
+      return ageB - ageA;
+    });
+    const topAge = todayYear - (anniversaryCandidates[0].year_original || anniversaryCandidates[0].year_pressed);
+    const topTier = anniversaryCandidates.filter(r =>
+      todayYear - (r.year_original || r.year_pressed) === topAge
+    );
+    const pick = topTier[Math.floor(Math.random() * topTier.length)];
+    const years = todayYear - (pick.year_original || pick.year_pressed);
     return {
       type: "anniversary",
       record: pick,
-      fact: years
-        ? `"${pick.title}" by ${pick.artist} was released ${years} year${years === 1 ? "" : "s"} ago this month.`
-        : `"${pick.title}" by ${pick.artist} was released this month.`,
+      fact: `"${pick.title}" by ${pick.artist} turns ${years} this month.`,
     };
   }
 
@@ -3546,7 +3581,7 @@ export default function VinylCrate() {
               .filter(([, d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000)
               .map(([id]) => parseInt(id))
           );
-          const pool = myRecords.filter(r => !recentIds.has(r.id));
+          const pool = dedupeByAlbum(myRecords, playCounts).filter(r => !recentIds.has(r.id));
           const refRecord = lastPlayed;
           const context = {
             refGenres: refRecord ? getGenres(refRecord) : [],
@@ -3555,7 +3590,8 @@ export default function VinylCrate() {
             allFeatures: spotifyFeatures,
             recentlyPlayedIds: recentIds,
           };
-          const scored = (pool.length ? pool : myRecords).map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
+          const deduped = dedupeByAlbum(myRecords, playCounts);
+          const scored = (pool.length ? pool : deduped).map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
           const heuristicReason = `Chosen because it hasn't been played recently and fits the collection's sound.`;
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
@@ -3568,13 +3604,14 @@ export default function VinylCrate() {
 
         } else if (type === "random") {
           // Weighted random: less-played records get higher weight. No Claude — instant result.
-          const weights = myRecords.map(r => 1 / ((playCounts[r.id] || 0) + 1));
+          const randomPool = dedupeByAlbum(myRecords, playCounts);
+          const weights = randomPool.map(r => 1 / ((playCounts[r.id] || 0) + 1));
           const total = weights.reduce((a, b) => a + b, 0);
           let rand = Math.random() * total;
-          let picked = myRecords[myRecords.length - 1];
-          for (let i = 0; i < myRecords.length; i++) {
+          let picked = randomPool[randomPool.length - 1];
+          for (let i = 0; i < randomPool.length; i++) {
             rand -= weights[i];
-            if (rand <= 0) { picked = myRecords[i]; break; }
+            if (rand <= 0) { picked = randomPool[i]; break; }
           }
           const plays = playCounts[picked.id] || 0;
           const reason = plays === 0
@@ -3591,7 +3628,7 @@ export default function VinylCrate() {
             allFeatures: spotifyFeatures,
             recentlyPlayedIds: new Set(Object.entries(lastPlayedDates).filter(([,d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000).map(([id]) => parseInt(id))),
           };
-          const candidates = myRecords.filter(r => r.id !== lastPlayed.id);
+          const candidates = dedupeByAlbum(myRecords, playCounts).filter(r => r.id !== lastPlayed.id);
           const scored = candidates.map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || candidates[0];
           if (!picked) { setRecoError("Not enough records to suggest a next pick."); return; }
@@ -3628,8 +3665,9 @@ export default function VinylCrate() {
               tempo: energetic ? 140 : mellow ? 80 : 110,
             };
           }
-          const scored = myRecords.map(r => ({ r, s: scoreRecord(r, moodTargets) })).sort((a, b) => b.s - a.s);
-          const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
+          const moodPool = dedupeByAlbum(myRecords, playCounts);
+          const scored = moodPool.map(r => ({ r, s: scoreRecord(r, moodTargets) })).sort((a, b) => b.s - a.s);
+          const picked = scored[0]?.r || moodPool[Math.floor(Math.random() * moodPool.length)];
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
           const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist}. The reason it was chosen: best match for the mood "${mood}" based on genre, energy, and feel. Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
           const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
@@ -3819,50 +3857,62 @@ export default function VinylCrate() {
   }
 
   function computeTrailSuggestions(centerRecord, features) {
-    const cf = features[centerRecord.id];
-    const candidates = myRecords.filter(r => r.id !== centerRecord.id);
+    const centerKey = getCanonicalKey(centerRecord);
+    const candidates = dedupeByAlbum(myRecords, playCounts)
+      .filter(r => getCanonicalKey(r) !== centerKey);
+
+    // Resolve features: real Spotify data first, then genre-based estimate
+    function resolveFeatures(r) {
+      return features[r.id] || estimateFeaturesFromRecord(r);
+    }
+
+    const cf = resolveFeatures(centerRecord);
 
     function score(r, direction) {
-      const rf = features[r.id];
-      if (cf && rf) {
-        const eDiff = rf.energy - cf.energy;
-        const tDiff = rf.tempo - cf.tempo;
-        const lDiff = (rf.loudness ?? 0.70) - (cf.loudness ?? 0.70);
-        if (direction === "windDown") {
-          // Want lower energy + lower tempo + quieter/more dynamic
-          return eDiff < 0 ? Math.abs(eDiff) * 1.5 + Math.max(0, -tDiff / 150) + Math.max(0, -lDiff) * 0.6 : eDiff - 1;
-        }
-        if (direction === "liftUp") {
-          // Want higher energy + higher tempo + louder
-          return eDiff > 0 ? eDiff * 1.5 + Math.max(0, tDiff / 150) + Math.max(0, lDiff) * 0.6 : eDiff - 1;
-        }
-        // sideways: similar energy + similar loudness (keep the amp at the same level), different genre/valence
-        const energyClose = 1 - Math.abs(eDiff);
-        const valenceDiff = Math.abs(rf.valence - cf.valence);
+      const rf = resolveFeatures(r);
+      const eDiff = rf.energy - cf.energy;
+      const tDiff = rf.tempo  - cf.tempo;
+      const lDiff = (rf.loudness ?? 0.70) - (cf.loudness ?? 0.70);
+
+      let s;
+      if (direction === "windDown") {
+        s = eDiff < 0
+          ? Math.abs(eDiff) * 1.5 + Math.max(0, -tDiff / 150) + Math.max(0, -lDiff) * 0.6
+          : eDiff - 1;
+      } else if (direction === "liftUp") {
+        s = eDiff > 0
+          ? eDiff * 1.5 + Math.max(0, tDiff / 150) + Math.max(0, lDiff) * 0.6
+          : eDiff - 1;
+      } else {
+        // sideways: similar energy + different genre/valence
+        const energyClose   = 1 - Math.abs(eDiff);
+        const valenceDiff   = Math.abs(rf.valence - cf.valence);
         const loudnessClose = 1 - Math.abs(lDiff);
-        const diffGenre = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.6 : 0;
-        return energyClose * 0.35 + valenceDiff * 0.25 + diffGenre + loudnessClose * 0.15;
+        const diffGenre     = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.6 : 0;
+        s = energyClose * 0.35 + valenceDiff * 0.25 + diffGenre + loudnessClose * 0.15;
       }
-      // Fallback: genre/decade heuristics only
-      const sameGenre = getGenres(r).some(g => getGenres(centerRecord).includes(g));
-      const sameDec = getDecade(r) === getDecade(centerRecord);
-      if (direction === "windDown") return sameGenre && !sameDec ? 0.4 : sameGenre ? 0.3 : 0.1;
-      if (direction === "liftUp") return sameGenre && !sameDec ? 0.4 : sameGenre ? 0.3 : 0.1;
-      return !sameGenre ? 0.6 : sameDec ? 0.1 : 0.3;
+
+      // Recency penalty: played in last 7 days → 30% score
+      const lastPlayed = lastPlayedDates[r.id];
+      if (lastPlayed) {
+        const daysSince = (Date.now() - new Date(lastPlayed).getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSince < 7) s *= 0.3;
+      }
+      return s;
     }
 
     const sorted = (dir) => [...candidates].sort((a, b) => score(b, dir) - score(a, dir));
-    const pickedIds = new Set();
+    const pickedKeys = new Set([centerKey]);
 
     function pick(dir) {
-      const best = sorted(dir).find(r => !pickedIds.has(r.id));
-      if (best) pickedIds.add(best.id);
+      const best = sorted(dir).find(r => !pickedKeys.has(getCanonicalKey(r)));
+      if (best) pickedKeys.add(getCanonicalKey(best));
       return best || null;
     }
 
     return {
       windDown: pick("windDown"),
-      liftUp: pick("liftUp"),
+      liftUp:   pick("liftUp"),
       sideways: pick("sideways"),
     };
   }
