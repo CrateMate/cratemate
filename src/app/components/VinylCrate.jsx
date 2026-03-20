@@ -3357,6 +3357,9 @@ export default function VinylCrate() {
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
   const [spotifyExpanded, setSpotifyExpanded] = useState(true);
   const [recoFiltersExpanded, setRecoFiltersExpanded] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => { try { return !localStorage.getItem("cratemate_onboarded"); } catch { return false; } }
+  );
   const [screensaverEnabled, setScreensaverEnabled] = useState(
     () => typeof window === "undefined" || localStorage.getItem("cratemate_screensaver") !== "0"
   );
@@ -4503,6 +4506,86 @@ export default function VinylCrate() {
           Loading your crate...
         </div>
         {collectionError && <div className="text-red-500/70 text-sm mt-2">{collectionError}</div>}
+      </div>
+    );
+  }
+
+  function dismissOnboarding() {
+    try { localStorage.setItem("cratemate_onboarded", "1"); } catch {}
+    setShowOnboarding(false);
+  }
+
+  const forceOnboarding = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("onboarding") === "preview";
+
+  if ((collection.length === 0 && showOnboarding) || forceOnboarding) {
+    return (
+      <div
+        className="h-dvh flex flex-col items-center justify-center px-8 text-center max-w-md mx-auto"
+        style={{ background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)", fontFamily: "'DM Sans',sans-serif" }}
+      >
+        <img src="/icon-192.png" alt="CrateMate" style={{ width: 64, height: 64, borderRadius: "50%", marginBottom: 24 }} />
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 36, lineHeight: 1 }} className="text-amber-50 mb-1">
+          CrateMate
+        </div>
+        <div className="text-stone-500 text-sm mb-10">
+          Your vinyl. Your story.
+        </div>
+
+        <div className="w-full space-y-3 mb-10 text-left">
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <span className="text-lg leading-none mt-0.5">🗂️</span>
+            <div>
+              <div className="text-amber-100 text-sm font-medium">Import your collection</div>
+              <div className="text-stone-500 text-xs mt-0.5">Sync from Discogs or add records manually</div>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <span className="text-lg leading-none mt-0.5">🎯</span>
+            <div>
+              <div className="text-amber-100 text-sm font-medium">Get vinyl recommendations</div>
+              <div className="text-stone-500 text-xs mt-0.5">Discover records that match your taste and listening habits</div>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <span className="text-lg leading-none mt-0.5">📖</span>
+            <div>
+              <div className="text-amber-100 text-sm font-medium">Track your listening</div>
+              <div className="text-stone-500 text-xs mt-0.5">Log plays, build streaks, and share your sessions</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full flex flex-col gap-3">
+          {discogsConnected ? (
+            <button
+              onClick={handleDiscogsImport}
+              disabled={importLoading}
+              className="w-full py-3.5 rounded-xl bg-amber-800/60 border border-amber-700/40 text-amber-100 font-medium text-sm disabled:opacity-40 hover:bg-amber-800/80 transition-colors"
+            >
+              {importLoading ? "Importing…" : "Import from Discogs"}
+            </button>
+          ) : (
+            <a
+              href="/api/discogs/auth"
+              className="w-full py-3.5 rounded-xl bg-amber-800/60 border border-amber-700/40 text-amber-100 font-medium text-sm text-center block hover:bg-amber-800/80 transition-colors"
+            >
+              Connect Discogs
+            </a>
+          )}
+          <button
+            onClick={() => { dismissOnboarding(); setShowAddModal(true); }}
+            className="w-full py-3.5 rounded-xl border border-stone-700 text-stone-300 font-medium text-sm hover:border-stone-500 hover:text-stone-100 transition-colors"
+          >
+            + Add a record manually
+          </button>
+        </div>
+
+        <button
+          onClick={dismissOnboarding}
+          className="mt-6 text-stone-600 text-xs hover:text-stone-400 transition-colors"
+        >
+          Explore first →
+        </button>
       </div>
     );
   }
