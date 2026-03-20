@@ -1367,7 +1367,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   );
 }
 
-export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onShowToast }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onShowToast, screensaverEnabled = true, onToggleScreensaver }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -1382,10 +1382,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   const hexLongPressTimer = useRef(null);
   const hexLongPressDidFire = useRef(false);
 
-  // Screensaver (idle auto-pan)
-  const [screensaverEnabled, setScreensaverEnabled] = useState(
-    () => typeof window === "undefined" || localStorage.getItem("cratemate_screensaver") !== "0"
-  );
+  // Screensaver (idle auto-pan) — state is lifted to parent VinylCrate
   const screensaverEnabledRef = useRef(screensaverEnabled);
   useEffect(() => { screensaverEnabledRef.current = screensaverEnabled; }, [screensaverEnabled]);
   const idleTimerRef = useRef(null);
@@ -1590,13 +1587,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   }
 
   function toggleScreensaver() {
-    setScreensaverEnabled(prev => {
-      const next = !prev;
-      localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
-      if (!next) stopScreensaver();
-      else resetIdleTimer();
-      return next;
-    });
+    if (onToggleScreensaver) onToggleScreensaver();
   }
 
   function onPointerDown(e) {
@@ -3331,6 +3322,9 @@ export default function VinylCrate() {
   const [statsSubTab, setStatsSubTab] = useState("listening");
   const [recoFilterGenres, setRecoFilterGenres] = useState(new Set());
   const [recoFilterDecades, setRecoFilterDecades] = useState(new Set());
+  const [screensaverEnabled, setScreensaverEnabled] = useState(
+    () => typeof window === "undefined" || localStorage.getItem("cratemate_screensaver") !== "0"
+  );
 
   const [playCounts, setPlayCounts] = useState({});
   const [lastPlayedDates, setLastPlayedDates] = useState({});
@@ -4744,6 +4738,12 @@ export default function VinylCrate() {
                 }}
                 onLogPlay={logPlay}
                 onShowToast={showPlayToast}
+                screensaverEnabled={screensaverEnabled}
+                onToggleScreensaver={() => {
+                  const next = !screensaverEnabled;
+                  localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
+                  setScreensaverEnabled(next);
+                }}
               />
               {/* Top-left: back to list + share */}
               <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
