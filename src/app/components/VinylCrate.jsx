@@ -3367,9 +3367,7 @@ export default function VinylCrate() {
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
   const [spotifyExpanded, setSpotifyExpanded] = useState(true);
   const [recoFiltersExpanded, setRecoFiltersExpanded] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(
-    () => { try { return !localStorage.getItem("cratemate_onboarded"); } catch { return false; } }
-  );
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const [seenHints, setSeenHints] = useState(() => {
     try { return JSON.parse(localStorage.getItem("cratemate_hints") || "{}"); } catch { return {}; }
   });
@@ -4529,7 +4527,6 @@ export default function VinylCrate() {
   }
 
   function dismissOnboarding() {
-    try { localStorage.setItem("cratemate_onboarded", "1"); } catch {}
     setShowOnboarding(false);
   }
 
