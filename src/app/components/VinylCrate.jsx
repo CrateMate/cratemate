@@ -1384,7 +1384,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
 
   // Screensaver (idle auto-pan)
   const [screensaverEnabled, setScreensaverEnabled] = useState(
-    () => localStorage.getItem("cratemate_screensaver") !== "0"
+    () => typeof window === "undefined" || localStorage.getItem("cratemate_screensaver") !== "0"
   );
   const screensaverEnabledRef = useRef(screensaverEnabled);
   useEffect(() => { screensaverEnabledRef.current = screensaverEnabled; }, [screensaverEnabled]);
