@@ -3002,13 +3002,13 @@ function sessionDurationLabel(playCount, listeningSecs) {
 
 function loadImgForCanvas(url) {
   if (!url) return Promise.resolve(null);
+  const proxied = `/api/proxy-image?url=${encodeURIComponent(url)}`;
   return new Promise(resolve => {
     const img = new Image();
-    const timer = setTimeout(() => resolve(null), 4000);
+    const timer = setTimeout(() => resolve(null), 6000);
     img.onload = () => { clearTimeout(timer); resolve(img); };
     img.onerror = () => { clearTimeout(timer); resolve(null); };
-    img.crossOrigin = 'anonymous';
-    img.src = url;
+    img.src = proxied;
   });
 }
 
@@ -3026,6 +3026,25 @@ function canvasRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// Returns honeycomb positions sorted center-outward, matching HoneycombView layout
+function honeycombPositions(count, BASE_SIZE) {
+  const COL_STEP = BASE_SIZE * 0.76;
+  const ROW_STEP = BASE_SIZE * 0.88;
+  const CIRCLE_RADIUS = BASE_SIZE * 3.2;
+  const RANGE = 6;
+  const positions = [];
+  for (let col = -RANGE; col <= RANGE; col++) {
+    for (let row = -RANGE; row <= RANGE; row++) {
+      const px = col * COL_STEP;
+      const py = row * ROW_STEP + (((col % 2) + 2) % 2 === 1 ? ROW_STEP / 2 : 0);
+      const dist = Math.hypot(px, py);
+      if (dist <= CIRCLE_RADIUS) positions.push({ px, py, dist });
+    }
+  }
+  positions.sort((a, b) => a.dist - b.dist);
+  return positions.slice(0, count);
+}
+
 async function generateCrateStory(session, username) {
   const W = 1080, H = 1920;
   const canvas = document.createElement('canvas');
@@ -3033,90 +3052,116 @@ async function generateCrateStory(session, username) {
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  // Background
-  ctx.fillStyle = '#0d0d0d';
-  ctx.fillRect(0, 0, W, H);
-
-  // Warm vignette from center-top
-  const grad = ctx.createRadialGradient(W / 2, H * 0.3, 0, W / 2, H * 0.3, W * 0.9);
-  grad.addColorStop(0, 'rgba(40,28,16,0.55)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
-
   const records = session.records;
-  const isSingle = records.length === 1;
+  const count = Math.min(records.length, 19);
+  const isSingle = count === 1;
 
-  // Load cover images (iTunes URLs only — CORS-friendly; fall back to placeholder)
-  const artUrls = records.slice(0, 9).map(r => _artCache.get(r.id) || null);
+  // Background
+  ctx.fillStyle = '#0c0c0c';
+  ctx.fillRect(0, 0, W, H);
+
+  // Load covers via proxy (handles both Discogs and iTunes URLs)
+  const artUrls = records.slice(0, count).map(r =>
+    (_artCache.get(r.id) || '') || r.thumb || null
+  );
   const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
 
-  let coverBottomY;
+  // ── Honeycomb layout ────────────────────────────────────────────────────────
+  const BASE_SIZE = isSingle ? 700 : count <= 3 ? 310 : count <= 7 ? 250 : count <= 12 ? 210 : 175;
+  const positions = honeycombPositions(count, BASE_SIZE);
+  const maxDist = positions.length > 1 ? positions[positions.length - 1].dist : 1;
 
-  if (isSingle) {
-    const size = 800;
-    const x = (W - size) / 2;
-    const y = 220;
-    const img = imgs[0];
+  // Honeycomb center: upper portion of the canvas
+  const honeyCenterX = W / 2;
+  const honeyCenterY = isSingle ? 640 : 620;
+
+  // Warm radial glow behind the honeycomb
+  const glow = ctx.createRadialGradient(honeyCenterX, honeyCenterY, 0, honeyCenterX, honeyCenterY, BASE_SIZE * (isSingle ? 0.8 : 3));
+  glow.addColorStop(0, 'rgba(50,32,10,0.7)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw outer cells first so center appears on top (matches HoneycombView z-index logic)
+  const drawOrder = positions.map((pos, i) => ({ pos, i })).sort((a, b) => b.pos.dist - a.pos.dist);
+
+  for (const { pos, i } of drawOrder) {
+    const scaleFactor = isSingle ? 1 : 0.68 + 0.38 * (1 - pos.dist / maxDist);
+    const drawSize = Math.round(BASE_SIZE * scaleFactor);
+    const x = Math.round(honeyCenterX + pos.px - drawSize / 2);
+    const y = Math.round(honeyCenterY + pos.py - drawSize / 2);
+    const radius = Math.round(drawSize * 0.09);
+    const img = imgs[i];
+    const genre = getGenres(records[i])[0] || '';
+    const genreHex = getGenrePalette(genre).hex;
+    const rgb = hexToRgb(genreHex);
+
+    // Genre-color glow ring (matches HoneycombView box-shadow)
+    ctx.save();
+    ctx.shadowColor = `rgba(${rgb},0.55)`;
+    ctx.shadowBlur = Math.round(drawSize * 0.12);
+    canvasRoundRect(ctx, x, y, drawSize, drawSize, radius);
+    ctx.strokeStyle = `rgba(${rgb},0.32)`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+
+    // Cover image or dark placeholder
+    ctx.save();
+    canvasRoundRect(ctx, x, y, drawSize, drawSize, radius);
     if (img) {
-      ctx.save();
-      canvasRoundRect(ctx, x, y, size, size, 28);
       ctx.clip();
-      ctx.drawImage(img, x, y, size, size);
-      ctx.restore();
+      ctx.drawImage(img, x, y, drawSize, drawSize);
     } else {
       ctx.fillStyle = '#1c1814';
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // For single record: title + artist overlay (matches isFocused overlay)
+    if (isSingle) {
       ctx.save();
-      canvasRoundRect(ctx, x, y, size, size, 28);
+      canvasRoundRect(ctx, x, y + drawSize * 0.55, drawSize, drawSize * 0.45, radius);
+      ctx.fillStyle = 'rgba(0,0,0,0)';
       ctx.fill();
       ctx.restore();
-    }
-    coverBottomY = y + size + 64;
-
-    // Title
-    ctx.fillStyle = '#fef9f0';
-    ctx.textAlign = 'center';
-    ctx.font = `bold 56px Georgia, serif`;
-    const title = records[0].title || '';
-    ctx.fillText(title.length > 32 ? title.slice(0, 30) + '…' : title, W / 2, coverBottomY + 60);
-    // Artist
-    ctx.fillStyle = '#78716c';
-    ctx.font = `40px Georgia, serif`;
-    const artist = records[0].artist || '';
-    ctx.fillText(artist.length > 36 ? artist.slice(0, 34) + '…' : artist, W / 2, coverBottomY + 116);
-    coverBottomY += 160;
-  } else {
-    const count = Math.min(records.length, 9);
-    const cols = count <= 3 ? count : 3;
-    const rows = Math.ceil(count / cols);
-    const margin = 60;
-    const gap = 18;
-    const coverSize = Math.floor((W - 2 * margin - (cols - 1) * gap) / cols);
-    const gridW = cols * coverSize + (cols - 1) * gap;
-    const startX = Math.floor((W - gridW) / 2);
-    const startY = 220;
-
-    for (let i = 0; i < count; i++) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = startX + col * (coverSize + gap);
-      const y = startY + row * (coverSize + gap);
-      const img = imgs[i];
+      const overlayGrad = ctx.createLinearGradient(0, y + drawSize * 0.45, 0, y + drawSize);
+      overlayGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      overlayGrad.addColorStop(1, 'rgba(0,0,0,0.78)');
       ctx.save();
-      canvasRoundRect(ctx, x, y, coverSize, coverSize, 18);
-      if (img) {
-        ctx.clip();
-        ctx.drawImage(img, x, y, coverSize, coverSize);
-      } else {
-        ctx.fillStyle = '#1c1814';
-        ctx.fill();
-      }
+      canvasRoundRect(ctx, x, y, drawSize, drawSize, radius);
+      ctx.clip();
+      ctx.fillStyle = overlayGrad;
+      ctx.fillRect(x, y, drawSize, drawSize);
       ctx.restore();
     }
-    coverBottomY = startY + rows * (coverSize + gap) - gap + 64;
   }
 
-  // Stats line
+  // Single record: title + artist below the cover
+  let textStartY;
+  if (isSingle) {
+    const pos = positions[0];
+    const drawSize = BASE_SIZE;
+    textStartY = Math.round(honeyCenterY + pos.py + drawSize / 2) + 56;
+    ctx.fillStyle = '#fef9f0';
+    ctx.textAlign = 'center';
+    ctx.font = `bold 58px Georgia, serif`;
+    const title = records[0].title || '';
+    ctx.fillText(title.length > 30 ? title.slice(0, 28) + '…' : title, W / 2, textStartY);
+    ctx.fillStyle = '#78716c';
+    ctx.font = `40px Georgia, serif`;
+    ctx.fillText((records[0].artist || '').slice(0, 36), W / 2, textStartY + 60);
+    textStartY += 130;
+  } else {
+    // Estimate bottom of the honeycomb cluster
+    const bottomMostY = Math.max(...positions.map(pos => {
+      const scaleFactor = 0.68 + 0.38 * (1 - pos.dist / maxDist);
+      return honeyCenterY + pos.py + (BASE_SIZE * scaleFactor) / 2;
+    }));
+    textStartY = Math.round(bottomMostY) + 56;
+  }
+
+  // ── Stats line ──────────────────────────────────────────────────────────────
   const genres = [...new Set(records.flatMap(r => getGenres(r)))].slice(0, 3);
   const durationStr = session.listeningSecs != null ? formatListeningTime(session.listeningSecs) : null;
   const statsParts = [];
@@ -3127,10 +3172,12 @@ async function generateCrateStory(session, username) {
   ctx.fillStyle = '#a8a29e';
   ctx.font = `38px Georgia, serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(statsParts.join('  ·  '), W / 2, coverBottomY + 44);
-  let nextY = coverBottomY + 120;
+  // Wrap stats if too long
+  const statsLine = statsParts.join('  ·  ');
+  ctx.fillText(statsLine.length > 48 ? statsLine.slice(0, 46) + '…' : statsLine, W / 2, textStartY + 40);
+  let nextY = textStartY + 110;
 
-  // Hearted tracks from this session
+  // ── Hearted tracks ──────────────────────────────────────────────────────────
   const hearted = records.flatMap(r =>
     (r.favorite_tracks || []).map(ft => {
       const t = typeof ft === 'object' ? ft : { key: ft, title: ft };
@@ -3138,38 +3185,37 @@ async function generateCrateStory(session, username) {
     }).filter(Boolean)
   );
 
-  if (hearted.length > 0) {
+  if (hearted.length > 0 && nextY < H - 280) {
     ctx.fillStyle = '#fb7185';
     ctx.font = `bold 38px Georgia, serif`;
     ctx.fillText('♥  Loved this session', W / 2, nextY);
-    nextY += 64;
+    nextY += 60;
     ctx.fillStyle = '#a8a29e';
     ctx.font = `34px Georgia, serif`;
     for (const line of hearted.slice(0, 4)) {
+      if (nextY > H - 220) break;
       ctx.fillText(line.length > 44 ? line.slice(0, 42) + '…' : line, W / 2, nextY);
-      nextY += 52;
+      nextY += 50;
     }
-    nextY += 20;
   }
 
-  // Divider
-  ctx.strokeStyle = '#2c2622';
+  // ── Branding ────────────────────────────────────────────────────────────────
+  ctx.strokeStyle = '#262220';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(80, H - 140);
-  ctx.lineTo(W - 80, H - 140);
+  ctx.moveTo(80, H - 130);
+  ctx.lineTo(W - 80, H - 130);
   ctx.stroke();
 
-  // Crate URL + branding
   ctx.textAlign = 'center';
   if (username) {
     ctx.fillStyle = '#57534e';
-    ctx.font = `32px Georgia, serif`;
-    ctx.fillText(`cratemate.com/crate/${username}`, W / 2, H - 96);
+    ctx.font = `30px Georgia, serif`;
+    ctx.fillText(`cratemate.com/crate/${username}`, W / 2, H - 86);
   }
   ctx.fillStyle = '#44403c';
-  ctx.font = `bold 30px Georgia, serif`;
-  ctx.fillText('CrateMate', W / 2, H - 52);
+  ctx.font = `bold 28px Georgia, serif`;
+  ctx.fillText('CrateMate', W / 2, H - 46);
 
   return canvas;
 }
