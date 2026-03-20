@@ -3267,6 +3267,7 @@ export default function VinylCrate() {
   const toggleStyle = (s) =>
     setActiveStyles((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
   const [bubbleView, setBubbleView] = useState("genres");
+  const [statsSubTab, setStatsSubTab] = useState("listening");
 
   const [playCounts, setPlayCounts] = useState({});
   const [lastPlayedDates, setLastPlayedDates] = useState({});
@@ -5292,129 +5293,204 @@ export default function VinylCrate() {
 
             return (
               <div className="space-y-6 pt-2">
-                {/* Section: Listening */}
-                <div className="flex items-center gap-3">
-                  <div className="text-xs uppercase tracking-widest text-stone-600">Listening</div>
-                  <div className="flex-1 border-t border-stone-800/50" />
+                {/* Subtab pills */}
+                <div className="flex gap-1.5">
+                  {[["listening", "◷ Listening"], ["collection", "◎ Collection"]].map(([id, label]) => (
+                    <button
+                      key={id}
+                      onClick={() => setStatsSubTab(id)}
+                      className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                        statsSubTab === id
+                          ? "bg-amber-900/25 text-amber-400 border-amber-800/35"
+                          : "text-stone-500 border-stone-800/50 hover:text-stone-300"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-                {/* Identity labels */}
-                {totalPlays >= 5 && (
-                  <div className="flex gap-2">
-                    <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
-                      <div className="text-xl">{nightPlays > dayPlays ? "🌙" : "☀"}</div>
-                      <div className="text-amber-300 text-xs font-medium mt-1">{nightPlays > dayPlays ? "Night Owl" : "Early Bird"}</div>
-                    </div>
-                    <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
-                      <div className="text-xl">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "🎉" : "📅"}</div>
-                      <div className="text-amber-300 text-xs font-medium mt-1">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "Weekend Warrior" : "Daily Listener"}</div>
-                    </div>
-                  </div>
-                )}
 
-                {/* Listening time */}
-                {(weekListeningLabel || totalListeningLabel) && (
-                  <div className="flex gap-2">
-                    {weekListeningLabel && (
-                      <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
-                        <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{weekListeningLabel}</div>
-                        <div className="text-stone-500 text-xs mt-0.5">this week</div>
-                      </div>
-                    )}
-                    {totalListeningLabel && (
-                      <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
-                        <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{totalListeningLabel}</div>
-                        <div className="text-stone-500 text-xs mt-0.5">all time</div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 2x2 stats grid */}
-                {totalPlays > 0 && (
+                {/* ── Listening subtab ── */}
+                {statsSubTab === "listening" && (
                   <>
-                  <div className="grid grid-cols-2 gap-2 mb-2 mt-1">
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Total Plays</div>
-                      <div className="text-stone-200 text-sm font-medium">{totalPlays}</div>
-                    </div>
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Listening Time</div>
-                      <div className="text-stone-200 text-sm font-medium">{totalListeningSecs > 0 ? formatListeningTime(totalListeningSecs) : "—"}</div>
-                    </div>
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Current Streak</div>
-                      <div className="text-stone-200 text-sm font-medium">{streak > 0 ? `${streak}d` : "—"}</div>
-                    </div>
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Longest Streak</div>
-                      <div className="text-stone-200 text-sm font-medium">{longestStreak > 0 ? `${longestStreak}d` : "—"}</div>
-                    </div>
-                  </div>
+                    {totalPlays === 0 && (
+                      <div className="text-stone-600 text-sm text-center py-16">No plays logged yet.</div>
+                    )}
 
-                  {/* Most Played */}
-                  {topPlayed.length > 0 && (
-                    <div className="mb-4">
-                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Most Played</div>
-                      <div className="space-y-1.5">
-                        {topPlayed.map(({ record: r, count }) => (
-                          <div key={r.id} className="flex items-center gap-2.5">
-                            <CoverArt record={r} size={32} />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
-                              <div className="mt-0.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
-                                <div className="h-full rounded-full bg-amber-700/60" style={{ width: `${Math.round((count / maxPlays) * 100)}%` }} />
-                              </div>
-                            </div>
-                            <div className="text-stone-600 text-xs shrink-0 w-6 text-right">{count}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Genre Mix (play-weighted) */}
-                  {topPlayedGenres.length > 0 && (
-                    <div className="mb-4">
-                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Genre Mix</div>
-                      <div className="space-y-1.5">
-                        {topPlayedGenres.map(([genre, count]) => (
-                          <div key={genre} className="flex items-center gap-2.5">
-                            <div className="text-stone-500 text-xs w-20 shrink-0 truncate">{genre}</div>
-                            <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
-                              <div className="h-full rounded-full bg-stone-500/70" style={{ width: `${Math.round((count / maxGenrePlays) * 100)}%` }} />
-                            </div>
-                            <div className="text-stone-700 text-xs shrink-0 w-6 text-right">{count}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Your Week */}
-                  <div className="mb-4">
-                    <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Your Week</div>
-                    <div className="flex items-end gap-1.5 h-12">
-                      {byDow.map((count, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                          <div className="w-full flex flex-col justify-end rounded-sm bg-stone-800/60" style={{ height: 32 }}>
-                            <div
-                              className="w-full rounded-sm bg-amber-800/50"
-                              style={{ height: `${Math.round((count / maxDow) * 100)}%` }}
-                            />
-                          </div>
-                          <div className="text-stone-700 text-[10px]">{dowLabels[i]}</div>
+                    {/* Identity labels */}
+                    {totalPlays >= 5 && (
+                      <div className="flex gap-2">
+                        <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
+                          <div className="text-xl">{nightPlays > dayPlays ? "🌙" : "☀"}</div>
+                          <div className="text-amber-300 text-xs font-medium mt-1">{nightPlays > dayPlays ? "Night Owl" : "Early Bird"}</div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                        <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
+                          <div className="text-xl">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "🎉" : "📅"}</div>
+                          <div className="text-amber-300 text-xs font-medium mt-1">{weekendPlays / Math.max(totalPlays,1) > 0.4 ? "Weekend Warrior" : "Daily Listener"}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Listening time */}
+                    {(weekListeningLabel || totalListeningLabel) && (
+                      <div className="flex gap-2">
+                        {weekListeningLabel && (
+                          <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
+                            <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{weekListeningLabel}</div>
+                            <div className="text-stone-500 text-xs mt-0.5">this week</div>
+                          </div>
+                        )}
+                        {totalListeningLabel && (
+                          <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
+                            <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{totalListeningLabel}</div>
+                            <div className="text-stone-500 text-xs mt-0.5">all time</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 2x2 stats grid */}
+                    {totalPlays > 0 && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                          <div className="text-stone-600 text-xs mb-0.5">Total Plays</div>
+                          <div className="text-stone-200 text-sm font-medium">{totalPlays}</div>
+                        </div>
+                        <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                          <div className="text-stone-600 text-xs mb-0.5">Listening Time</div>
+                          <div className="text-stone-200 text-sm font-medium">{totalListeningSecs > 0 ? formatListeningTime(totalListeningSecs) : "—"}</div>
+                        </div>
+                        <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                          <div className="text-stone-600 text-xs mb-0.5">Current Streak</div>
+                          <div className="text-stone-200 text-sm font-medium">{streak > 0 ? `${streak}d` : "—"}</div>
+                        </div>
+                        <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                          <div className="text-stone-600 text-xs mb-0.5">Longest Streak</div>
+                          <div className="text-stone-200 text-sm font-medium">{longestStreak > 0 ? `${longestStreak}d` : "—"}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Most Played */}
+                    {topPlayed.length > 0 && (
+                      <div>
+                        <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Most Played</div>
+                        <div className="space-y-1.5">
+                          {topPlayed.map(({ record: r, count }) => (
+                            <div key={r.id} className="flex items-center gap-2.5">
+                              <CoverArt record={r} size={32} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
+                                <div className="mt-0.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                                  <div className="h-full rounded-full bg-amber-700/60" style={{ width: `${Math.round((count / maxPlays) * 100)}%` }} />
+                                </div>
+                              </div>
+                              <div className="text-stone-600 text-xs shrink-0 w-6 text-right">{count}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Genre Mix (play-weighted) */}
+                    {topPlayedGenres.length > 0 && (
+                      <div>
+                        <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Genre Mix</div>
+                        <div className="space-y-1.5">
+                          {topPlayedGenres.map(([genre, count]) => (
+                            <div key={genre} className="flex items-center gap-2.5">
+                              <div className="text-stone-500 text-xs w-20 shrink-0 truncate">{genre}</div>
+                              <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                                <div className="h-full rounded-full bg-stone-500/70" style={{ width: `${Math.round((count / maxGenrePlays) * 100)}%` }} />
+                              </div>
+                              <div className="text-stone-700 text-xs shrink-0 w-6 text-right">{count}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* When You Listen + Day of Week */}
+                    {totalPlays > 0 && (
+                      <>
+                        <div>
+                          <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">When You Listen</div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {timeSlots.map(({ label, icon }, idx) => (
+                              <div key={label} className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                                <div className="text-lg">{icon}</div>
+                                <div className="mt-1 h-8 flex items-end justify-center">
+                                  <div
+                                    className="w-4 bg-amber-800/60 rounded-sm"
+                                    style={{ height: `${Math.max(4, (slotCounts[idx] / maxSlot) * 32)}px` }}
+                                  />
+                                </div>
+                                <div className="text-stone-500 text-[10px] mt-1">{label}</div>
+                                <div className="text-stone-400 text-xs">{slotCounts[idx]}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Day of Week</div>
+                          <div className="flex items-end gap-1 h-16">
+                            {byDow.map((count, i) => (
+                              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                                <div
+                                  className="w-full rounded-sm"
+                                  style={{
+                                    height: `${Math.max(4, (count / maxDow) * 48)}px`,
+                                    background: i === 0 || i === 6 ? "rgba(180,100,30,0.6)" : "rgba(100,100,100,0.4)",
+                                  }}
+                                />
+                                <div className="text-stone-600 text-[10px]">{dowLabels[i].slice(0,1)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {(midnightRecord || sunMorningRecord) && (
+                          <div>
+                            <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Special Records</div>
+                            <div className="space-y-2">
+                              {midnightRecord && (
+                                <button
+                                  onClick={() => { setSelected(midnightRecord); setLastPlayed(midnightRecord); }}
+                                  className="w-full flex items-center gap-3 bg-white/[0.04] rounded-xl p-3 hover:bg-white/[0.06] transition-colors text-left"
+                                >
+                                  <span className="text-lg shrink-0">🌙</span>
+                                  <CoverArt record={midnightRecord} size={36} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{midnightRecord.title}</div>
+                                    <div className="text-stone-600 text-xs">Midnight record</div>
+                                  </div>
+                                </button>
+                              )}
+                              {sunMorningRecord && (
+                                <button
+                                  onClick={() => { setSelected(sunMorningRecord); setLastPlayed(sunMorningRecord); }}
+                                  className="w-full flex items-center gap-3 bg-white/[0.04] rounded-xl p-3 hover:bg-white/[0.06] transition-colors text-left"
+                                >
+                                  <span className="text-lg shrink-0">☕</span>
+                                  <CoverArt record={sunMorningRecord} size={36} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{sunMorningRecord.title}</div>
+                                    <div className="text-stone-600 text-xs">Sunday morning album</div>
+                                  </div>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </>
                 )}
 
-                {/* Section: Collection */}
-                <div className="flex items-center gap-3">
-                  <div className="text-xs uppercase tracking-widest text-stone-600">Collection</div>
-                  <div className="flex-1 border-t border-stone-800/50" />
-                </div>
+                {/* ── Collection subtab ── */}
+                {statsSubTab === "collection" && (
+                  <>
                 {/* By Decade */}
                 {sortedDecades.length > 0 && (
                   <div>
@@ -5631,84 +5707,10 @@ export default function VinylCrate() {
                   </div>
                 )}
 
-                {/* When You Listen */}
-                {totalPlays > 0 && (
-                  <>
-                    <div>
-                      <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">When You Listen</div>
-                      <div className="grid grid-cols-4 gap-2">
-                        {timeSlots.map(({ label, icon }, idx) => (
-                          <div key={label} className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                            <div className="text-lg">{icon}</div>
-                            <div className="mt-1 h-8 flex items-end justify-center">
-                              <div
-                                className="w-4 bg-amber-800/60 rounded-sm"
-                                style={{ height: `${Math.max(4, (slotCounts[idx] / maxSlot) * 32)}px` }}
-                              />
-                            </div>
-                            <div className="text-stone-500 text-[10px] mt-1">{label}</div>
-                            <div className="text-stone-400 text-xs">{slotCounts[idx]}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">Day of Week</div>
-                      <div className="flex items-end gap-1 h-16">
-                        {byDow.map((count, i) => (
-                          <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                            <div
-                              className="w-full rounded-sm"
-                              style={{
-                                height: `${Math.max(4, (count / maxDow) * 48)}px`,
-                                background: i === 0 || i === 6 ? "rgba(180,100,30,0.6)" : "rgba(100,100,100,0.4)",
-                              }}
-                            />
-                            <div className="text-stone-600 text-[10px]">{dowLabels[i].slice(0,1)}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {(midnightRecord || sunMorningRecord) && (
-                      <div>
-                        <div className="text-stone-400 text-xs uppercase tracking-widest mb-3">Special Records</div>
-                        <div className="space-y-2">
-                          {midnightRecord && (
-                            <button
-                              onClick={() => { setSelected(midnightRecord); setLastPlayed(midnightRecord); }}
-                              className="w-full flex items-center gap-3 bg-white/[0.04] rounded-xl p-3 hover:bg-white/[0.06] transition-colors text-left"
-                            >
-                              <span className="text-lg shrink-0">🌙</span>
-                              <CoverArt record={midnightRecord} size={36} />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{midnightRecord.title}</div>
-                                <div className="text-stone-600 text-xs">Midnight record</div>
-                              </div>
-                            </button>
-                          )}
-                          {sunMorningRecord && (
-                            <button
-                              onClick={() => { setSelected(sunMorningRecord); setLastPlayed(sunMorningRecord); }}
-                              className="w-full flex items-center gap-3 bg-white/[0.04] rounded-xl p-3 hover:bg-white/[0.06] transition-colors text-left"
-                            >
-                              <span className="text-lg shrink-0">☕</span>
-                              <CoverArt record={sunMorningRecord} size={36} />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{sunMorningRecord.title}</div>
-                                <div className="text-stone-600 text-xs">Sunday morning album</div>
-                              </div>
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                    {myRecords.length === 0 && (
+                      <div className="text-stone-600 text-sm text-center py-16">Add records to see stats.</div>
                     )}
                   </>
-                )}
-
-                {myRecords.length === 0 && (
-                  <div className="text-stone-600 text-sm text-center py-16">Add records to see stats.</div>
                 )}
               </div>
             );
