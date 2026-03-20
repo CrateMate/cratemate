@@ -3356,6 +3356,7 @@ export default function VinylCrate() {
   const [spotifyRecs, setSpotifyRecs] = useState(null);
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
   const [spotifyExpanded, setSpotifyExpanded] = useState(true);
+  const [recoFiltersExpanded, setRecoFiltersExpanded] = useState(false);
   const [screensaverEnabled, setScreensaverEnabled] = useState(
     () => typeof window === "undefined" || localStorage.getItem("cratemate_screensaver") !== "0"
   );
@@ -5214,56 +5215,73 @@ export default function VinylCrate() {
             }).length;
             const hasFilters = recoFilterGenres.size > 0 || recoFilterDecades.size > 0;
             return (
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between">
-                  <div className="text-stone-600 text-xs uppercase tracking-widest">Filter</div>
-                  {hasFilters && (
-                    <button
-                      onClick={() => { setRecoFilterGenres(new Set()); setRecoFilterDecades(new Set()); }}
-                      className="text-xs text-stone-600 hover:text-stone-400 transition-colors"
-                    >
-                      clear · {matchCount} records
-                    </button>
-                  )}
-                </div>
-                <div className="flex gap-1.5 flex-wrap">
-                  {availableGenres.map(g => (
-                    <button
-                      key={g}
-                      onClick={() => setRecoFilterGenres(prev => {
-                        const next = new Set(prev);
-                        next.has(g) ? next.delete(g) : next.add(g);
-                        return next;
-                      })}
-                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                        recoFilterGenres.has(g)
-                          ? "bg-amber-900/30 border-amber-800/50 text-amber-400"
-                          : "border-stone-800 text-stone-600 hover:text-stone-400"
-                      }`}
-                    >
-                      {g}
-                    </button>
-                  ))}
-                </div>
-                {availableDecades.length > 1 && (
-                  <div className="flex gap-1.5 flex-wrap">
-                    {availableDecades.map(d => (
+              <div className="rounded-xl border border-stone-800/60 overflow-hidden">
+                {/* Header — always visible */}
+                <button
+                  onClick={() => setRecoFiltersExpanded(e => !e)}
+                  className="w-full flex items-center gap-2 px-4 py-3 hover:bg-white/[0.02] transition-colors text-left"
+                >
+                  <span className="text-xs text-stone-400 uppercase tracking-widest font-medium flex-1">Narrow it down</span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-stone-600">
+                    {hasFilters && <span className="text-amber-600">{matchCount} records</span>}
+                    {!recoFiltersExpanded && !hasFilters && <span className="text-stone-700">genre · decade</span>}
+                    <span>{recoFiltersExpanded ? "▲" : "▼"}</span>
+                  </span>
+                </button>
+
+                {recoFiltersExpanded && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-stone-800/40 pt-3">
+                    <p className="text-[11px] text-stone-600 leading-relaxed">
+                      Filter your crate by genre or decade — recommendations will only pick from matching records.
+                    </p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {availableGenres.map(g => (
+                        <button
+                          key={g}
+                          onClick={() => setRecoFilterGenres(prev => {
+                            const next = new Set(prev);
+                            next.has(g) ? next.delete(g) : next.add(g);
+                            return next;
+                          })}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            recoFilterGenres.has(g)
+                              ? "bg-amber-900/30 border-amber-800/50 text-amber-400"
+                              : "border-stone-800 text-stone-600 hover:text-stone-400"
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                    {availableDecades.length > 1 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {availableDecades.map(d => (
+                          <button
+                            key={d}
+                            onClick={() => setRecoFilterDecades(prev => {
+                              const next = new Set(prev);
+                              next.has(d) ? next.delete(d) : next.add(d);
+                              return next;
+                            })}
+                            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                              recoFilterDecades.has(d)
+                                ? "bg-stone-700 border-stone-500 text-stone-200"
+                                : "border-stone-800 text-stone-600 hover:text-stone-400"
+                            }`}
+                          >
+                            {d}s
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {hasFilters && (
                       <button
-                        key={d}
-                        onClick={() => setRecoFilterDecades(prev => {
-                          const next = new Set(prev);
-                          next.has(d) ? next.delete(d) : next.add(d);
-                          return next;
-                        })}
-                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                          recoFilterDecades.has(d)
-                            ? "bg-stone-700 border-stone-500 text-stone-200"
-                            : "border-stone-800 text-stone-600 hover:text-stone-400"
-                        }`}
+                        onClick={() => { setRecoFilterGenres(new Set()); setRecoFilterDecades(new Set()); }}
+                        className="text-xs text-stone-600 hover:text-stone-400 transition-colors"
                       >
-                        {d}s
+                        clear filters
                       </button>
-                    ))}
+                    )}
                   </div>
                 )}
               </div>
