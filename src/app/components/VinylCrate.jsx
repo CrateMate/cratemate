@@ -2657,7 +2657,7 @@ function computeStyleLayout(styleList, cx, cy, genreR, fullscreen) {
 }
 
 function GenreBubbleMapInner({ items, styleItems, onBubbleClick, onStyleClick, fullscreen = false }) {
-  const [containerWidth, setContainerWidth] = useState(fullscreen ? window.innerWidth : 320);
+  const [containerWidth, setContainerWidth] = useState(fullscreen && typeof window !== "undefined" ? window.innerWidth : 320);
   const [expandedGenre, setExpandedGenre] = useState(null);
   const ref = useRef(null);
 
