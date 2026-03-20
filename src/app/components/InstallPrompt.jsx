@@ -13,15 +13,12 @@ export default function InstallPrompt() {
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     setIsIOS(ios);
 
-    if (ios) {
-      setVisible(true);
-      return;
-    }
+    // Always show on mobile (iOS or Android) — prompt event is a bonus
+    setVisible(true);
 
     const handler = (e) => {
       e.preventDefault();
       setPrompt(e);
-      setVisible(true);
     };
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
