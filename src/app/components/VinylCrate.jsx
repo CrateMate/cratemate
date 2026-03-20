@@ -578,13 +578,15 @@ function GenreTag({ genre, onClick, active }) {
 }
 
 function condenseCondition(c) {
-  return (c || "")
+  const condense = (s) => (s || "")
     .replace("Near Mint (NM or M-)", "NM")
     .replace("Very Good Plus (VG+)", "VG+")
     .replace("Very Good (VG)", "VG")
     .replace("Mint (M)", "M")
     .replace("Good Plus (G+)", "G+")
-    .replace("Good (G)", "G");
+    .replace("Good (G)", "G")
+    .trim();
+  return (c || "").split(" / ").map(condense).filter(Boolean).join(" / ") || null;
 }
 
 function ArtistTag({ artist, discogsId }) {
@@ -3067,7 +3069,7 @@ async function generateCrateStory(session, username) {
   const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
 
   // ── Honeycomb layout ────────────────────────────────────────────────────────
-  const BASE_SIZE = isSingle ? 700 : count <= 3 ? 310 : count <= 7 ? 250 : count <= 12 ? 210 : 175;
+  const BASE_SIZE = isSingle ? 700 : count <= 2 ? 480 : count <= 3 ? 400 : count <= 5 ? 330 : count <= 8 ? 270 : count <= 12 ? 220 : 180;
   const positions = honeycombPositions(count, BASE_SIZE);
   const maxDist = positions.length > 1 ? positions[positions.length - 1].dist : 1;
 
@@ -3181,18 +3183,40 @@ async function generateCrateStory(session, username) {
   const hearted = records.flatMap(r =>
     (r.favorite_tracks || []).map(ft => {
       const t = typeof ft === 'object' ? ft : { key: ft, title: ft };
-      return t.title && t.title !== t.key ? `${t.title}  —  ${r.artist || ''}` : null;
+      return t.title ? `${t.title}  —  ${r.artist || ''}` : null;
     }).filter(Boolean)
   );
 
   if (hearted.length > 0 && nextY < H - 280) {
+    // Pill/card background behind the hearts section
+    const pillH = 60 + Math.min(hearted.length, 4) * 52 + 20;
+    const pillW = W - 120;
+    const pillX = 60;
+    ctx.save();
+    ctx.fillStyle = 'rgba(136, 19, 55, 0.18)';
+    canvasRoundRect(ctx, pillX, nextY - 20, pillW, pillH, 28);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(251, 113, 133, 0.25)';
+    ctx.lineWidth = 1.5;
+    canvasRoundRect(ctx, pillX, nextY - 20, pillW, pillH, 28);
+    ctx.stroke();
+    ctx.restore();
+
     ctx.fillStyle = '#fb7185';
     ctx.font = `bold 38px Georgia, serif`;
-    ctx.fillText('♥  Loved this session', W / 2, nextY);
+    ctx.fillText('♥  Now Playing', W / 2, nextY);
     nextY += 60;
+    // First hearted track as prominent callout
+    const featuredTrack = hearted[0];
+    ctx.fillStyle = '#fda4af';
+    ctx.font = `bold 42px Georgia, serif`;
+    const featuredDisplay = featuredTrack.length > 36 ? featuredTrack.slice(0, 34) + '…' : featuredTrack;
+    ctx.fillText(featuredDisplay, W / 2, nextY);
+    nextY += 54;
+    // Remaining tracks in smaller text
     ctx.fillStyle = '#a8a29e';
     ctx.font = `34px Georgia, serif`;
-    for (const line of hearted.slice(0, 4)) {
+    for (const line of hearted.slice(1, 4)) {
       if (nextY > H - 220) break;
       ctx.fillText(line.length > 44 ? line.slice(0, 42) + '…' : line, W / 2, nextY);
       nextY += 50;
@@ -4363,7 +4387,7 @@ export default function VinylCrate() {
       className="h-dvh flex flex-col max-w-md mx-auto"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
-      {viewMode !== "drift" && (
+      {!selected && viewMode !== "drift" && (
         <div className="px-5 pt-7 pb-2 flex items-start justify-between">
           <div>
             {user?.firstName && (
@@ -4400,7 +4424,7 @@ export default function VinylCrate() {
         </div>
       )}
 
-      <div className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${viewMode === "drift" ? "relative z-[60]" : ""}`}>
+      <div className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${selected || viewMode === "drift" ? "relative z-[60]" : ""}`}>
         {[
           ["crate", "⏺ Crate"],
           ["wants", "◇ Wants"],
@@ -4412,7 +4436,7 @@ export default function VinylCrate() {
         ].map(([id, label]) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => { setTab(id); setSelected(null); }}
             className={`flex-1 py-1 rounded-xl text-xs font-medium transition-all shrink-0 ${
               tab === id
                 ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
@@ -5028,36 +5052,9 @@ export default function VinylCrate() {
       {tab === "history" && (
         <div className="flex-1 px-4 overflow-y-auto pb-8">
           {(() => {
-            const totalPlays = playSessions.length;
-            const uniqueRecords = new Set(playSessions.map((s) => s.record_id)).size;
             const streak = computeStreak(playSessions);
-            const longestStreak = computeLongestStreak(playSessions);
             const badge = streakBadge(streak);
             const allSessions = groupPlaySessions(playSessions, collection || []);
-            const totalListeningSecs = allSessions.reduce((sum, s) => sum + (s.listeningSecs || 0), 0);
-
-            // Top 5 played records
-            const topPlayed = Object.entries(playCounts)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 5)
-              .map(([id, count]) => ({ record: collection?.find(r => String(r.id) === String(id)), count }))
-              .filter(x => x.record);
-            const maxPlays = topPlayed[0]?.count || 1;
-
-            // Play-weighted genre breakdown
-            const genrePlayCounts = {};
-            for (const [id, count] of Object.entries(playCounts)) {
-              const rec = collection?.find(r => String(r.id) === String(id));
-              if (!rec) continue;
-              for (const g of getGenres(rec)) genrePlayCounts[g] = (genrePlayCounts[g] || 0) + count;
-            }
-            const topGenres = Object.entries(genrePlayCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-            const maxGenrePlays = topGenres[0]?.[1] || 1;
-
-            // Day of week activity
-            const timeStats = buildTimeStats(playSessions, collection || []);
-            const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const maxDow = Math.max(...timeStats.byDow, 1);
 
             return (
               <>
@@ -5069,85 +5066,6 @@ export default function VinylCrate() {
                       {badge && <span className="text-amber-900/80 text-xs ml-2">{badge}</span>}
                     </div>
                   </div>
-                )}
-                {totalPlays > 0 && (
-                  <>
-                  <div className="grid grid-cols-2 gap-2 mb-2 mt-1">
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Total Plays</div>
-                      <div className="text-stone-200 text-sm font-medium">{totalPlays}</div>
-                    </div>
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Unique Records</div>
-                      <div className="text-stone-200 text-sm font-medium">{uniqueRecords}</div>
-                    </div>
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Listening Time</div>
-                      <div className="text-stone-200 text-sm font-medium">{totalListeningSecs > 0 ? formatListeningTime(totalListeningSecs) : "—"}</div>
-                    </div>
-                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Longest Streak</div>
-                      <div className="text-stone-200 text-sm font-medium">{longestStreak > 0 ? `${longestStreak}d` : "—"}</div>
-                    </div>
-                  </div>
-
-                  {/* Top played */}
-                  {topPlayed.length > 0 && (
-                    <div className="mb-4">
-                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Most Played</div>
-                      <div className="space-y-1.5">
-                        {topPlayed.map(({ record: r, count }) => (
-                          <div key={r.id} className="flex items-center gap-2.5">
-                            <CoverArt record={r} size={32} />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
-                              <div className="mt-0.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
-                                <div className="h-full rounded-full bg-amber-700/60" style={{ width: `${Math.round((count / maxPlays) * 100)}%` }} />
-                              </div>
-                            </div>
-                            <div className="text-stone-600 text-xs shrink-0 w-6 text-right">{count}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Genre breakdown by plays */}
-                  {topGenres.length > 0 && (
-                    <div className="mb-4">
-                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Genre Mix</div>
-                      <div className="space-y-1.5">
-                        {topGenres.map(([genre, count]) => (
-                          <div key={genre} className="flex items-center gap-2.5">
-                            <div className="text-stone-500 text-xs w-20 shrink-0 truncate">{genre}</div>
-                            <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
-                              <div className="h-full rounded-full bg-stone-500/70" style={{ width: `${Math.round((count / maxGenrePlays) * 100)}%` }} />
-                            </div>
-                            <div className="text-stone-700 text-xs shrink-0 w-6 text-right">{count}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Day of week activity */}
-                  <div className="mb-4">
-                    <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Your Week</div>
-                    <div className="flex items-end gap-1.5 h-12">
-                      {timeStats.byDow.map((count, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                          <div className="w-full flex flex-col justify-end rounded-sm bg-stone-800/60" style={{ height: 32 }}>
-                            <div
-                              className="w-full rounded-sm bg-amber-800/50"
-                              style={{ height: `${Math.round((count / maxDow) * 100)}%` }}
-                            />
-                          </div>
-                          <div className="text-stone-700 text-[10px]">{DOW_LABELS[i]}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  </>
                 )}
                 {playSessions.length === 0 ? (
                   <div className="text-stone-600 text-sm text-center py-16">No plays logged yet.</div>
@@ -5354,6 +5272,24 @@ export default function VinylCrate() {
             const slotCounts = timeSlots.map(({ hours }) => hours.reduce((sum, h) => sum + byHour[h], 0));
             const maxSlot = Math.max(...slotCounts, 1);
 
+            // Listening analytics (moved from History tab)
+            const streak = computeStreak(playSessions);
+            const longestStreak = computeLongestStreak(playSessions);
+            const topPlayed = Object.entries(playCounts)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5)
+              .map(([id, count]) => ({ record: collection?.find(r => String(r.id) === String(id)), count }))
+              .filter(x => x.record);
+            const maxPlays = topPlayed[0]?.count || 1;
+            const genrePlayCounts = {};
+            for (const [id, count] of Object.entries(playCounts)) {
+              const rec = collection?.find(r => String(r.id) === String(id));
+              if (!rec) continue;
+              for (const g of getGenres(rec)) genrePlayCounts[g] = (genrePlayCounts[g] || 0) + count;
+            }
+            const topPlayedGenres = Object.entries(genrePlayCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            const maxGenrePlays = topPlayedGenres[0]?.[1] || 1;
+
             return (
               <div className="space-y-6 pt-2">
                 {/* Section: Listening */}
@@ -5391,6 +5327,87 @@ export default function VinylCrate() {
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* 2x2 stats grid */}
+                {totalPlays > 0 && (
+                  <>
+                  <div className="grid grid-cols-2 gap-2 mb-2 mt-1">
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Total Plays</div>
+                      <div className="text-stone-200 text-sm font-medium">{totalPlays}</div>
+                    </div>
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Listening Time</div>
+                      <div className="text-stone-200 text-sm font-medium">{totalListeningSecs > 0 ? formatListeningTime(totalListeningSecs) : "—"}</div>
+                    </div>
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Current Streak</div>
+                      <div className="text-stone-200 text-sm font-medium">{streak > 0 ? `${streak}d` : "—"}</div>
+                    </div>
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Longest Streak</div>
+                      <div className="text-stone-200 text-sm font-medium">{longestStreak > 0 ? `${longestStreak}d` : "—"}</div>
+                    </div>
+                  </div>
+
+                  {/* Most Played */}
+                  {topPlayed.length > 0 && (
+                    <div className="mb-4">
+                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Most Played</div>
+                      <div className="space-y-1.5">
+                        {topPlayed.map(({ record: r, count }) => (
+                          <div key={r.id} className="flex items-center gap-2.5">
+                            <CoverArt record={r} size={32} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
+                              <div className="mt-0.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                                <div className="h-full rounded-full bg-amber-700/60" style={{ width: `${Math.round((count / maxPlays) * 100)}%` }} />
+                              </div>
+                            </div>
+                            <div className="text-stone-600 text-xs shrink-0 w-6 text-right">{count}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Genre Mix (play-weighted) */}
+                  {topPlayedGenres.length > 0 && (
+                    <div className="mb-4">
+                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Genre Mix</div>
+                      <div className="space-y-1.5">
+                        {topPlayedGenres.map(([genre, count]) => (
+                          <div key={genre} className="flex items-center gap-2.5">
+                            <div className="text-stone-500 text-xs w-20 shrink-0 truncate">{genre}</div>
+                            <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                              <div className="h-full rounded-full bg-stone-500/70" style={{ width: `${Math.round((count / maxGenrePlays) * 100)}%` }} />
+                            </div>
+                            <div className="text-stone-700 text-xs shrink-0 w-6 text-right">{count}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Your Week */}
+                  <div className="mb-4">
+                    <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Your Week</div>
+                    <div className="flex items-end gap-1.5 h-12">
+                      {byDow.map((count, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <div className="w-full flex flex-col justify-end rounded-sm bg-stone-800/60" style={{ height: 32 }}>
+                            <div
+                              className="w-full rounded-sm bg-amber-800/50"
+                              style={{ height: `${Math.round((count / maxDow) * 100)}%` }}
+                            />
+                          </div>
+                          <div className="text-stone-700 text-[10px]">{dowLabels[i]}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  </>
                 )}
 
                 {/* Section: Collection */}

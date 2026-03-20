@@ -29,7 +29,7 @@ export default function RootLayout({ children }) {
             href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap"
             rel="stylesheet"
           />
-          <link rel="apple-touch-icon" href="/icon-192.png" />
+          <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
         </head>
         <body>
           <ThemeProvider>{children}</ThemeProvider>

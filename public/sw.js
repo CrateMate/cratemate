@@ -1,5 +1,5 @@
 // CrateMate Service Worker
-const CACHE_NAME = "cratemate-v2";
+const CACHE_NAME = "cratemate-v3";
 const OFFLINE_DB = "cratemate-offline";
 const OFFLINE_STORE = "offline-plays";
 
