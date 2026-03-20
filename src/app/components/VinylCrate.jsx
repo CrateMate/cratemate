@@ -897,7 +897,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
   );
 }
 
-function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, onLogPlay, onShowToast }) {
+function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, bpm, onLogPlay, onShowToast }) {
   const longPressTimer = useRef(null);
   const didLongPress = useRef(false);
   const originalYear = record.year_original || record.year_pressed;
@@ -958,6 +958,9 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
             <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
           ))}
         </div>
+        {bpm != null && (
+          <div className="text-stone-600 text-[11px]">♩ {Math.round(bpm)}</div>
+        )}
         {playCount > 0 && (
           <div className="text-stone-600 text-[11px]">· {playCount}</div>
         )}
@@ -2972,12 +2975,186 @@ function formatListeningTime(secs) {
   return `${h}h${rem > 0 ? ` ${rem}m` : ""}`;
 }
 
-function sessionDurationLabel(durationMins, playCount, listeningSecs) {
+function sessionDurationLabel(playCount, listeningSecs) {
   const countStr = playCount === 1 ? "1 record" : `${playCount} records`;
-  const timeStr = listeningSecs != null
-    ? formatListeningTime(listeningSecs)
-    : (durationMins >= 2 ? formatListeningTime(durationMins * 60) : null);
+  const timeStr = listeningSecs != null ? formatListeningTime(listeningSecs) : null;
   return timeStr ? `${countStr} · ${timeStr}` : countStr;
+}
+
+// ─── Crate Story canvas generator ────────────────────────────────────────────
+
+function loadImgForCanvas(url) {
+  if (!url) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const img = new Image();
+    const timer = setTimeout(() => resolve(null), 4000);
+    img.onload = () => { clearTimeout(timer); resolve(img); };
+    img.onerror = () => { clearTimeout(timer); resolve(null); };
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+  });
+}
+
+function canvasRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+async function generateCrateStory(session, username) {
+  const W = 1080, H = 1920;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#0d0d0d';
+  ctx.fillRect(0, 0, W, H);
+
+  // Warm vignette from center-top
+  const grad = ctx.createRadialGradient(W / 2, H * 0.3, 0, W / 2, H * 0.3, W * 0.9);
+  grad.addColorStop(0, 'rgba(40,28,16,0.55)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  const records = session.records;
+  const isSingle = records.length === 1;
+
+  // Load cover images (iTunes URLs only — CORS-friendly; fall back to placeholder)
+  const artUrls = records.slice(0, 9).map(r => _artCache.get(r.id) || null);
+  const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
+
+  let coverBottomY;
+
+  if (isSingle) {
+    const size = 800;
+    const x = (W - size) / 2;
+    const y = 220;
+    const img = imgs[0];
+    if (img) {
+      ctx.save();
+      canvasRoundRect(ctx, x, y, size, size, 28);
+      ctx.clip();
+      ctx.drawImage(img, x, y, size, size);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#1c1814';
+      ctx.save();
+      canvasRoundRect(ctx, x, y, size, size, 28);
+      ctx.fill();
+      ctx.restore();
+    }
+    coverBottomY = y + size + 64;
+
+    // Title
+    ctx.fillStyle = '#fef9f0';
+    ctx.textAlign = 'center';
+    ctx.font = `bold 56px Georgia, serif`;
+    const title = records[0].title || '';
+    ctx.fillText(title.length > 32 ? title.slice(0, 30) + '…' : title, W / 2, coverBottomY + 60);
+    // Artist
+    ctx.fillStyle = '#78716c';
+    ctx.font = `40px Georgia, serif`;
+    const artist = records[0].artist || '';
+    ctx.fillText(artist.length > 36 ? artist.slice(0, 34) + '…' : artist, W / 2, coverBottomY + 116);
+    coverBottomY += 160;
+  } else {
+    const count = Math.min(records.length, 9);
+    const cols = count <= 3 ? count : 3;
+    const rows = Math.ceil(count / cols);
+    const margin = 60;
+    const gap = 18;
+    const coverSize = Math.floor((W - 2 * margin - (cols - 1) * gap) / cols);
+    const gridW = cols * coverSize + (cols - 1) * gap;
+    const startX = Math.floor((W - gridW) / 2);
+    const startY = 220;
+
+    for (let i = 0; i < count; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = startX + col * (coverSize + gap);
+      const y = startY + row * (coverSize + gap);
+      const img = imgs[i];
+      ctx.save();
+      canvasRoundRect(ctx, x, y, coverSize, coverSize, 18);
+      if (img) {
+        ctx.clip();
+        ctx.drawImage(img, x, y, coverSize, coverSize);
+      } else {
+        ctx.fillStyle = '#1c1814';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    coverBottomY = startY + rows * (coverSize + gap) - gap + 64;
+  }
+
+  // Stats line
+  const genres = [...new Set(records.flatMap(r => getGenres(r)))].slice(0, 3);
+  const durationStr = session.listeningSecs != null ? formatListeningTime(session.listeningSecs) : null;
+  const statsParts = [];
+  if (!isSingle) statsParts.push(`${records.length} records`);
+  if (genres.length > 0) statsParts.push(genres.join(' · '));
+  if (durationStr) statsParts.push(durationStr);
+
+  ctx.fillStyle = '#a8a29e';
+  ctx.font = `38px Georgia, serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(statsParts.join('  ·  '), W / 2, coverBottomY + 44);
+  let nextY = coverBottomY + 120;
+
+  // Hearted tracks from this session
+  const hearted = records.flatMap(r =>
+    (r.favorite_tracks || []).map(ft => {
+      const t = typeof ft === 'object' ? ft : { key: ft, title: ft };
+      return t.title && t.title !== t.key ? `${t.title}  —  ${r.artist || ''}` : null;
+    }).filter(Boolean)
+  );
+
+  if (hearted.length > 0) {
+    ctx.fillStyle = '#fb7185';
+    ctx.font = `bold 38px Georgia, serif`;
+    ctx.fillText('♥  Loved this session', W / 2, nextY);
+    nextY += 64;
+    ctx.fillStyle = '#a8a29e';
+    ctx.font = `34px Georgia, serif`;
+    for (const line of hearted.slice(0, 4)) {
+      ctx.fillText(line.length > 44 ? line.slice(0, 42) + '…' : line, W / 2, nextY);
+      nextY += 52;
+    }
+    nextY += 20;
+  }
+
+  // Divider
+  ctx.strokeStyle = '#2c2622';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(80, H - 140);
+  ctx.lineTo(W - 80, H - 140);
+  ctx.stroke();
+
+  // Crate URL + branding
+  ctx.textAlign = 'center';
+  if (username) {
+    ctx.fillStyle = '#57534e';
+    ctx.font = `32px Georgia, serif`;
+    ctx.fillText(`cratemate.com/crate/${username}`, W / 2, H - 96);
+  }
+  ctx.fillStyle = '#44403c';
+  ctx.font = `bold 30px Georgia, serif`;
+  ctx.fillText('CrateMate', W / 2, H - 52);
+
+  return canvas;
 }
 
 export default function VinylCrate() {
@@ -3039,6 +3216,7 @@ export default function VinylCrate() {
   const [trailSearch, setTrailSearch] = useState("");
   const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
   const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
+  const [storyGenerating, setStoryGenerating] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState(new Set());
   const [trailSavePrompt, setTrailSavePrompt] = useState(false);
   const [trailSaving, setTrailSaving] = useState(false);
@@ -3165,6 +3343,30 @@ export default function VinylCrate() {
 
   // kept for backwards compat signature — RecordRow/HoneycombView call onShowToast(record)
   const showPlayToast = showActionPill;
+
+  async function handleShareStory(session) {
+    if (storyGenerating) return;
+    setStoryGenerating(true);
+    try {
+      const canvas = await generateCrateStory(session, discogsUsername);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const filename = `crate-story-${new Date(session.startTime).toISOString().slice(0, 10)}.png`;
+      if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'image/png' })] })) {
+        await navigator.share({ files: [new File([blob], filename, { type: 'image/png' })] });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') console.error('Story export failed:', err);
+    } finally {
+      setStoryGenerating(false);
+    }
+  }
 
   useEffect(() => {
     refreshRecords();
@@ -4534,6 +4736,7 @@ export default function VinylCrate() {
                   onGenreClick={toggleGenre}
                   activeGenres={activeGenres}
                   playCount={playCounts[r.id] || 0}
+                  bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
                   onLogPlay={logPlay}
                   onShowToast={showPlayToast}
                 />
@@ -4850,8 +5053,17 @@ export default function VinylCrate() {
                               <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
                                 {sessionDateLabel(session.startTime)}
                               </div>
-                              <div className="text-stone-500 text-xs">{sessionDurationLabel(session.durationMins, session.playCount, session.listeningSecs)}</div>
+                              <div className="text-stone-500 text-xs">{sessionDurationLabel(session.playCount, session.listeningSecs)}</div>
                             </div>
+                            {/* Share story button */}
+                            <button
+                              onClick={e => { e.stopPropagation(); handleShareStory(session); }}
+                              disabled={storyGenerating}
+                              className="shrink-0 text-stone-600 hover:text-stone-300 transition-colors disabled:opacity-40 p-1 rounded-lg hover:bg-white/[0.06]"
+                              title="Share as story"
+                            >
+                              ↗
+                            </button>
                             {/* Chevron */}
                             <span className={`text-stone-600 text-xs transition-transform inline-block shrink-0 ${isExpanded ? "rotate-90" : ""}`}>›</span>
                           </div>
