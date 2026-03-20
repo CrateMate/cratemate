@@ -5141,26 +5141,27 @@ export default function VinylCrate() {
 
             {spotifyLinked === true && !spotifyRecsLoading && spotifyRecs && spotifyRecs.length > 0 && (
               <div className="divide-y divide-stone-800/40">
-                {spotifyRecs.slice(0, 8).map((rec) => (
-                  <div key={rec.artist} className="flex items-center gap-3 px-4 py-3">
+                {spotifyRecs.slice(0, 10).map((rec) => (
+                  <div key={`${rec.artist}|${rec.album}`} className="flex items-center gap-3 px-4 py-3">
                     {rec.image ? (
-                      <img src={rec.image} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 bg-stone-800" />
+                      <img src={rec.image} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-stone-800" />
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-stone-800 shrink-0 flex items-center justify-center text-stone-600 text-xs">♪</div>
+                      <div className="w-10 h-10 rounded-lg bg-stone-800 shrink-0 flex items-center justify-center text-stone-600 text-xs">◇</div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-amber-50 font-medium truncate">{rec.artist}</div>
+                      <div className="text-sm text-amber-50 font-medium truncate">{rec.album}</div>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        {rec.genres.slice(0, 1).map(g => (
-                          <span key={g} className="text-[10px] text-stone-600">{g}</span>
-                        ))}
+                        <span className="text-[10px] text-stone-500 truncate">{rec.artist}{rec.year ? ` · ${rec.year}` : ""}</span>
+                        {rec.artist_in_crate && (
+                          <span className="text-[10px] text-amber-900/70">you have other {rec.artist} records</span>
+                        )}
                         {rec.on_wantlist && (
                           <span className="text-[10px] text-stone-500">◇ on wantlist</span>
                         )}
                       </div>
                     </div>
                     <a
-                      href={`https://www.discogs.com/search/?artist=${encodeURIComponent(rec.artist)}&type=release&format=Vinyl`}
+                      href={`https://www.discogs.com/search/?artist=${encodeURIComponent(rec.artist)}&q=${encodeURIComponent(rec.album)}&type=release&format=Vinyl`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
