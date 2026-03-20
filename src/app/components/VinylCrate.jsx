@@ -3268,6 +3268,8 @@ export default function VinylCrate() {
     setActiveStyles((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
   const [bubbleView, setBubbleView] = useState("genres");
   const [statsSubTab, setStatsSubTab] = useState("listening");
+  const [recoFilterGenres, setRecoFilterGenres] = useState(new Set());
+  const [recoFilterDecades, setRecoFilterDecades] = useState(new Set());
 
   const [playCounts, setPlayCounts] = useState({});
   const [lastPlayedDates, setLastPlayedDates] = useState({});
@@ -3829,6 +3831,15 @@ export default function VinylCrate() {
       setRecoError("");
       setReco(null);
       try {
+        const recoFilteredRecords = myRecords.filter(r => {
+          if (recoFilterGenres.size > 0 && !getGenres(r).some(g => recoFilterGenres.has(g))) return false;
+          if (recoFilterDecades.size > 0) {
+            const decade = String(Math.floor((r.year_original || r.year_pressed || 0) / 10) * 10);
+            if (!recoFilterDecades.has(decade)) return false;
+          }
+          return true;
+        });
+        const activePool = recoFilteredRecords.length > 0 ? recoFilteredRecords : myRecords;
         if (type === "daily") {
           // Try cultural/birthday hook first
           let artistMembers = {};
@@ -3871,7 +3882,7 @@ export default function VinylCrate() {
               .filter(([, d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000)
               .map(([id]) => parseInt(id))
           );
-          const pool = dedupeByAlbum(myRecords, playCounts).filter(r => !recentIds.has(r.id));
+          const pool = dedupeByAlbum(activePool, playCounts).filter(r => !recentIds.has(r.id));
           const refRecord = lastPlayed;
           const context = {
             refGenres: refRecord ? getGenres(refRecord) : [],
@@ -3880,7 +3891,7 @@ export default function VinylCrate() {
             allFeatures: spotifyFeatures,
             recentlyPlayedIds: recentIds,
           };
-          const deduped = dedupeByAlbum(myRecords, playCounts);
+          const deduped = dedupeByAlbum(activePool, playCounts);
           const scored = (pool.length ? pool : deduped).map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
           const heuristicReason = `Chosen because it hasn't been played recently and fits the collection's sound.`;
@@ -3894,7 +3905,7 @@ export default function VinylCrate() {
 
         } else if (type === "random") {
           // Weighted random: less-played records get higher weight. No Claude — instant result.
-          const randomPool = dedupeByAlbum(myRecords, playCounts);
+          const randomPool = dedupeByAlbum(activePool, playCounts);
           const weights = randomPool.map(r => 1 / ((playCounts[r.id] || 0) + 1));
           const total = weights.reduce((a, b) => a + b, 0);
           let rand = Math.random() * total;
@@ -3918,7 +3929,7 @@ export default function VinylCrate() {
             allFeatures: spotifyFeatures,
             recentlyPlayedIds: new Set(Object.entries(lastPlayedDates).filter(([,d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000).map(([id]) => parseInt(id))),
           };
-          const candidates = dedupeByAlbum(myRecords, playCounts).filter(r => r.id !== lastPlayed.id);
+          const candidates = dedupeByAlbum(activePool, playCounts).filter(r => r.id !== lastPlayed.id);
           const scored = candidates.map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || candidates[0];
           if (!picked) { setRecoError("Not enough records to suggest a next pick."); return; }
@@ -3955,7 +3966,7 @@ export default function VinylCrate() {
               tempo: energetic ? 140 : mellow ? 80 : 110,
             };
           }
-          const moodPool = dedupeByAlbum(myRecords, playCounts);
+          const moodPool = dedupeByAlbum(activePool, playCounts);
           const scored = moodPool.map(r => ({ r, s: scoreRecord(r, moodTargets) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || moodPool[Math.floor(Math.random() * moodPool.length)];
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
@@ -3973,7 +3984,7 @@ export default function VinylCrate() {
         setRecoLoading(false);
       }
     },
-    [myRecords, mood, lastPlayed, lastPlayedDates, playCounts, spotifyFeatures]
+    [myRecords, mood, lastPlayed, lastPlayedDates, playCounts, spotifyFeatures, recoFilterGenres, recoFilterDecades]
   );
 
   async function handleDiscogsImport() {
@@ -4971,6 +4982,79 @@ export default function VinylCrate() {
 
       {tab === "reco" && (
         <div className="flex-1 px-4 overflow-y-auto pb-8 space-y-3">
+          {/* Genre + Decade filters */}
+          {myRecords.length > 0 && (() => {
+            const availableGenres = [...new Set(myRecords.flatMap(r => getGenres(r)))].sort();
+            const availableDecades = [...new Set(myRecords.map(r => {
+              const y = r.year_original || r.year_pressed || 0;
+              return y > 0 ? String(Math.floor(y / 10) * 10) : null;
+            }).filter(Boolean))].sort();
+            const matchCount = myRecords.filter(r => {
+              if (recoFilterGenres.size > 0 && !getGenres(r).some(g => recoFilterGenres.has(g))) return false;
+              if (recoFilterDecades.size > 0) {
+                const decade = String(Math.floor((r.year_original || r.year_pressed || 0) / 10) * 10);
+                if (!recoFilterDecades.has(decade)) return false;
+              }
+              return true;
+            }).length;
+            const hasFilters = recoFilterGenres.size > 0 || recoFilterDecades.size > 0;
+            return (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <div className="text-stone-600 text-xs uppercase tracking-widest">Filter</div>
+                  {hasFilters && (
+                    <button
+                      onClick={() => { setRecoFilterGenres(new Set()); setRecoFilterDecades(new Set()); }}
+                      className="text-xs text-stone-600 hover:text-stone-400 transition-colors"
+                    >
+                      clear · {matchCount} records
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {availableGenres.map(g => (
+                    <button
+                      key={g}
+                      onClick={() => setRecoFilterGenres(prev => {
+                        const next = new Set(prev);
+                        next.has(g) ? next.delete(g) : next.add(g);
+                        return next;
+                      })}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                        recoFilterGenres.has(g)
+                          ? "bg-amber-900/30 border-amber-800/50 text-amber-400"
+                          : "border-stone-800 text-stone-600 hover:text-stone-400"
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+                {availableDecades.length > 1 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {availableDecades.map(d => (
+                      <button
+                        key={d}
+                        onClick={() => setRecoFilterDecades(prev => {
+                          const next = new Set(prev);
+                          next.has(d) ? next.delete(d) : next.add(d);
+                          return next;
+                        })}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          recoFilterDecades.has(d)
+                            ? "bg-stone-700 border-stone-500 text-stone-200"
+                            : "border-stone-800 text-stone-600 hover:text-stone-400"
+                        }`}
+                      >
+                        {d}s
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {[
             { type: "random", icon: "🎲", title: "Random Pick", sub: "Surprise me from the crate" },
             {
