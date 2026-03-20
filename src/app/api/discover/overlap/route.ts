@@ -78,14 +78,16 @@ export async function GET(request: Request) {
   const username = searchParams.get("username");
   if (!username) return NextResponse.json({ error: "Missing username" }, { status: 400 });
 
-  // Look up their user_id
-  const { data: tokenRow } = await supabase
+  // Look up their user_id — use limit(1) so duplicate rows (dev vs prod Clerk
+  // instances sharing the same discogs_username) don't cause a 404.
+  const { data: tokenRows } = await supabase
     .from("discogs_tokens")
     .select("user_id")
     .eq("discogs_username", username)
     .eq("is_discoverable", true)
-    .single();
+    .limit(1);
 
+  const tokenRow = tokenRows?.[0];
   if (!tokenRow) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   // Fetch both collections — select("*") to avoid failing if optional columns are missing
