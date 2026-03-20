@@ -4,8 +4,20 @@ import { useEffect, useState } from "react";
 export default function InstallPrompt() {
   const [prompt, setPrompt] = useState(null);
   const [visible, setVisible] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
+    // Don't show if already running as installed PWA
+    if (window.matchMedia("(display-mode: standalone)").matches) return;
+
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    setIsIOS(ios);
+
+    if (ios) {
+      setVisible(true);
+      return;
+    }
+
     const handler = (e) => {
       e.preventDefault();
       setPrompt(e);
@@ -43,25 +55,37 @@ export default function InstallPrompt() {
         maxWidth: "calc(100vw - 2rem)",
       }}
     >
-      <span style={{ color: "#d4c5a9", fontSize: "0.875rem", whiteSpace: "nowrap" }}>
-        Add CrateMate to your home screen
-      </span>
-      <button
-        onClick={install}
-        style={{
-          background: "#c9a84c",
-          color: "#0c0b09",
-          border: "none",
-          borderRadius: "0.5rem",
-          padding: "0.4rem 0.9rem",
-          fontSize: "0.8rem",
-          fontWeight: 600,
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-        }}
-      >
-        Install
-      </button>
+      {isIOS ? (
+        <span style={{ color: "#d4c5a9", fontSize: "0.875rem" }}>
+          Tap <strong>Share</strong> → <strong>Add to Home Screen</strong> to install
+        </span>
+      ) : prompt ? (
+        <>
+          <span style={{ color: "#d4c5a9", fontSize: "0.875rem", whiteSpace: "nowrap" }}>
+            Add CrateMate to your home screen
+          </span>
+          <button
+            onClick={install}
+            style={{
+              background: "#c9a84c",
+              color: "#0c0b09",
+              border: "none",
+              borderRadius: "0.5rem",
+              padding: "0.4rem 0.9rem",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Install
+          </button>
+        </>
+      ) : (
+        <span style={{ color: "#d4c5a9", fontSize: "0.875rem" }}>
+          Tap <strong>⋮</strong> → <strong>Add to Home Screen</strong> to install
+        </span>
+      )}
       <button
         onClick={() => setVisible(false)}
         style={{
@@ -72,6 +96,7 @@ export default function InstallPrompt() {
           fontSize: "1rem",
           lineHeight: 1,
           padding: "0 0.25rem",
+          flexShrink: 0,
         }}
         aria-label="Dismiss"
       >
