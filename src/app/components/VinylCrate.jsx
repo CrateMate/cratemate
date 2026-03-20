@@ -3068,28 +3068,60 @@ async function generateCrateStory(session, username) {
   );
   const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
 
-  // ── Honeycomb layout ────────────────────────────────────────────────────────
-  const BASE_SIZE = isSingle ? 700 : count <= 2 ? 480 : count <= 3 ? 400 : count <= 5 ? 330 : count <= 8 ? 270 : count <= 12 ? 220 : 180;
-  const positions = honeycombPositions(count, BASE_SIZE);
-  const maxDist = positions.length > 1 ? positions[positions.length - 1].dist : 1;
+  // ── Session flow layout (shows play order, serpentine rows) ─────────────────
+  const FLOW_COLS = isSingle ? 1 : count <= 2 ? 2 : count <= 6 ? 3 : 4;
+  const GAP = isSingle ? 0 : 30;
+  const BASE_SIZE = isSingle ? 600
+    : count <= 2 ? 440
+    : count <= 4 ? 360
+    : count <= 6 ? 300
+    : count <= 9 ? 260
+    : 220;
+  const FLOW_ROWS = Math.ceil(count / FLOW_COLS);
+  const clusterH = FLOW_ROWS * BASE_SIZE + (FLOW_ROWS - 1) * GAP;
 
-  // Honeycomb center: upper portion of the canvas
+  // Build positions in session order, serpentine rows
+  const positions = [];
+  for (let i = 0; i < count; i++) {
+    const row = Math.floor(i / FLOW_COLS);
+    const posInRow = i % FLOW_COLS;
+    const itemsInRow = (row === FLOW_ROWS - 1) ? (count - row * FLOW_COLS) : FLOW_COLS;
+    const col = (row % 2 === 0) ? posInRow : (itemsInRow - 1 - posInRow);
+    const px = (col - (itemsInRow - 1) / 2) * (BASE_SIZE + GAP);
+    const py = (row - (FLOW_ROWS - 1) / 2) * (BASE_SIZE + GAP);
+    positions.push({ px, py });
+  }
+
   const honeyCenterX = W / 2;
-  const honeyCenterY = isSingle ? 640 : 620;
+  const honeyCenterY = 180 + clusterH / 2;
 
-  // Warm radial glow behind the honeycomb
-  const glow = ctx.createRadialGradient(honeyCenterX, honeyCenterY, 0, honeyCenterX, honeyCenterY, BASE_SIZE * (isSingle ? 0.8 : 3));
-  glow.addColorStop(0, 'rgba(50,32,10,0.7)');
+  // Warm radial glow behind the cluster
+  const glowR = Math.max(clusterH, BASE_SIZE * FLOW_COLS) * 0.85;
+  const glow = ctx.createRadialGradient(honeyCenterX, honeyCenterY, 0, honeyCenterX, honeyCenterY, glowR);
+  glow.addColorStop(0, 'rgba(50,32,10,0.65)');
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // Draw outer cells first so center appears on top (matches HoneycombView z-index logic)
-  const drawOrder = positions.map((pos, i) => ({ pos, i })).sort((a, b) => b.pos.dist - a.pos.dist);
+  // Draw connectors between consecutive covers (under covers)
+  if (count > 1) {
+    ctx.save();
+    ctx.setLineDash([6, 16]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < count - 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(Math.round(honeyCenterX + positions[i].px), Math.round(honeyCenterY + positions[i].py));
+      ctx.lineTo(Math.round(honeyCenterX + positions[i + 1].px), Math.round(honeyCenterY + positions[i + 1].py));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
-  for (const { pos, i } of drawOrder) {
-    const scaleFactor = isSingle ? 1 : 0.68 + 0.38 * (1 - pos.dist / maxDist);
-    const drawSize = Math.round(BASE_SIZE * scaleFactor);
+  // Draw covers in session order
+  for (let i = 0; i < count; i++) {
+    const pos = positions[i];
+    const drawSize = BASE_SIZE;
     const x = Math.round(honeyCenterX + pos.px - drawSize / 2);
     const y = Math.round(honeyCenterY + pos.py - drawSize / 2);
     const radius = Math.round(drawSize * 0.09);
@@ -3098,7 +3130,7 @@ async function generateCrateStory(session, username) {
     const genreHex = getGenrePalette(genre).hex;
     const rgb = hexToRgb(genreHex);
 
-    // Genre-color glow ring (matches HoneycombView box-shadow)
+    // Genre-color glow ring
     ctx.save();
     ctx.shadowColor = `rgba(${rgb},0.55)`;
     ctx.shadowBlur = Math.round(drawSize * 0.12);
@@ -3120,13 +3152,27 @@ async function generateCrateStory(session, username) {
     }
     ctx.restore();
 
-    // For single record: title + artist overlay (matches isFocused overlay)
-    if (isSingle) {
+    // Order badge (top-left corner) — multi-record only
+    if (count > 1) {
+      const br = Math.round(drawSize * 0.095);
+      const bx = x + br + 8;
+      const by = y + br + 8;
       ctx.save();
-      canvasRoundRect(ctx, x, y + drawSize * 0.55, drawSize, drawSize * 0.45, radius);
-      ctx.fillStyle = 'rgba(0,0,0,0)';
+      ctx.fillStyle = 'rgba(0,0,0,0.62)';
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = '#fef3e0';
+      ctx.font = `bold ${Math.round(br * 1.05)}px Georgia, serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), bx, by + 1);
+      ctx.textBaseline = 'alphabetic';
       ctx.restore();
+    }
+
+    // Single record: gradient overlay
+    if (isSingle) {
       const overlayGrad = ctx.createLinearGradient(0, y + drawSize * 0.45, 0, y + drawSize);
       overlayGrad.addColorStop(0, 'rgba(0,0,0,0)');
       overlayGrad.addColorStop(1, 'rgba(0,0,0,0.78)');
@@ -3139,12 +3185,11 @@ async function generateCrateStory(session, username) {
     }
   }
 
-  // Single record: title + artist below the cover
+  // Text starts below the cluster
+  const clusterBottom = honeyCenterY + clusterH / 2;
   let textStartY;
   if (isSingle) {
-    const pos = positions[0];
-    const drawSize = BASE_SIZE;
-    textStartY = Math.round(honeyCenterY + pos.py + drawSize / 2) + 56;
+    textStartY = Math.round(clusterBottom) + 56;
     ctx.fillStyle = '#fef9f0';
     ctx.textAlign = 'center';
     ctx.font = `bold 58px Georgia, serif`;
@@ -3155,12 +3200,7 @@ async function generateCrateStory(session, username) {
     ctx.fillText((records[0].artist || '').slice(0, 36), W / 2, textStartY + 60);
     textStartY += 130;
   } else {
-    // Estimate bottom of the honeycomb cluster
-    const bottomMostY = Math.max(...positions.map(pos => {
-      const scaleFactor = 0.68 + 0.38 * (1 - pos.dist / maxDist);
-      return honeyCenterY + pos.py + (BASE_SIZE * scaleFactor) / 2;
-    }));
-    textStartY = Math.round(bottomMostY) + 56;
+    textStartY = Math.round(clusterBottom) + 56;
   }
 
   // ── Stats line ──────────────────────────────────────────────────────────────
@@ -3179,19 +3219,33 @@ async function generateCrateStory(session, username) {
   ctx.fillText(statsLine.length > 48 ? statsLine.slice(0, 46) + '…' : statsLine, W / 2, textStartY + 40);
   let nextY = textStartY + 110;
 
-  // ── Hearted tracks ──────────────────────────────────────────────────────────
-  const hearted = records.flatMap(r =>
-    (r.favorite_tracks || []).map(ft => {
-      const t = typeof ft === 'object' ? ft : { key: ft, title: ft };
-      return t.title ? `${t.title}  —  ${r.artist || ''}` : null;
-    }).filter(Boolean)
-  );
+  // ── Hearted tracks — grouped by album ───────────────────────────────────────
+  const heartedGroups = records
+    .map(r => ({
+      artist: r.artist || r.title || '',
+      tracks: (r.favorite_tracks || [])
+        .map(ft => {
+          const t = typeof ft === 'object' ? ft : { key: ft, title: ft };
+          // Only show if title is a real track name, not just a position key like "A1"
+          return (t.title && t.title !== t.key) ? t.title : null;
+        })
+        .filter(Boolean),
+    }))
+    .filter(g => g.tracks.length > 0);
 
-  if (hearted.length > 0 && nextY < H - 280) {
-    // Pill/card background behind the hearts section
-    const pillH = 60 + Math.min(hearted.length, 4) * 52 + 20;
-    const pillW = W - 120;
+  // Deduplicate consecutive same-artist groups
+  const mergedGroups = [];
+  for (const g of heartedGroups) {
+    const last = mergedGroups[mergedGroups.length - 1];
+    if (last && last.artist === g.artist) last.tracks.push(...g.tracks);
+    else mergedGroups.push({ artist: g.artist, tracks: [...g.tracks] });
+  }
+
+  if (mergedGroups.length > 0 && nextY < H - 280) {
     const pillX = 60;
+    const pillW = W - 120;
+    const totalLines = mergedGroups.reduce((s, g) => s + 1 + g.tracks.length, 0);
+    const pillH = Math.min(54 + totalLines * 46 + 30, H - nextY - 120);
     ctx.save();
     ctx.fillStyle = 'rgba(136, 19, 55, 0.18)';
     canvasRoundRect(ctx, pillX, nextY - 20, pillW, pillH, 28);
@@ -3202,25 +3256,32 @@ async function generateCrateStory(session, username) {
     ctx.stroke();
     ctx.restore();
 
+    ctx.textAlign = 'center';
     ctx.fillStyle = '#fb7185';
-    ctx.font = `bold 38px Georgia, serif`;
-    ctx.fillText('♥  Now Playing', W / 2, nextY);
-    nextY += 60;
-    // First hearted track as prominent callout
-    const featuredTrack = hearted[0];
-    ctx.fillStyle = '#fda4af';
-    ctx.font = `bold 42px Georgia, serif`;
-    const featuredDisplay = featuredTrack.length > 36 ? featuredTrack.slice(0, 34) + '…' : featuredTrack;
-    ctx.fillText(featuredDisplay, W / 2, nextY);
-    nextY += 54;
-    // Remaining tracks in smaller text
-    ctx.fillStyle = '#a8a29e';
-    ctx.font = `34px Georgia, serif`;
-    for (const line of hearted.slice(1, 4)) {
-      if (nextY > H - 220) break;
-      ctx.fillText(line.length > 44 ? line.slice(0, 42) + '…' : line, W / 2, nextY);
-      nextY += 50;
+    ctx.font = `bold 36px Georgia, serif`;
+    ctx.fillText('♥  Favorites', W / 2, nextY);
+    nextY += 52;
+
+    for (const group of mergedGroups) {
+      if (nextY > H - 200) break;
+      // Artist header (left-aligned, inside pill)
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#fda4af';
+      ctx.font = `bold 33px Georgia, serif`;
+      const artistDisplay = group.artist.length > 30 ? group.artist.slice(0, 28) + '…' : group.artist;
+      ctx.fillText(artistDisplay, pillX + 32, nextY);
+      nextY += 44;
+      // Indented track titles
+      ctx.fillStyle = '#a8a29e';
+      ctx.font = `30px Georgia, serif`;
+      for (const track of group.tracks.slice(0, 4)) {
+        if (nextY > H - 200) break;
+        const td = track.length > 38 ? track.slice(0, 36) + '…' : track;
+        ctx.fillText(td, pillX + 64, nextY);
+        nextY += 42;
+      }
     }
+    ctx.textAlign = 'center';
   }
 
   // ── Branding ────────────────────────────────────────────────────────────────
