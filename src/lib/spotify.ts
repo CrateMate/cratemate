@@ -41,30 +41,95 @@ export type SpotifyFeatures = {
   track_count: number;
 };
 
+type SpotifyAlbum = {
+  id: string;
+  name: string;
+  release_date: string;
+  artists: Array<{ name: string }>;
+};
+
+/** Strip common suffixes that appear in Discogs titles but not Spotify album names */
+function cleanTitle(title: string): string {
+  return title
+    .replace(/\s*\(.*?(remaster|remastered|deluxe|expanded|anniversary|edition|version|mono|stereo|bonus|limited|special|re-?issue|re-?release|re-?mix|reissue)[^)]*\)/gi, "")
+    .replace(/\s*\[.*?(remaster|remastered|deluxe|expanded|anniversary|edition|version|mono|stereo|bonus|limited|special)[^\]]*\]/gi, "")
+    .replace(/\s*-\s*(remastered|remaster)\s*(\d{4})?$/gi, "")
+    .trim();
+}
+
+/** Normalise a string for loose comparison */
+function normalise(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** True if Spotify album name is a reasonable match for the query title */
+function titleMatches(spotifyName: string, queryTitle: string): boolean {
+  const sn = normalise(spotifyName);
+  const qt = normalise(queryTitle);
+  return sn.includes(qt) || qt.includes(sn);
+}
+
+/** Pick the best album from a result set:
+ *  1. Prefer albums whose name matches the query title
+ *  2. Among those, prefer the earliest release year (original pressing)
+ */
+function pickBestAlbum(albums: SpotifyAlbum[], queryTitle: string): SpotifyAlbum | null {
+  if (albums.length === 0) return null;
+  const matching = albums.filter((a) => titleMatches(a.name, queryTitle));
+  const pool = matching.length > 0 ? matching : albums;
+  return pool.reduce((best, a) => {
+    const bestYear = parseInt(best.release_date) || 9999;
+    const aYear = parseInt(a.release_date) || 9999;
+    return aYear < bestYear ? a : best;
+  });
+}
+
+/** Search Spotify for an album using multiple strategies, returning the best match */
+async function searchAlbum(artist: string, title: string): Promise<SpotifyAlbum | null> {
+  const cleanedTitle = cleanTitle(title);
+  const isVA = /^various(\s+artists?)?$/i.test(artist.trim());
+
+  const strategies: string[] = [];
+
+  if (!isVA) {
+    // Strategy 1: field-filtered with cleaned title
+    strategies.push(`album:${cleanedTitle} artist:${artist}`);
+    // Strategy 2: field-filtered with original title (in case cleaning was too aggressive)
+    if (cleanedTitle !== title) strategies.push(`album:${title} artist:${artist}`);
+    // Strategy 3: plain text fallback
+    strategies.push(`${cleanedTitle} ${artist}`);
+  }
+  // Strategy for compilations / Various Artists: search by title only
+  strategies.push(`album:${cleanedTitle}`);
+
+  for (const q of strategies) {
+    const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=album&limit=5`);
+    if (!res.ok) continue;
+    const data = await res.json();
+    const albums: SpotifyAlbum[] = data.albums?.items || [];
+    const pick = pickBestAlbum(albums, cleanedTitle);
+    if (pick) return pick;
+  }
+
+  return null;
+}
+
 export async function fetchAlbumFeatures(
   artist: string,
   title: string
 ): Promise<SpotifyFeatures | null> {
-  // Step 1: Search Spotify for the album to get track IDs
-  const q = encodeURIComponent(`album:${title} artist:${artist}`);
-  const searchRes = await spotifyGet(`/search?q=${q}&type=album&limit=3`);
-  if (!searchRes.ok) return null;
-
-  const searchData = await searchRes.json();
-  const albums: Array<{ id: string }> = searchData.albums?.items || [];
-  if (albums.length === 0) return null;
-
-  const albumId = albums[0].id;
+  // Step 1: Find the best matching album on Spotify
+  const album = await searchAlbum(artist, title);
+  if (!album) return null;
 
   // Step 2: Get track IDs from the album
-  const tracksRes = await spotifyGet(`/albums/${albumId}/tracks?limit=50`);
+  const tracksRes = await spotifyGet(`/albums/${album.id}/tracks?limit=50`);
   if (!tracksRes.ok) return null;
   const tracksData = await tracksRes.json();
   const trackIds: string[] = (tracksData.items || []).map((t: { id: string }) => t.id).filter(Boolean);
   if (trackIds.length === 0) return null;
 
   // Step 3: Fetch audio features from ReccoBeats using Spotify track IDs
-  // ReccoBeats accepts Spotify track IDs directly at /v1/audio-features?ids=...
   const ids = trackIds.slice(0, 100).join(",");
   const featuresRes = await fetch(`${RECCOBEATS_BASE}/v1/audio-features?ids=${ids}`);
   if (!featuresRes.ok) return null;

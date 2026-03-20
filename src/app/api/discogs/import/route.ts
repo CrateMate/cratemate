@@ -137,8 +137,8 @@ export async function POST(request: Request) {
     });
   }
 
-  // Fetch collection pages (max 10 pages normally; max 5 in bare mode for speed)
-  const maxPages = bareMode ? 5 : 10;
+  // Fetch all collection pages (bare mode capped at 5 pages for speed; normal mode fetches everything)
+  const maxPages = bareMode ? 5 : Infinity;
   const releases: Record<string, unknown>[] = [];
   let page = 1;
   let totalPages = 1;
