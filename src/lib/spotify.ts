@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabase";
+
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID!;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET!;
 
@@ -30,6 +32,59 @@ async function spotifyGet(path: string): Promise<Response> {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// ---------- User OAuth token management ----------
+
+/** Get a valid access token for a user, refreshing if needed. Returns null if not connected. */
+export async function getUserAccessToken(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("spotify_user_tokens")
+    .select("access_token, refresh_token, expires_at")
+    .eq("user_id", userId)
+    .single();
+
+  if (!data) return null;
+
+  // Still valid (60s buffer)
+  if (new Date(data.expires_at) > new Date(Date.now() + 60_000)) {
+    return data.access_token;
+  }
+
+  // Refresh
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      Authorization: "Basic " + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64"),
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: data.refresh_token }),
+  });
+
+  if (!res.ok) return null;
+
+  const refreshed = await res.json();
+  const expiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+
+  await supabase.from("spotify_user_tokens").update({
+    access_token: refreshed.access_token,
+    expires_at: expiresAt,
+    updated_at: new Date().toISOString(),
+    ...(refreshed.refresh_token ? { refresh_token: refreshed.refresh_token } : {}),
+  }).eq("user_id", userId);
+
+  return refreshed.access_token;
+}
+
+/** Spotify API call authenticated as a specific user. Throws if not connected. */
+export async function spotifyUserGet(path: string, userId: string): Promise<Response> {
+  const token = await getUserAccessToken(userId);
+  if (!token) throw new Error("Spotify not connected");
+  return fetch(`https://api.spotify.com/v1${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// ---------- Album features (client credentials) ----------
 
 export type SpotifyFeatures = {
   energy: number;
