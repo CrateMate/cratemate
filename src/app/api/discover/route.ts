@@ -17,7 +17,17 @@ export async function GET() {
     (myRecords || []).map((r) => (r.artist || "").toLowerCase().trim()).filter(Boolean)
   );
 
-  // Fetch up to 20 discoverable users (excluding current user)
+  // Get current user's own discogs_username(s) so we can exclude all their rows
+  // (a user may have multiple rows from dev + prod Clerk instances)
+  const { data: myTokenRows } = await supabase
+    .from("discogs_tokens")
+    .select("discogs_username")
+    .eq("user_id", userId);
+  const myUsernames = new Set(
+    (myTokenRows || []).map((r) => r.discogs_username).filter(Boolean)
+  );
+
+  // Fetch up to 20 discoverable users (excluding current user by user_id and username)
   const { data: discoverableTokens } = await supabase
     .from("discogs_tokens")
     .select("user_id, discogs_username")
@@ -56,9 +66,9 @@ export async function GET() {
     })
   );
 
-  // Return top 10 sorted by shared artists desc
+  // Return top 10 sorted by shared artists desc — exclude own username duplicates
   const top10 = results
-    .filter((r) => r.username)
+    .filter((r) => r.username && !myUsernames.has(r.username))
     .sort((a, b) => b.shared_artists - a.shared_artists)
     .slice(0, 10);
 
