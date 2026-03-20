@@ -4,6 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { useTheme } from "./ThemeProvider";
 
+function HintBanner({ children, onDismiss }) {
+  return (
+    <div className="mx-4 mt-3 mb-1 px-4 py-3 rounded-xl bg-amber-950/40 border border-amber-800/25 flex items-start gap-3">
+      <span className="text-amber-500 text-base mt-0.5 shrink-0">💡</span>
+      <div className="text-stone-300 text-xs leading-relaxed flex-1">{children}</div>
+      <button onClick={onDismiss} className="text-stone-600 hover:text-stone-400 text-sm ml-1 shrink-0 leading-none">×</button>
+    </div>
+  );
+}
+
 function mapSearchResult(r) {
   const dash = (r.title || "").indexOf(" - ");
   const artist = dash > -1 ? r.title.slice(0, dash) : "Unknown";
@@ -3360,6 +3370,14 @@ export default function VinylCrate() {
   const [showOnboarding, setShowOnboarding] = useState(
     () => { try { return !localStorage.getItem("cratemate_onboarded"); } catch { return false; } }
   );
+  const [seenHints, setSeenHints] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("cratemate_hints") || "{}"); } catch { return {}; }
+  });
+  function dismissHint(key) {
+    const next = { ...seenHints, [key]: true };
+    setSeenHints(next);
+    try { localStorage.setItem("cratemate_hints", JSON.stringify(next)); } catch {}
+  }
   const [screensaverEnabled, setScreensaverEnabled] = useState(
     () => typeof window === "undefined" || localStorage.getItem("cratemate_screensaver") !== "0"
   );
@@ -4515,9 +4533,7 @@ export default function VinylCrate() {
     setShowOnboarding(false);
   }
 
-  const forceOnboarding = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("onboarding") === "preview";
-
-  if ((collection.length === 0 && showOnboarding) || forceOnboarding) {
+  if (collection.length === 0 && showOnboarding) {
     return (
       <div
         className="h-dvh flex flex-col items-center justify-center px-8 text-center max-w-md mx-auto"
@@ -4531,60 +4547,52 @@ export default function VinylCrate() {
           Your vinyl. Your story.
         </div>
 
-        <div className="w-full space-y-3 mb-10 text-left">
-          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <span className="text-lg leading-none mt-0.5">🗂️</span>
-            <div>
-              <div className="text-amber-100 text-sm font-medium">Import your collection</div>
-              <div className="text-stone-500 text-xs mt-0.5">Sync from Discogs or add records manually</div>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <span className="text-lg leading-none mt-0.5">🎯</span>
-            <div>
-              <div className="text-amber-100 text-sm font-medium">Get vinyl recommendations</div>
-              <div className="text-stone-500 text-xs mt-0.5">Discover records that match your taste and listening habits</div>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-            <span className="text-lg leading-none mt-0.5">📖</span>
-            <div>
-              <div className="text-amber-100 text-sm font-medium">Track your listening</div>
-              <div className="text-stone-500 text-xs mt-0.5">Log plays, build streaks, and share your sessions</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="w-full flex flex-col gap-3">
+        <div className="w-full flex flex-col gap-3 mb-6">
           {discogsConnected ? (
             <button
-              onClick={handleDiscogsImport}
+              onClick={() => { handleDiscogsImport(); dismissOnboarding(); }}
               disabled={importLoading}
-              className="w-full py-3.5 rounded-xl bg-amber-800/60 border border-amber-700/40 text-amber-100 font-medium text-sm disabled:opacity-40 hover:bg-amber-800/80 transition-colors"
+              className="w-full px-5 py-4 rounded-xl bg-amber-950/60 border border-amber-800/40 text-left flex items-center gap-4 hover:bg-amber-950/80 transition-colors disabled:opacity-40"
             >
-              {importLoading ? "Importing…" : "Import from Discogs"}
+              <span className="text-xl shrink-0">🔗</span>
+              <div className="flex-1">
+                <div className="text-amber-100 text-sm font-medium">I use Discogs</div>
+                <div className="text-stone-400 text-xs mt-0.5">{importLoading ? "Importing…" : "Sync your whole collection in seconds"}</div>
+              </div>
+              <span className="text-stone-500 text-sm">→</span>
             </button>
           ) : (
             <a
               href="/api/discogs/auth"
-              className="w-full py-3.5 rounded-xl bg-amber-800/60 border border-amber-700/40 text-amber-100 font-medium text-sm text-center block hover:bg-amber-800/80 transition-colors"
+              className="w-full px-5 py-4 rounded-xl bg-amber-950/60 border border-amber-800/40 text-left flex items-center gap-4 hover:bg-amber-950/80 transition-colors"
             >
-              Connect Discogs
+              <span className="text-xl shrink-0">🔗</span>
+              <div className="flex-1">
+                <div className="text-amber-100 text-sm font-medium">I use Discogs</div>
+                <div className="text-stone-400 text-xs mt-0.5">Sync your whole collection in seconds</div>
+              </div>
+              <span className="text-stone-500 text-sm">→</span>
             </a>
           )}
+
           <button
             onClick={() => { dismissOnboarding(); setShowAddModal(true); }}
-            className="w-full py-3.5 rounded-xl border border-stone-700 text-stone-300 font-medium text-sm hover:border-stone-500 hover:text-stone-100 transition-colors"
+            className="w-full px-5 py-4 rounded-xl border border-stone-700 text-left flex items-center gap-4 hover:border-stone-500 transition-colors"
           >
-            + Add a record manually
+            <span className="text-xl shrink-0">＋</span>
+            <div className="flex-1">
+              <div className="text-stone-200 text-sm font-medium">I&apos;m starting fresh</div>
+              <div className="text-stone-500 text-xs mt-0.5">Search &amp; add any record from the Discogs database. No account needed.</div>
+            </div>
+            <span className="text-stone-600 text-sm">→</span>
           </button>
         </div>
 
         <button
           onClick={dismissOnboarding}
-          className="mt-6 text-stone-600 text-xs hover:text-stone-400 transition-colors"
+          className="text-stone-600 text-xs hover:text-stone-400 transition-colors"
         >
-          Explore first →
+          explore first →
         </button>
       </div>
     );
@@ -4661,6 +4669,11 @@ export default function VinylCrate() {
 
       {tab === "crate" && (
         <div className="flex-1 flex flex-col overflow-hidden">
+          {!seenHints["crate_play"] && collection.length > 0 && collection.length <= 10 && (
+            <HintBanner onDismiss={() => dismissHint("crate_play")}>
+              Long-press any record to log a play and start your streak.
+            </HintBanner>
+          )}
           {viewMode !== "drift" && <div className="px-4 space-y-2 mb-1">
             <input
               value={search}
@@ -5069,7 +5082,13 @@ export default function VinylCrate() {
       )}
 
       {tab === "hearts" && (
-        <div className="flex-1 px-4 overflow-y-auto pb-8">
+        <div className="flex-1 overflow-y-auto pb-8">
+          {!seenHints["hearts"] && (
+            <HintBanner onDismiss={() => dismissHint("hearts")}>
+              Open a record, expand its tracklist, and tap ♥ next to any track to save it here.
+            </HintBanner>
+          )}
+          <div className="px-4">
           {(() => {
             const allFavRecords = myRecords
               .filter((r) => (r.favorite_tracks || []).length > 0)
@@ -5182,11 +5201,18 @@ export default function VinylCrate() {
               </>
             );
           })()}
+          </div>
         </div>
       )}
 
       {tab === "reco" && (
-        <div className="flex-1 px-4 overflow-y-auto pb-8 space-y-3">
+        <div className="flex-1 overflow-y-auto pb-8">
+          {!seenHints["reco_spotify"] && spotifyLinked === false && (
+            <HintBanner onDismiss={() => dismissHint("reco_spotify")}>
+              Connect Spotify to get recommendations based on what you&apos;ve actually been listening to.
+            </HintBanner>
+          )}
+          <div className="px-4 space-y-3 pt-0">
 
           {/* Spotify listening recommendations */}
           <div className="rounded-xl border border-stone-800/60 overflow-hidden">
@@ -5445,11 +5471,18 @@ export default function VinylCrate() {
           {reco && !recoLoading && (
             <RecoCard reco={reco} onClose={() => setReco(null)} onGenreClick={toggleGenre} activeGenres={activeGenres} />
           )}
+          </div>
         </div>
       )}
 
       {tab === "history" && (
-        <div className="flex-1 px-4 overflow-y-auto pb-8">
+        <div className="flex-1 overflow-y-auto pb-8">
+          {!seenHints["history"] && playSessions.length === 0 && (
+            <HintBanner onDismiss={() => dismissHint("history")}>
+              Long-press a record in your crate to log a play — your sessions and streak live here.
+            </HintBanner>
+          )}
+          <div className="px-4">
           {(() => {
             const streak = computeStreak(playSessions);
             const badge = streakBadge(streak);
@@ -5607,6 +5640,7 @@ export default function VinylCrate() {
               </>
             );
           })()}
+          </div>
         </div>
       )}
 
@@ -6117,7 +6151,13 @@ export default function VinylCrate() {
       )}
 
       {tab === "discover" && (
-        <div className="flex-1 px-4 overflow-y-auto pb-8 pt-2 space-y-4">
+        <div className="flex-1 overflow-y-auto pb-8">
+          {!seenHints["discover"] && (
+            <HintBanner onDismiss={() => dismissHint("discover")}>
+              Toggle discoverability above to find other collectors who share your taste.
+            </HintBanner>
+          )}
+          <div className="px-4 pt-2 space-y-4">
           {/* Discovery toggle */}
           <div className="bg-white/[0.04] rounded-xl p-4">
             <div className="flex items-center justify-between">
@@ -6327,6 +6367,7 @@ export default function VinylCrate() {
               )}
             </>
           )}
+          </div>
         </div>
       )}
 
