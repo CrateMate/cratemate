@@ -4496,9 +4496,7 @@ export default function VinylCrate() {
         className="min-h-screen flex flex-col items-center justify-center px-8 text-center"
         style={{ background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)", fontFamily: "'DM Sans',sans-serif" }}
       >
-        <div className="text-4xl mb-5" style={{ animation: "spin 3s linear infinite" }}>
-          ⏺
-        </div>
+        <img src="/icon-192.png" alt="" style={{ width: 56, height: 56, borderRadius: "50%", marginBottom: 20, animation: "spin 3s linear infinite" }} />
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24 }} className="text-amber-100 mb-2">
           Loading your crate...
@@ -5338,9 +5336,7 @@ export default function VinylCrate() {
 
           {recoLoading && (
             <div className="text-center py-8">
-              <div className="text-amber-900 text-3xl" style={{ display: "inline-block", animation: "spin 2s linear infinite" }}>
-                ⏺
-              </div>
+              <img src="/icon-192.png" alt="" style={{ width: 40, height: 40, borderRadius: "50%", display: "inline-block", animation: "spin 2s linear infinite" }} />
               <div className="text-stone-600 text-sm mt-3">Flipping through the crate...</div>
             </div>
           )}

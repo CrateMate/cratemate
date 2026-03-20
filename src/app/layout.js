@@ -2,7 +2,6 @@ import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import ThemeProvider from "./components/ThemeProvider";
 import ServiceWorkerRegistration from "./components/ServiceWorkerRegistration";
-import InstallPrompt from "./components/InstallPrompt";
 
 export const metadata = {
   title: "CrateMate",
@@ -34,7 +33,6 @@ export default function RootLayout({ children }) {
         <body>
           <ThemeProvider>{children}</ThemeProvider>
           <ServiceWorkerRegistration />
-          <InstallPrompt />
         </body>
       </html>
     </ClerkProvider>
