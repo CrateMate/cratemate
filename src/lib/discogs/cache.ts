@@ -195,6 +195,8 @@ type PriceCacheRow = {
   currency?: string | null;
   condition?: string | null;
   ships_from?: string | null;
+  lowest_listing?: number | null;
+  num_for_sale?: number | null;
   cached_at?: string | null;
   expires_at?: string | null;
 };

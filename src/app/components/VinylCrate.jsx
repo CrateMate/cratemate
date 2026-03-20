@@ -630,6 +630,16 @@ function countryToFlag(country) {
   return [...code].map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)).join('');
 }
 
+function DealBadge({ dealPct }) {
+  if (!dealPct || dealPct < 20) return null;
+  const great = dealPct >= 30;
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${great ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400" : "bg-amber-900/20 border-amber-700/30 text-amber-400"}`}>
+      {great ? "Great deal" : "Good deal"} · {dealPct}% below market
+    </span>
+  );
+}
+
 function WantReleaseRow({ release, onPriceLoaded }) {
   const [price, setPrice] = useState(null);
   const marketplaceUrl = `https://www.discogs.com/sell/release/${release.release_id}`;
@@ -664,11 +674,12 @@ function WantReleaseRow({ release, onPriceLoaded }) {
         <div className="text-xs text-stone-400 truncate">
           {[release.year_pressed, release.label, release.format, release.notes].filter(Boolean).join(" · ")}
         </div>
-        <div className="flex items-center gap-2 mt-0.5">
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <span className="text-[10px] text-stone-600">↗ Discogs Marketplace</span>
           {price && (
-            <span className="text-[10px] text-emerald-700">from ${price.min_price.toFixed(2)} {price.condition}{price.ships_from ? ` ${countryToFlag(price.ships_from) || price.ships_from}` : ''}</span>
+            <span className="text-[10px] text-emerald-700">from ${price.lowest_listing != null ? price.lowest_listing.toFixed(2) : price.min_price.toFixed(2)} VG+{price.ships_from ? ` ${countryToFlag(price.ships_from) || price.ships_from}` : ''}</span>
           )}
+          {price && <DealBadge dealPct={price.deal_pct} />}
         </div>
       </div>
     </a>
@@ -689,6 +700,24 @@ function WantGroupRow({ group, expanded, onToggle }) {
     if (!best || p.min_price < best.min_price) return p;
     return best;
   }, null);
+
+  // Best deal across all loaded prices
+  const bestDeal = Object.values(loadedPrices).reduce((best, p) => {
+    if (!p.deal_pct) return best;
+    if (!best || p.deal_pct > best.deal_pct) return p;
+    return best;
+  }, null);
+
+  // Pre-fetch representative release price on mount so deal badge shows without expanding
+  useEffect(() => {
+    if (!rep?.release_id) return;
+    fetch(`/api/discogs/wantlist/price/${rep.release_id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.min_price != null) setLoadedPrices(prev => ({ ...prev, [rep.release_id]: data }));
+      })
+      .catch(() => {});
+  }, [rep?.release_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePointerDown() {
     didLongPress.current = false;
@@ -740,9 +769,10 @@ function WantGroupRow({ group, expanded, onToggle }) {
             )}
             {minPrice && (
               <span className="text-[10px] text-emerald-700">
-                from ${minPrice.min_price.toFixed(2)} {minPrice.condition}{minPrice.ships_from ? ` ${countryToFlag(minPrice.ships_from) || minPrice.ships_from}` : ''}
+                from ${minPrice.lowest_listing != null ? minPrice.lowest_listing.toFixed(2) : minPrice.min_price.toFixed(2)} VG+{minPrice.ships_from ? ` ${countryToFlag(minPrice.ships_from) || minPrice.ships_from}` : ''}
               </span>
             )}
+            {bestDeal && <DealBadge dealPct={bestDeal.deal_pct} />}
           </div>
         </div>
         <div className="flex flex-col items-center gap-0.5 shrink-0 px-1">
