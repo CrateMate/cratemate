@@ -531,6 +531,23 @@ function computeStreak(sessions) {
   return streak;
 }
 
+function computeLongestStreak(sessions) {
+  if (!sessions.length) return 0;
+  const DAY = 86400000;
+  const daySet = new Set(sessions.map(s => {
+    const d = new Date(s.played_at);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }));
+  const days = [...daySet].sort((a, b) => a - b);
+  let longest = 1, current = 1;
+  for (let i = 1; i < days.length; i++) {
+    if (days[i] - days[i - 1] === DAY) { current++; if (current > longest) longest = current; }
+    else current = 1;
+  }
+  return longest;
+}
+
 function streakBadge(streak) {
   if (streak >= 30) return "True obsessive";
   if (streak >= 14) return "Dedicated listener";
@@ -4967,10 +4984,35 @@ export default function VinylCrate() {
           {(() => {
             const totalPlays = playSessions.length;
             const uniqueRecords = new Set(playSessions.map((s) => s.record_id)).size;
-            const mostPlayedId = Object.entries(playCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
-            const mostPlayed = mostPlayedId ? collection?.find((r) => String(r.id) === String(mostPlayedId)) : null;
             const streak = computeStreak(playSessions);
+            const longestStreak = computeLongestStreak(playSessions);
             const badge = streakBadge(streak);
+            const allSessions = groupPlaySessions(playSessions, collection || []);
+            const totalListeningSecs = allSessions.reduce((sum, s) => sum + (s.listeningSecs || 0), 0);
+
+            // Top 5 played records
+            const topPlayed = Object.entries(playCounts)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5)
+              .map(([id, count]) => ({ record: collection?.find(r => String(r.id) === String(id)), count }))
+              .filter(x => x.record);
+            const maxPlays = topPlayed[0]?.count || 1;
+
+            // Play-weighted genre breakdown
+            const genrePlayCounts = {};
+            for (const [id, count] of Object.entries(playCounts)) {
+              const rec = collection?.find(r => String(r.id) === String(id));
+              if (!rec) continue;
+              for (const g of getGenres(rec)) genrePlayCounts[g] = (genrePlayCounts[g] || 0) + count;
+            }
+            const topGenres = Object.entries(genrePlayCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            const maxGenrePlays = topGenres[0]?.[1] || 1;
+
+            // Day of week activity
+            const timeStats = buildTimeStats(playSessions, collection || []);
+            const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const maxDow = Math.max(...timeStats.byDow, 1);
+
             return (
               <>
                 {streak > 0 && (
@@ -4983,7 +5025,8 @@ export default function VinylCrate() {
                   </div>
                 )}
                 {totalPlays > 0 && (
-                  <div className="grid grid-cols-3 gap-2 mb-4 mt-1">
+                  <>
+                  <div className="grid grid-cols-2 gap-2 mb-2 mt-1">
                     <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
                       <div className="text-stone-600 text-xs mb-0.5">Total Plays</div>
                       <div className="text-stone-200 text-sm font-medium">{totalPlays}</div>
@@ -4993,10 +5036,72 @@ export default function VinylCrate() {
                       <div className="text-stone-200 text-sm font-medium">{uniqueRecords}</div>
                     </div>
                     <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-                      <div className="text-stone-600 text-xs mb-0.5">Most Played</div>
-                      <div className="text-stone-200 text-xs font-medium truncate">{mostPlayed?.title || "—"}</div>
+                      <div className="text-stone-600 text-xs mb-0.5">Listening Time</div>
+                      <div className="text-stone-200 text-sm font-medium">{totalListeningSecs > 0 ? formatListeningTime(totalListeningSecs) : "—"}</div>
+                    </div>
+                    <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
+                      <div className="text-stone-600 text-xs mb-0.5">Longest Streak</div>
+                      <div className="text-stone-200 text-sm font-medium">{longestStreak > 0 ? `${longestStreak}d` : "—"}</div>
                     </div>
                   </div>
+
+                  {/* Top played */}
+                  {topPlayed.length > 0 && (
+                    <div className="mb-4">
+                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Most Played</div>
+                      <div className="space-y-1.5">
+                        {topPlayed.map(({ record: r, count }) => (
+                          <div key={r.id} className="flex items-center gap-2.5">
+                            <CoverArt record={r} size={32} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
+                              <div className="mt-0.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                                <div className="h-full rounded-full bg-amber-700/60" style={{ width: `${Math.round((count / maxPlays) * 100)}%` }} />
+                              </div>
+                            </div>
+                            <div className="text-stone-600 text-xs shrink-0 w-6 text-right">{count}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Genre breakdown by plays */}
+                  {topGenres.length > 0 && (
+                    <div className="mb-4">
+                      <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Genre Mix</div>
+                      <div className="space-y-1.5">
+                        {topGenres.map(([genre, count]) => (
+                          <div key={genre} className="flex items-center gap-2.5">
+                            <div className="text-stone-500 text-xs w-20 shrink-0 truncate">{genre}</div>
+                            <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                              <div className="h-full rounded-full bg-stone-500/70" style={{ width: `${Math.round((count / maxGenrePlays) * 100)}%` }} />
+                            </div>
+                            <div className="text-stone-700 text-xs shrink-0 w-6 text-right">{count}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Day of week activity */}
+                  <div className="mb-4">
+                    <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Your Week</div>
+                    <div className="flex items-end gap-1.5 h-12">
+                      {timeStats.byDow.map((count, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <div className="w-full flex flex-col justify-end rounded-sm bg-stone-800/60" style={{ height: 32 }}>
+                            <div
+                              className="w-full rounded-sm bg-amber-800/50"
+                              style={{ height: `${Math.round((count / maxDow) * 100)}%` }}
+                            />
+                          </div>
+                          <div className="text-stone-700 text-[10px]">{DOW_LABELS[i]}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  </>
                 )}
                 {playSessions.length === 0 ? (
                   <div className="text-stone-600 text-sm text-center py-16">No plays logged yet.</div>
@@ -5012,7 +5117,6 @@ export default function VinylCrate() {
                     </div>
                   <div className="space-y-1">
                     {(() => {
-                      const allSessions = groupPlaySessions(playSessions, collection);
                       const historyTotalPages = Math.ceil(allSessions.length / HISTORY_PAGE_SIZE);
                       const visibleSessions = historyInfiniteScroll
                         ? allSessions.slice(0, historyVisible)
