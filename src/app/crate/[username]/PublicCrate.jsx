@@ -65,9 +65,12 @@ export default function PublicCrate({ records, username }) {
     >
       {/* Header bar */}
       <div className="w-full flex items-center justify-between px-4 py-2.5 border-b border-stone-800/60 bg-black/30">
-        <div className="text-xs text-stone-500">
-          <span className="text-stone-400 font-medium">{username}</span>
-          <span className="ml-1">· {records.length} records</span>
+        <div className="flex items-center gap-2">
+          <img src="/icon-192.png" alt="CrateMate" width={20} height={20} className="rounded-md opacity-70" />
+          <div className="text-xs text-stone-500">
+            <span className="text-stone-400 font-medium">{username}</span>
+            <span className="ml-1">· {records.length} records</span>
+          </div>
         </div>
         <a
           href="/sign-up"

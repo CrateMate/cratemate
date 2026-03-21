@@ -77,8 +77,9 @@ export default function LandingPage() {
           <h1
             className="text-5xl md:text-6xl leading-tight"
             style={{
-              fontFamily: "'Cormorant Garamond', serif",
+              fontFamily: "'Playfair Display', serif",
               fontStyle: "italic",
+              fontWeight: 700,
               color: "#fbbf24",
             }}
           >

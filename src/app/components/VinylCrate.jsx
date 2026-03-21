@@ -4499,7 +4499,7 @@ export default function VinylCrate() {
   const [spotifyLinked, setSpotifyLinked] = useState(null); // null=unknown, true/false
   const [spotifyRecs, setSpotifyRecs] = useState(null);
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
-  const [spotifyExpanded, setSpotifyExpanded] = useState(true);
+  const [spotifyExpanded, setSpotifyExpanded] = useState(false);
   const [recoFiltersExpanded, setRecoFiltersExpanded] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [seenHints, setSeenHints] = useState(() => {
@@ -5875,9 +5875,12 @@ export default function VinylCrate() {
             {user?.firstName && (
               <div className="text-xs uppercase tracking-widest text-amber-900 mb-0.5">{user.firstName}&apos;s</div>
             )}
-            <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, lineHeight: 1 }} className="text-amber-50">
-              CrateMate
-            </h1>
+            <div className="flex items-center gap-2">
+              <img src="/icon-192.png" alt="CrateMate" width={28} height={28} className="rounded-lg" />
+              <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, lineHeight: 1 }} className="text-amber-50">
+                CrateMate
+              </h1>
+            </div>
             <div className="text-stone-600 text-xs mt-1">
               {myRecords.length} records · {forSaleRecords.length} for sale
             </div>
@@ -5930,7 +5933,12 @@ export default function VinylCrate() {
                 : viewMode === "drift" ? "text-stone-600 hover:text-stone-400 bg-black/40" : "text-stone-500 hover:text-stone-300"
             }`}
           >
-            {label}
+            {id === "crate" ? (
+              <span className="flex items-center justify-center gap-1">
+                <img src="/icon-192.png" alt="" width={11} height={11} className="rounded-sm opacity-75" />
+                Crate
+              </span>
+            ) : label}
           </button>
         ))}
       </div>
