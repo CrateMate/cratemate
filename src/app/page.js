@@ -78,7 +78,7 @@ export default function LandingPage() {
             className="text-5xl md:text-6xl leading-tight"
             style={{
               fontFamily: "'Fraunces', serif",
-              fontStyle: "italic",
+
               fontWeight: 700,
               color: "#fbbf24",
             }}

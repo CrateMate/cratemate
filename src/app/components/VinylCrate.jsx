@@ -3587,7 +3587,7 @@ async function generateCollectionDNA(stats, username) {
   // ── TOP THIRD — title + username ─────────────────────────────────────────
   ctx.textAlign = "center";
   ctx.fillStyle = "#fbbf24";
-  ctx.font = `italic bold 100px "Fraunces", serif`;
+  ctx.font = `bold 100px "Fraunces", serif`;
   ctx.fillText("Your collection.", W / 2, curY);
   curY += 60;
   if (username) {
@@ -3837,7 +3837,7 @@ async function generateStoryCards(session, username) {
     const textX = LX + LOGO + 20;
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.60)';
-    ctx.font = `italic 600 44px "Fraunces", serif`;
+    ctx.font = `700 44px "Fraunces", serif`;
     ctx.fillText('CrateMate', textX, LY + 44);
     if (username) {
       ctx.fillStyle = 'rgba(255,255,255,0.32)';
@@ -3934,7 +3934,7 @@ async function generateStoryCards(session, username) {
   ctx.textAlign = 'left';
 
   ctx.fillStyle = 'rgba(255,255,255,0.93)';
-  ctx.font = `italic 78px "Fraunces", serif`;
+  ctx.font = `700 78px "Fraunces", serif`;
   ctx.fillText(sessionTitle, TX, 112);
 
   // Decade badge + genre pills on the same row
@@ -4017,7 +4017,7 @@ async function generateStoryCards(session, username) {
     for (const group of mergedHearts.slice(0, maxArtists)) {
       if (ty > textBottom - 120) break;
       ctx.fillStyle = '#fef3c7';
-      ctx.font = `italic 70px "Fraunces", serif`;
+      ctx.font = `700 70px "Fraunces", serif`;
       ctx.fillText(group.artist.length > 26 ? group.artist.slice(0, 24) + '…' : group.artist, TX, ty);
       ty += 78;
       ctx.fillStyle = 'rgba(255,255,255,0.56)';
@@ -4038,7 +4038,7 @@ async function generateStoryCards(session, username) {
       ctx.fillText('Artists', TX, ty);
       ty += 72;
       ctx.fillStyle = '#fef3c7';
-      ctx.font = `italic 70px "Fraunces", serif`;
+      ctx.font = `700 70px "Fraunces", serif`;
       for (const artist of uniqueArtists) {
         if (ty > textBottom - 80) break;
         ctx.fillText(artist.length > 26 ? artist.slice(0, 24) + '…' : artist, TX, ty);
@@ -4199,7 +4199,7 @@ async function generateCrateSnapshot(shape, records, username, playCounts) {
   ctx.fillStyle = 'rgba(12,11,9,0.85)';
   ctx.fillRect(0, H - FOOTER_H, W, FOOTER_H);
   ctx.fillStyle = '#fbbf24';
-  ctx.font = `italic 600 34px "Fraunces", serif`;
+  ctx.font = `700 34px "Fraunces", serif`;
   ctx.textAlign = 'left';
   ctx.fillText('CrateMate', 32, H - FOOTER_H + 42);
   ctx.fillStyle = '#a8a29e';
