@@ -3844,6 +3844,16 @@ async function generateStoryCards(session, username) {
       ctx.font = `300 28px "DM Sans", sans-serif`;
       ctx.fillText(`@${username}`, textX, LY + 44 + 38);
     }
+
+    // Date — bottom-right, opposite CrateMate
+    const dd = String(sd.getDate()).padStart(2, '0');
+    const mm = String(sd.getMonth() + 1).padStart(2, '0');
+    const yy = String(sd.getFullYear()).slice(-2);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.font = `300 26px "DM Sans", sans-serif`;
+    ctx.fillText(`${dd}/${mm}/${yy}`, W - 80, LY + 56);
+
     ctx.restore();
   }
 
