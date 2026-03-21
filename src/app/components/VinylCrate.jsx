@@ -3430,13 +3430,18 @@ function canvasRoundRect(ctx, x, y, w, h, r) {
 // Renders all tiles to an offscreen canvas and returns it.
 // Replicates the CSS Grid dense layout (TOTAL_UNITS=4 columns) so the export
 // matches what the user sees in the app.
-async function generateTileExport(records, playCounts) {
+// mode: "full" = entire collection (tall image) | "square" = 1:1 crop, most-played first
+async function generateTileExport(records, playCounts, mode = "full") {
   await document.fonts.ready;
 
   const COLS = 4;
-  const UNIT = 120;   // px per grid unit — high enough for readable art
   const GAP = 3;
-  const PADDING = 8;  // outer margin
+  const PADDING = 8;
+
+  // Square mode uses a larger unit so the result fills a 1080×1080 canvas.
+  // Full mode uses a smaller unit to keep file sizes reasonable.
+  const TARGET_W = mode === "square" ? 1080 : 1080;
+  const UNIT = Math.floor((TARGET_W - PADDING * 2 - GAP * (COLS - 1)) / COLS);
 
   // --- compute tile sizes (same logic as TileView) ---
   const maxPlays = Math.max(...records.map(r => playCounts[r.id] || 0), 1);
@@ -3502,13 +3507,22 @@ async function generateTileExport(records, playCounts) {
     }
   }
 
-  const totalRows = occupied.length;
   const W = COLS * UNIT + (COLS - 1) * GAP + PADDING * 2;
-  const H = totalRows * UNIT + (totalRows - 1) * GAP + PADDING * 2;
+
+  // Square mode: clamp to rows that fit within W (1:1 canvas)
+  const maxRows = mode === "square"
+    ? Math.floor((W - PADDING * 2 + GAP) / (UNIT + GAP))
+    : occupied.length;
+  const visiblePlacements = mode === "square"
+    ? placements.filter(({ tile, row }) => row + tile.units <= maxRows)
+    : placements;
+
+  const totalRows = mode === "square" ? maxRows : occupied.length;
+  const H = mode === "square" ? W : totalRows * UNIT + (totalRows - 1) * GAP + PADDING * 2;
 
   // --- load all images ---
   const imgMap = new Map();
-  await Promise.all(placements.map(async ({ tile }) => {
+  await Promise.all(visiblePlacements.map(async ({ tile }) => {
     if (imgMap.has(tile.record.id)) return;
     const url = _artCache.get(tile.record.id) || tile.record.thumb || null;
     const img = await loadImgForCanvas(url);
@@ -3525,7 +3539,7 @@ async function generateTileExport(records, playCounts) {
   ctx.fillStyle = "#0c0b09";
   ctx.fillRect(0, 0, W, H);
 
-  for (const { tile, row, col } of placements) {
+  for (const { tile, row, col } of visiblePlacements) {
     const { record, units, plays } = tile;
     const px = PADDING + col * (UNIT + GAP);
     const py = PADDING + row * (UNIT + GAP);
@@ -4638,7 +4652,7 @@ export default function VinylCrate() {
   const [storyGenerating, setStoryGenerating] = useState(false);
   const [storyCanvases, setStoryCanvases] = useState(null);
   const [showStoryPreview, setShowStoryPreview] = useState(false);
-  const [tileExporting, setTileExporting] = useState(false);
+  const [tileExporting, setTileExporting] = useState(null); // "square" | "full" | null
   const [dnaGenerating, setDnaGenerating] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
   const tabRowRef = useRef(null);
@@ -6266,32 +6280,36 @@ export default function VinylCrate() {
                   </button>
                 )}
                 {honeycombShape === "tiles" && (
-                  <button
-                    disabled={tileExporting}
-                    onClick={async () => {
-                      if (tileExporting) return;
-                      setTileExporting(true);
-                      try {
-                        const canvas = await generateTileExport(honeycombRecords, playCounts);
-                        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-                        const filename = "my-crate.png";
-                        const file = new File([blob], filename, { type: "image/png" });
-                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                          await navigator.share({ files: [file] });
-                        } else {
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url; a.download = filename; a.click();
-                          URL.revokeObjectURL(url);
-                        }
-                      } catch {}
-                      setTileExporting(false);
-                    }}
-                    className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-xs transition-colors text-stone-400 hover:text-amber-300 disabled:text-stone-700"
-                    title="Save as image"
-                  >
-                    {tileExporting ? "Saving…" : "⬇ Save image"}
-                  </button>
+                  <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                    {[["square", "⬇ 1:1"], ["full", "⬇ Full"]].map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        disabled={tileExporting}
+                        onClick={async () => {
+                          if (tileExporting) return;
+                          setTileExporting(mode);
+                          try {
+                            const canvas = await generateTileExport(honeycombRecords, playCounts, mode);
+                            const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+                            const filename = mode === "square" ? "my-crate-square.png" : "my-crate-full.png";
+                            const file = new File([blob], filename, { type: "image/png" });
+                            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                              await navigator.share({ files: [file] });
+                            } else {
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url; a.download = filename; a.click();
+                              URL.revokeObjectURL(url);
+                            }
+                          } catch {}
+                          setTileExporting(null);
+                        }}
+                        className={`px-3 py-1.5 text-xs transition-colors disabled:text-stone-700 ${mode === "full" ? "border-l border-white/10" : ""} ${tileExporting === mode ? "text-amber-300" : "text-stone-400 hover:text-amber-300"}`}
+                      >
+                        {tileExporting === mode ? "Saving…" : label}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
               )}
