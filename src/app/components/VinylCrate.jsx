@@ -1097,39 +1097,30 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
   );
 }
 
-function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, bpm, onLogPlay, onShowToast }) {
-  const longPressTimer = useRef(null);
-  const didLongPress = useRef(false);
+function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, bpm, onLogPlay, onDoubleTap }) {
+  const lastTapTime = useRef(0);
+  const singleTapTimer = useRef(null);
   const originalYear = record.year_original || record.year_pressed;
   const pressedYear = record.year_pressed || null;
   const showPressed = originalYear && pressedYear && pressedYear !== originalYear;
 
-  function handlePointerDown() {
-    didLongPress.current = false;
-    if (!onShowToast) return;
-    longPressTimer.current = setTimeout(() => {
-      didLongPress.current = true;
-      onShowToast(record); // shows action pill — user chooses log vs trail
-    }, 500);
-  }
-  function handlePointerUp() {
-    clearTimeout(longPressTimer.current);
-    if (didLongPress.current) return;
-    onClick(record);
-  }
-  function handlePointerLeave() { clearTimeout(longPressTimer.current); }
-  function handleDoubleClick(e) {
-    e.stopPropagation();
-    if (!onShowToast) return;
-    onShowToast(record);
+  useEffect(() => () => clearTimeout(singleTapTimer.current), []);
+
+  function handleTap() {
+    const now = Date.now();
+    if (now - lastTapTime.current < 300) {
+      clearTimeout(singleTapTimer.current);
+      lastTapTime.current = 0;
+      onDoubleTap?.(record);
+      return;
+    }
+    lastTapTime.current = now;
+    singleTapTimer.current = setTimeout(() => onClick(record), 300);
   }
 
   return (
     <div
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerLeave}
-      onDoubleClick={handleDoubleClick}
+      onClick={handleTap}
       className="flex items-center gap-3 px-2.5 py-2 rounded-xl cursor-pointer transition-all duration-150 hover:bg-white/[0.04] active:scale-[0.99] border border-transparent hover:border-white/[0.07]"
       style={{ touchAction: "manipulation" }}
     >
@@ -1169,7 +1160,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onEnterTrail, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1442,6 +1433,15 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
             )}
           </div>
 
+          {!record.for_sale && (
+            <button
+              onClick={() => onEnterTrail?.(record)}
+              className="w-full py-3 rounded-xl border border-amber-800/40 bg-amber-900/20 text-amber-300 text-sm font-medium hover:bg-amber-900/35 transition-colors mt-2 mb-1"
+            >
+              ⬡ Start Listening Session →
+            </button>
+          )}
+
           {lastPlayedDate && (
             <div className="text-stone-600 text-xs text-center mb-4">
               Last played: {(() => {
@@ -1548,7 +1548,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   );
 }
 
-export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onShowToast, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb" }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onDoubleTap, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb" }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -1560,8 +1560,9 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   const scaleRafRef = useRef(null);
   const cellsRef = useRef([]);
   const [scales, setScales] = useState({});
-  const hexLongPressTimer = useRef(null);
-  const hexLongPressDidFire = useRef(false);
+  const hexLastTapTime = useRef(0);
+  const hexLastTapRecordId = useRef(null);
+  const hexSingleTapTimer = useRef(null);
 
   // Screensaver (idle auto-pan) — state is lifted to parent VinylCrate
   const screensaverEnabledRef = useRef(screensaverEnabled);
@@ -1793,7 +1794,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
     const dy = pos.clientY - lastPos.current.y;
     lastPos.current = { x: pos.clientX, y: pos.clientY };
     moveDistance.current += Math.abs(dx) + Math.abs(dy);
-    if (moveDistance.current > 6) { clearTimeout(hexLongPressTimer.current); }
+    if (moveDistance.current > 6) { clearTimeout(hexSingleTapTimer.current); }
     velocity.current = { x: dx, y: dy };
     const clamped = clampOffset(offsetRef.current.x + dx, offsetRef.current.y + dy);
     offsetRef.current = clamped;
@@ -1807,10 +1808,18 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   function onPointerUp(e, record) {
     if (!dragging.current) return;
     dragging.current = false;
-    clearTimeout(hexLongPressTimer.current);
     if (moveDistance.current < 6 && record) {
-      if (!hexLongPressDidFire.current) onSelect(record);
-      hexLongPressDidFire.current = false;
+      const now = Date.now();
+      if (now - hexLastTapTime.current < 300 && hexLastTapRecordId.current === record.id) {
+        clearTimeout(hexSingleTapTimer.current);
+        hexLastTapTime.current = 0;
+        hexLastTapRecordId.current = null;
+        onDoubleTap?.(record);
+      } else {
+        hexLastTapTime.current = now;
+        hexLastTapRecordId.current = record.id;
+        hexSingleTapTimer.current = setTimeout(() => onSelect(record), 300);
+      }
     } else {
       startMomentum();
     }
@@ -1864,22 +1873,6 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                 transformOrigin: "center center",
                 transition: "transform 150ms ease-out",
                 zIndex,
-              }}
-              onMouseDown={(e) => {
-                if (!onShowToast) return;
-                hexLongPressDidFire.current = false;
-                hexLongPressTimer.current = setTimeout(() => {
-                  hexLongPressDidFire.current = true;
-                  onShowToast(record);
-                }, 500);
-              }}
-              onTouchStart={(e) => {
-                if (!onShowToast) return;
-                hexLongPressDidFire.current = false;
-                hexLongPressTimer.current = setTimeout(() => {
-                  hexLongPressDidFire.current = true;
-                  onShowToast(record);
-                }, 500);
               }}
               onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
               onTouchEnd={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
@@ -1950,11 +1943,12 @@ function packTileRows(tiles, totalUnits) {
   return rows;
 }
 
-export function TileView({ records, playCounts, onSelect, onShowToast }) {
+export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   const containerRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
-  const longPressTimer = useRef(null);
-  const didLongPress = useRef(false);
+  const lastTapTime = useRef(0);
+  const lastTapRecordId = useRef(null);
+  const singleTapTimer = useRef(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -1986,116 +1980,105 @@ export function TileView({ records, playCounts, onSelect, onShowToast }) {
     return { record: r, units, plays };
   });
 
-  // Lookahead row packing — pulls forward tiles that fill leftover space to eliminate gaps
-  const rows = packTileRows(tiles, TOTAL_UNITS);
-
   if (!containerWidth) {
     return <div ref={containerRef} className="flex-1" />;
   }
 
-  const UNIT = (containerWidth - GAP * (TOTAL_UNITS - 1)) / TOTAL_UNITS;
+  // CSS Grid: each unit = one grid cell. Big tiles span multiple cells in both
+  // dimensions (square). Dense auto-flow makes the browser slot smaller tiles
+  // into any gaps left by larger ones — no manual row packing needed.
+  const UNIT = Math.round((containerWidth - GAP * (TOTAL_UNITS - 1)) / TOTAL_UNITS);
 
   return (
     <div
       ref={containerRef}
       className="flex-1 overflow-y-auto overflow-x-hidden pb-8"
-      style={{ scrollbarWidth: "none" }}
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(${TOTAL_UNITS}, ${UNIT}px)`,
+        gridAutoRows: `${UNIT}px`,
+        gap: GAP,
+        gridAutoFlow: "dense",
+        alignContent: "start",
+        scrollbarWidth: "none",
+      }}
     >
-      {rows.map((row, ri) => {
-        // Proportional sizing — tiles share the full row width by their unit count
-        // so the row always fills edge-to-edge regardless of which tiles landed in it.
-        // Row height = the natural square size of the largest tile, so all tiles in a
-        // row share the same height and there are no vertical black gaps.
-        const rowTotalUnits = row.reduce((s, t) => s + t.units, 0);
-        const numGaps = row.length - 1;
-        const availableWidth = containerWidth - numGaps * GAP;
-        const rowMaxUnits = Math.max(...row.map(t => t.units));
-        const rowHeight = Math.round((rowMaxUnits / rowTotalUnits) * availableWidth);
+      {tiles.map(({ record, units, plays }) => {
+        const tileSize = units * UNIT + (units - 1) * GAP; // pixel size of this tile
+        const primaryGenre = getGenres(record)[0] || "";
+        const genreHex = getGenrePalette(primaryGenre).hex;
+        const artUrl = _artCache.get(record.id) || record.thumb || null;
 
         return (
-          <div key={ri} className="flex items-stretch" style={{ gap: GAP, marginBottom: GAP }}>
-            {row.map(({ record, units, plays }) => {
-              const tileSize = Math.round((units / rowTotalUnits) * availableWidth);
-              const primaryGenre = getGenres(record)[0] || "";
-              const genreHex = getGenrePalette(primaryGenre).hex;
-              const artUrl = _artCache.get(record.id) || record.thumb || null;
+          <div
+            key={record.id}
+            onClick={() => {
+              const now = Date.now();
+              if (now - lastTapTime.current < 300 && lastTapRecordId.current === record.id) {
+                clearTimeout(singleTapTimer.current);
+                lastTapTime.current = 0;
+                lastTapRecordId.current = null;
+                onDoubleTap?.(record);
+                return;
+              }
+              lastTapTime.current = now;
+              lastTapRecordId.current = record.id;
+              singleTapTimer.current = setTimeout(() => onSelect(record), 300);
+            }}
+            style={{
+              gridColumn: `span ${units}`,
+              gridRow: `span ${units}`,
+              position: "relative",
+              overflow: "hidden",
+              cursor: "pointer",
+              background: "#0c0b09",
+              touchAction: "manipulation",
+            }}
+          >
+            {/* Art */}
+            {artUrl ? (
+              <img
+                src={artUrl}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+            ) : (
+              <div style={{ width: "100%", height: "100%", background: `${genreHex}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: tileSize * 0.3, opacity: 0.3 }}>◇</span>
+              </div>
+            )}
 
-              return (
-                <div
-                  key={record.id}
-                  onPointerDown={() => {
-                    didLongPress.current = false;
-                    if (!onShowToast) return;
-                    longPressTimer.current = setTimeout(() => {
-                      didLongPress.current = true;
-                      onShowToast(record);
-                    }, 500);
-                  }}
-                  onPointerUp={() => {
-                    clearTimeout(longPressTimer.current);
-                    if (didLongPress.current) return;
-                    onSelect(record);
-                  }}
-                  onPointerLeave={() => clearTimeout(longPressTimer.current)}
-                  style={{
-                    width: tileSize,
-                    height: rowHeight,
-                    flexShrink: 0,
-                    position: "relative",
-                    overflow: "hidden",
-                    cursor: "pointer",
-                    background: "#0c0b09",
-                    alignSelf: "flex-end",
-                    touchAction: "manipulation",
-                  }}
-                >
-                  {/* Art */}
-                  {artUrl ? (
-                    <img
-                      src={artUrl}
-                      alt=""
-                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                    />
-                  ) : (
-                    <div style={{ width: "100%", height: "100%", background: `${genreHex}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ fontSize: tileSize * 0.3, opacity: 0.3 }}>◇</span>
-                    </div>
-                  )}
-
-                  {/* Bottom gradient + title (always for large tiles, hover for small) */}
-                  {units >= 2 && (
-                    <div style={{
-                      position: "absolute", inset: 0,
-                      background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)",
-                      display: "flex", flexDirection: "column", justifyContent: "flex-end",
-                      padding: Math.round(tileSize * 0.06),
-                    }}>
-                      <div style={{ color: "#fef3c7", fontSize: Math.round(tileSize * 0.09), fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {record.title}
-                      </div>
-                      <div style={{ color: "#a8a29e", fontSize: Math.round(tileSize * 0.075), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
-                        {record.artist}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Genre accent top-left bar */}
-                  <div style={{ position: "absolute", top: 0, left: 0, width: Math.round(tileSize * 0.05), height: "100%", background: `${genreHex}55` }} />
-
-                  {/* Play count badge */}
-                  {plays > 0 && (
-                    <div style={{
-                      position: "absolute", top: 6, right: 6,
-                      background: "rgba(0,0,0,0.65)", borderRadius: 8,
-                      padding: "1px 6px", fontSize: Math.round(tileSize * 0.1),
-                      color: "#fbbf24", lineHeight: 1.4,
-                    }}>
-                      {plays}×
-                    </div>
-                  )}
+            {/* Bottom gradient + title (large tiles only) */}
+            {units >= 2 && (
+              <div style={{
+                position: "absolute", inset: 0,
+                background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)",
+                display: "flex", flexDirection: "column", justifyContent: "flex-end",
+                padding: Math.round(tileSize * 0.06),
+              }}>
+                <div style={{ color: "#fef3c7", fontSize: Math.round(tileSize * 0.09), fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {record.title}
                 </div>
-              );
-            })}
+                <div style={{ color: "#a8a29e", fontSize: Math.round(tileSize * 0.075), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
+                  {record.artist}
+                </div>
+              </div>
+            )}
+
+            {/* Genre accent top-left bar */}
+            <div style={{ position: "absolute", top: 0, left: 0, width: Math.round(tileSize * 0.05), height: "100%", background: `${genreHex}55` }} />
+
+            {/* Play count badge */}
+            {plays > 0 && (
+              <div style={{
+                position: "absolute", top: 6, right: 6,
+                background: "rgba(0,0,0,0.65)", borderRadius: 8,
+                padding: "1px 6px", fontSize: Math.round(tileSize * 0.1),
+                color: "#fbbf24", lineHeight: 1.4,
+              }}>
+                {plays}×
+              </div>
+            )}
           </div>
         );
       })}
@@ -4380,9 +4363,20 @@ export default function VinylCrate() {
   const PAGE_SIZE = 25;
   const sentinelRef = useRef(null);
 
-  // Long-press action pill (replaces old playToast)
-  const [actionPill, setActionPill] = useState(null); // { record }
-  const actionPillTimer = useRef(null);
+  // Now Playing — persisted to localStorage
+  const [nowPlaying, setNowPlaying] = useState(() => {
+    try { const s = localStorage.getItem("cratemate_now_playing"); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  const [, setNowPlayingTick] = useState(0); // force re-render every minute for relative time
+  useEffect(() => {
+    if (!nowPlaying) return;
+    const id = setInterval(() => setNowPlayingTick(t => t + 1), 60000);
+    return () => clearInterval(id);
+  }, [nowPlaying]);
+
+  // Undo pending
+  const [undoPending, setUndoPending] = useState(null); // { record, sessionId }
+  const undoTimerRef = useRef(null);
 
   // Play Trail
   const [trailActive, setTrailActive] = useState(false);
@@ -4417,9 +4411,6 @@ export default function VinylCrate() {
   const [trailSavePrompt, setTrailSavePrompt] = useState(false);
   const [trailSaving, setTrailSaving] = useState(false);
 
-  // legacy playToast kept as null so nothing breaks — pill replaces it
-  const [playToast] = useState(null);
-  const playToastTimer = useRef(null);
 
   const [expandedHearts, setExpandedHearts] = useState(new Set());
   const [heartsPage, setHeartsPage] = useState(1);
@@ -4607,14 +4598,49 @@ export default function VinylCrate() {
     } catch {}
   }
 
-  function showActionPill(record) {
-    clearTimeout(actionPillTimer.current);
-    setActionPill({ record });
-    actionPillTimer.current = setTimeout(() => setActionPill(null), 4000);
+  function relativePlayTime(loggedAt) {
+    const mins = Math.floor((Date.now() - new Date(loggedAt).getTime()) / 60000);
+    if (mins < 1) return "Now Playing";
+    if (mins < 60) return `Last played · ${mins}m ago`;
+    return `Last played · ${Math.floor(mins / 60)}h ago`;
   }
 
-  // kept for backwards compat signature — RecordRow/HoneycombView call onShowToast(record)
-  const showPlayToast = showActionPill;
+  async function handleDoubleTap(record) {
+    try {
+      const sessionId = await logPlay(record.id);
+      const loggedAt = new Date().toISOString();
+      const np = { record, loggedAt };
+      setNowPlaying(np);
+      try { localStorage.setItem("cratemate_now_playing", JSON.stringify(np)); } catch {}
+      clearTimeout(undoTimerRef.current);
+      setUndoPending({ record, sessionId });
+      undoTimerRef.current = setTimeout(() => setUndoPending(null), 4000);
+    } catch {}
+  }
+
+  async function handleUndo() {
+    if (!undoPending) return;
+    clearTimeout(undoTimerRef.current);
+    const { record, sessionId } = undoPending;
+    setUndoPending(null);
+    try {
+      await fetch(`/api/plays/${sessionId}`, { method: "DELETE" });
+    } catch {}
+    setPlayCounts(prev => ({ ...prev, [record.id]: Math.max((prev[record.id] || 0) - 1, 0) }));
+    setPlaySessions(prev => {
+      const next = prev.filter(s => s.id !== sessionId);
+      const nextForRecord = next.find(s => s.record_id === record.id);
+      setLastPlayedDates(d => {
+        const nd = { ...d };
+        if (nextForRecord) nd[record.id] = nextForRecord.played_at;
+        else delete nd[record.id];
+        return nd;
+      });
+      return next;
+    });
+    setNowPlaying(prev => prev?.record?.id === record.id ? null : prev);
+    try { localStorage.removeItem("cratemate_now_playing"); } catch {}
+  }
 
   async function handleShareStory(session) {
     if (storyGenerating) return;
@@ -5526,11 +5552,12 @@ export default function VinylCrate() {
         await queueOfflinePlay(user?.id || "unknown", recordId);
       } catch { /* ignore */ }
       const playedAt = new Date().toISOString();
+      const sessionId = crypto.randomUUID();
       setPlayCounts((prev) => ({ ...prev, [recordId]: (prev[recordId] || 0) + 1 }));
       setLastPlayedDates((prev) => ({ ...prev, [recordId]: playedAt }));
-      setPlaySessions((prev) => [{ id: crypto.randomUUID(), record_id: recordId, played_at: playedAt }, ...prev]);
+      setPlaySessions((prev) => [{ id: sessionId, record_id: recordId, played_at: playedAt }, ...prev]);
       setPendingPlays((c) => c + 1);
-      return;
+      return sessionId;
     }
 
     const res = await fetch("/api/plays", {
@@ -5540,9 +5567,11 @@ export default function VinylCrate() {
     });
     const data = await res.json();
     const playedAt = data.played_at || new Date().toISOString();
+    const sessionId = data.id || crypto.randomUUID();
     setPlayCounts((prev) => ({ ...prev, [recordId]: (prev[recordId] || 0) + 1 }));
     setLastPlayedDates((prev) => ({ ...prev, [recordId]: playedAt }));
-    setPlaySessions((prev) => [{ id: data.id || crypto.randomUUID(), record_id: recordId, played_at: playedAt }, ...prev]);
+    setPlaySessions((prev) => [{ id: sessionId, record_id: recordId, played_at: playedAt }, ...prev]);
+    return sessionId;
   }
 
   async function undoLogPlay(recordId) {
@@ -5731,7 +5760,7 @@ export default function VinylCrate() {
         <div className="flex-1 flex flex-col overflow-hidden relative">
           {!seenHints["crate_play"] && collection.length > 0 && collection.length <= 10 && (
             <HintBanner onDismiss={() => dismissHint("crate_play")}>
-              Long-press any record to log a play and start your streak.
+              Double-tap any record to instantly log a play and start your streak.
             </HintBanner>
           )}
           {viewMode !== "drift" && !selected && <div className="px-4 space-y-2 mb-1">
@@ -5940,7 +5969,7 @@ export default function VinylCrate() {
                   records={honeycombRecords}
                   playCounts={playCounts}
                   onSelect={(rec) => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
-                  onShowToast={showPlayToast}
+                  onDoubleTap={handleDoubleTap}
                 />
               ) : (
               <HoneycombView
@@ -5954,7 +5983,7 @@ export default function VinylCrate() {
                   if (!rec.for_sale) setLastPlayed(rec);
                 }}
                 onLogPlay={logPlay}
-                onShowToast={showPlayToast}
+                onDoubleTap={handleDoubleTap}
                 screensaverEnabled={screensaverEnabled}
                 onToggleScreensaver={() => {
                   const next = !screensaverEnabled;
@@ -6023,7 +6052,7 @@ export default function VinylCrate() {
                   onClick={() => setControlsHidden(true)}
                   className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-500 hover:text-stone-300 text-xs transition-colors"
                   title="Hide controls"
-                >👁</button>
+                >⚙</button>
               </div>
               )}
               {controlsHidden && (
@@ -6031,7 +6060,7 @@ export default function VinylCrate() {
                   onClick={() => setControlsHidden(false)}
                   className="absolute top-4 right-4 z-50 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 text-stone-500 hover:text-stone-300 text-xs transition-colors"
                   title="Show controls"
-                >👁</button>
+                >⚙</button>
               )}
               {/* Stat filter badge + Clear all */}
               {!controlsHidden && (statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
@@ -6145,7 +6174,7 @@ export default function VinylCrate() {
                   playCount={playCounts[r.id] || 0}
                   bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
                   onLogPlay={logPlay}
-                  onShowToast={showPlayToast}
+                  onDoubleTap={handleDoubleTap}
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
@@ -6183,7 +6212,7 @@ export default function VinylCrate() {
                       playCount={playCounts[r.id] || 0}
                       bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
                       onLogPlay={logPlay}
-                      onShowToast={showPlayToast}
+                      onDoubleTap={handleDoubleTap}
                     />
                   ))}
                 </>
@@ -6200,6 +6229,7 @@ export default function VinylCrate() {
               onDelete={handleDelete}
               onLogPlay={logPlay}
               onUndoLogPlay={undoLogPlay}
+              onEnterTrail={(rec) => { enterTrail(rec); setSelected(null); }}
               onRecordUpdate={(patch) => {
                 const updated = { ...selected, ...patch };
                 setSelected(updated);
@@ -6616,7 +6646,7 @@ export default function VinylCrate() {
         <div className="flex-1 overflow-y-auto pb-8">
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
-              Long-press a record in your crate to log a play — your sessions and streak live here.
+              Double-tap a record in your crate to log a play — your sessions and streak live here.
             </HintBanner>
           )}
           <div className="px-4">
@@ -7600,39 +7630,43 @@ export default function VinylCrate() {
 
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
 
-      {/* Long-press action pill */}
-      {actionPill && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200] shadow-2xl" style={{ pointerEvents: "auto", minWidth: 270 }}>
-          <div className="bg-stone-950 border border-stone-700/60 rounded-2xl px-4 pt-3 pb-3 backdrop-blur-sm">
-            <div className="flex items-center gap-2 mb-2.5">
-              <span className="text-stone-400 text-sm truncate flex-1">{actionPill.record.title}</span>
-              <button onClick={() => { clearTimeout(actionPillTimer.current); setActionPill(null); }}
-                className="text-stone-700 hover:text-stone-400 text-lg leading-none shrink-0">×</button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  logPlay(actionPill.record.id);
-                  clearTimeout(actionPillTimer.current);
-                  setActionPill(null);
-                }}
-                className="flex-1 py-2 rounded-xl border border-stone-700 text-stone-300 text-xs hover:border-amber-900/50 hover:text-amber-200 transition-colors"
-              >
-                Log play
-              </button>
-              <button
-                onClick={() => {
-                  const rec = actionPill.record;
-                  clearTimeout(actionPillTimer.current);
-                  setActionPill(null);
-                  enterTrail(rec);
-                }}
-                className="flex-1 py-2 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-xs hover:bg-amber-900/40 transition-colors"
-              >
-                ⬡ Listening Session
-              </button>
-            </div>
+      {/* Undo toast — appears for 4s after a double-tap log */}
+      {undoPending && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] shadow-2xl" style={{ minWidth: 260 }}>
+          <div className="bg-stone-950 border border-stone-700/60 rounded-2xl px-4 py-3 backdrop-blur-sm flex items-center gap-3">
+            <span className="text-emerald-400 text-sm">✓</span>
+            <span className="text-stone-300 text-sm truncate flex-1">Logged — {undoPending.record.title}</span>
+            <button onClick={handleUndo} className="text-amber-400 text-xs hover:text-amber-300 shrink-0 transition-colors">Undo</button>
           </div>
+        </div>
+      )}
+
+      {/* Now Playing banner */}
+      {nowPlaying && viewMode !== "drift" && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-[190] border-t border-stone-800/60 backdrop-blur-md"
+          style={{ background: "rgba(12,11,9,0.92)" }}
+        >
+          <div className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto">
+            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+              {nowPlaying.record.thumb
+                ? <img src={nowPlaying.record.thumb} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-stone-700" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-amber-50 text-sm truncate leading-tight">{nowPlaying.record.title}</div>
+              <div className="text-stone-500 text-xs">{relativePlayTime(nowPlaying.loggedAt)}</div>
+            </div>
+            <button
+              onClick={() => { enterTrail(nowPlaying.record); setSelected(null); }}
+              className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
+            >▷ Session</button>
+            <button
+              onClick={() => { setNowPlaying(null); try { localStorage.removeItem("cratemate_now_playing"); } catch {} }}
+              className="text-stone-600 hover:text-stone-400 text-lg leading-none shrink-0 transition-colors"
+            >×</button>
+          </div>
+          <div style={{ height: "env(safe-area-inset-bottom, 0px)" }} />
         </div>
       )}
 
