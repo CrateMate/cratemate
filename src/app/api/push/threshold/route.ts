@@ -26,15 +26,15 @@ export async function POST(request: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { release_id, threshold_price, currency = "USD" } = body;
-  if (!release_id || threshold_price == null) {
+  const { release_id, threshold_deal_pct } = body;
+  if (!release_id || threshold_deal_pct == null) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("wantlist_price_thresholds")
     .upsert(
-      { user_id: userId, release_id, threshold_price, currency, enabled: true },
+      { user_id: userId, release_id, threshold_deal_pct, enabled: true },
       { onConflict: "user_id,release_id" }
     )
     .select()

@@ -734,8 +734,16 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
   const longPressTimer = useRef(null);
   const didLongPress = useRef(false);
   const [loadedPrices, setLoadedPrices] = useState({});
-  const [showBellForm, setShowBellForm] = useState(false);
-  const [bellInput, setBellInput] = useState("");
+
+  // Bell-slider state
+  const trackRef = useRef(null);
+  const isDragging = useRef(false);
+  const activePct = threshold?.threshold_deal_pct ?? 0;
+  const [dragPct, setDragPct] = useState(activePct);
+  const [dragging, setDragging] = useState(false);
+
+  // Sync dragPct when threshold changes externally
+  useEffect(() => { if (!dragging) setDragPct(threshold?.threshold_deal_pct ?? 0); }, [threshold, dragging]);
 
   const minPrice = Object.values(loadedPrices).reduce((best, p) => {
     if (!best || p.min_price < best.min_price) return p;
@@ -818,53 +826,90 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
         </div>
         <div className="flex flex-col items-center gap-1 shrink-0 px-1">
           <span className="text-stone-600 text-xs">{expanded ? "▲" : "▼"}</span>
-          {pushEnabled && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowBellForm(v => !v); }}
-              className={`text-xs leading-none ${threshold ? "text-amber-400" : "text-stone-700 hover:text-amber-500"} transition-colors`}
-              title={threshold ? `Alert: below $${threshold.threshold_price}` : "Set price alert"}
-            >
-              🔔
-            </button>
-          )}
         </div>
       </div>
-      {showBellForm && pushEnabled && (
+
+      {/* Bell slider — only shown when push is enabled */}
+      {pushEnabled && (
         <div
-          className="px-3 pb-2 pt-1 border-t border-stone-800/40 flex items-center gap-2"
+          className="px-3 pb-2 pt-1"
           onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          {threshold ? (
-            <>
-              <span className="text-[11px] text-amber-400 flex-1">Alert: below ${Number(threshold.threshold_price).toFixed(2)}</span>
-              <button
-                onClick={() => { onRemoveThreshold?.(); setShowBellForm(false); }}
-                className="text-[11px] px-2 py-1 rounded-lg border border-stone-700 text-stone-500 hover:text-rose-400 hover:border-rose-900/40 transition-colors"
-              >Remove</button>
-            </>
-          ) : (
-            <>
-              <span className="text-[11px] text-stone-500 shrink-0">Alert below $</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={bellInput}
-                onChange={(e) => setBellInput(e.target.value)}
-                placeholder="e.g. 15.00"
-                className="flex-1 bg-stone-900 border border-stone-700 rounded-lg px-2 py-1 text-xs text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
-              />
-              <button
-                onClick={() => {
-                  const price = parseFloat(bellInput);
-                  if (!isNaN(price) && price > 0) { onSaveThreshold?.(price); setShowBellForm(false); }
+          {/* % label floats above thumb while dragging */}
+          <div ref={trackRef} className="relative h-7 flex items-center select-none" style={{ touchAction: "none" }}>
+            {/* Track fill — only visible when active */}
+            <div className="absolute inset-y-1/2 -translate-y-1/2 left-0 right-0 rounded-full overflow-hidden" style={{ height: 2 }}>
+              <div
+                className="h-full rounded-full transition-colors"
+                style={{
+                  width: `${(dragPct / 50) * 100}%`,
+                  background: dragPct > 0 ? "#f59e0b" : "transparent",
                 }}
-                className="text-[11px] px-2 py-1 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-300 hover:bg-amber-900/50 transition-colors"
-              >Save</button>
-            </>
-          )}
+              />
+            </div>
+            {/* Track background — faint, always shown */}
+            <div className="absolute inset-y-1/2 -translate-y-1/2 left-0 right-0 rounded-full" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
+
+            {/* Floating pct label */}
+            {dragging && dragPct > 0 && (
+              <div
+                className="absolute -top-5 text-[10px] text-amber-300 font-medium pointer-events-none"
+                style={{ left: `calc(${(dragPct / 50) * 100}% - 16px)` }}
+              >
+                ≥{dragPct}%
+              </div>
+            )}
+
+            {/* Bell thumb */}
+            <div
+              className="absolute"
+              style={{
+                left: `calc(${(dragPct / 50) * 100}% - 12px)`,
+                cursor: "ew-resize",
+                fontSize: 18,
+                lineHeight: 1,
+                filter: dragPct > 0 ? "none" : "grayscale(1) opacity(0.4)",
+                transition: dragging ? "none" : "left 0.15s ease, filter 0.2s",
+                userSelect: "none",
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture(e.pointerId);
+                isDragging.current = true;
+                setDragging(true);
+              }}
+              onPointerMove={(e) => {
+                if (!isDragging.current) return;
+                const track = trackRef.current;
+                if (!track) return;
+                const rect = track.getBoundingClientRect();
+                const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const snapped = Math.round((ratio * 50) / 5) * 5;
+                setDragPct(snapped);
+              }}
+              onPointerUp={(e) => {
+                if (!isDragging.current) return;
+                isDragging.current = false;
+                setDragging(false);
+                if (dragPct < 5) {
+                  onRemoveThreshold?.();
+                  setDragPct(0);
+                } else {
+                  onSaveThreshold?.(dragPct);
+                }
+              }}
+            >
+              🔔
+            </div>
+          </div>
+          {/* Hint text */}
+          <div className="text-[10px] text-stone-700 mt-0.5">
+            {dragPct > 0 ? `Alert when ≥${dragPct}% below market` : "Drag to set deal alert"}
+          </div>
         </div>
       )}
+
       {expanded && group.releases.length > 0 && (
         <div className="px-3 pb-3 space-y-1.5 border-t border-stone-800/40 pt-2">
           {group.releases.map((r) => (
@@ -4094,11 +4139,11 @@ export default function VinylCrate() {
     }
   }
 
-  async function savePriceThreshold(releaseId, price) {
+  async function savePriceThreshold(releaseId, pct) {
     const res = await fetch("/api/push/threshold", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ release_id: releaseId, threshold_price: price }),
+      body: JSON.stringify({ release_id: releaseId, threshold_deal_pct: pct }),
     });
     if (res.ok) {
       const row = await res.json();

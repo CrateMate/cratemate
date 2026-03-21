@@ -120,9 +120,10 @@ export async function GET(request: Request) {
         );
       }
 
-      const { lowest_listing, currency } = priceData;
-      if (lowest_listing == null) continue;
-      if (lowest_listing >= threshold.threshold_price) continue;
+      const { lowest_listing, min_price, currency } = priceData;
+      if (lowest_listing == null || min_price == null || min_price === 0) continue;
+      const dealPct = Math.round((min_price - lowest_listing) / min_price * 100);
+      if (dealPct < threshold.threshold_deal_pct) continue;
 
       // Check cooldown
       if (threshold.last_notified_at) {
@@ -141,7 +142,7 @@ export async function GET(request: Request) {
       const currencySymbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : `${currency} `;
       const payload = JSON.stringify({
         title: "CrateMate Price Alert",
-        body: `A record on your wantlist dropped to ${currencySymbol}${lowest_listing.toFixed(2)} — below your ${currencySymbol}${threshold.threshold_price} threshold.`,
+        body: `A record on your wantlist is ${dealPct}% below market at ${currencySymbol}${lowest_listing.toFixed(2)} — you set an alert at ≥${threshold.threshold_deal_pct}% off.`,
         url: "/app",
         tag: `price-alert-${threshold.release_id}`,
       });
