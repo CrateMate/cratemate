@@ -3813,10 +3813,7 @@ async function generateStoryCards(session, username) {
   const sd = new Date(session.startTime);
   const hr = sd.getHours();
   const timeOfDay = hr < 5 ? 'Night' : hr < 12 ? 'Morning' : hr < 17 ? 'Afternoon' : hr < 21 ? 'Evening' : 'Night';
-  const isToday = sd.toDateString() === new Date().toDateString();
-  const sessionTitle = isToday
-    ? `${sd.toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay} Session`
-    : `${sd.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} Session`;
+  const sessionTitle = `${sd.toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay} Session`;
 
   function cap(s) { return (s || '').replace(/\b\w/g, c => c.toUpperCase()); }
 
@@ -3917,13 +3914,13 @@ async function generateStoryCards(session, username) {
   }
 
   // ── 4. Text panel fade — genre gradient shows through ──
-  const fadeStart = Math.max(actualWallBottom - 200, HEADER_H);
-  const panelGrad = ctx.createLinearGradient(0, fadeStart, 0, H);
+  // Subtle fade only at the art/text boundary — keep gradient visible below
+  const fadeStart = Math.max(actualWallBottom - 120, HEADER_H);
+  const panelGrad = ctx.createLinearGradient(0, fadeStart, 0, fadeStart + 180);
   panelGrad.addColorStop(0, 'rgba(0,0,0,0)');
-  panelGrad.addColorStop(0.20, 'rgba(0,0,0,0.80)');
-  panelGrad.addColorStop(1, 'rgba(0,0,0,0.85)');
+  panelGrad.addColorStop(1, 'rgba(0,0,0,0.28)');
   ctx.fillStyle = panelGrad;
-  ctx.fillRect(0, fadeStart, W, H - fadeStart);
+  ctx.fillRect(0, fadeStart, W, 180);
 
   // ── 5. Session title + decade badge + genre pills in header zone ──
   const TX = 80;
@@ -4584,8 +4581,12 @@ export default function VinylCrate() {
   const [forSaleForced, setForSaleForced] = useState(false);
   useEffect(() => {
     if (!forSaleForced || !forSaleRef.current) return;
+    let hasBeenVisible = false;
     const observer = new IntersectionObserver(
-      ([entry]) => { if (!entry.isIntersecting) setForSaleForced(false); },
+      ([entry]) => {
+        if (entry.isIntersecting) { hasBeenVisible = true; }
+        else if (hasBeenVisible) { setForSaleForced(false); }
+      },
       { threshold: 0 }
     );
     observer.observe(forSaleRef.current);
@@ -5900,7 +5901,8 @@ export default function VinylCrate() {
                   onClick={() => {
                     setTab("crate");
                     setForSaleForced(true);
-                    setTimeout(() => forSaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+                    // Wait for React to render the section before scrolling
+                    setTimeout(() => forSaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
                   }}
                 >
                   {forSaleRecords.length} for sale ↓
