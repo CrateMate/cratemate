@@ -3922,13 +3922,6 @@ async function generateStoryCards(session, username) {
   }
 
   // ── 4. Text panel fade — genre gradient shows through ──
-  // Subtle fade only at the art/text boundary — keep gradient visible below
-  const fadeStart = Math.max(actualWallBottom - 120, HEADER_H);
-  const panelGrad = ctx.createLinearGradient(0, fadeStart, 0, fadeStart + 180);
-  panelGrad.addColorStop(0, 'rgba(0,0,0,0)');
-  panelGrad.addColorStop(1, 'rgba(0,0,0,0.28)');
-  ctx.fillStyle = panelGrad;
-  ctx.fillRect(0, fadeStart, W, 180);
 
   // Enable text shadow for all remaining draws — protects against bright genre gradients
   ctx.shadowColor = 'rgba(0,0,0,0.65)';
