@@ -4303,7 +4303,10 @@ export default function VinylCrate() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("artist");
   const [sortDir, setSortDir] = useState("asc");
-  const [showForSale, setShowForSale] = useState(false);
+  const [hideForSale, setHideForSale] = useState(
+    () => { try { return localStorage.getItem("cratemate_hide_for_sale") === "1"; } catch { return false; } }
+  );
+  const [showSettings, setShowSettings] = useState(false);
   const [selected, setSelected] = useState(null);
   const [lastPlayed, setLastPlayed] = useState(null);
   const [reco, setReco] = useState(null);
@@ -4348,6 +4351,7 @@ export default function VinylCrate() {
     try { return localStorage.getItem("cratemate_hc_shape") || "honeycomb"; } catch { return "honeycomb"; }
   });
   useEffect(() => { try { localStorage.setItem("cratemate_hc_shape", honeycombShape); } catch {} }, [honeycombShape]);
+  useEffect(() => { try { localStorage.setItem("cratemate_hide_for_sale", hideForSale ? "1" : "0"); } catch {} }, [hideForSale]);
   const [activeDecade, setActiveDecade] = useState(new Set());
   const [activeFormat, setActiveFormat] = useState(null);
   const [activeLabel, setActiveLabel] = useState(null);
@@ -4637,7 +4641,7 @@ export default function VinylCrate() {
     }
   }, [tab]); // intentionally omit myRecords/favTitles from deps to avoid refetching
 
-  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, activeLabel, showForSale]);
+  useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, activeLabel]);
 
   // Load Spotify status + recs when Reco tab first opens
   useEffect(() => {
@@ -4880,7 +4884,7 @@ export default function VinylCrate() {
 
   const myRecords = Array.isArray(collection) ? collection.filter((r) => !r.for_sale) : [];
   const forSaleRecords = Array.isArray(collection) ? collection.filter((r) => r.for_sale) : [];
-  const pool = showForSale ? forSaleRecords : myRecords;
+  const pool = myRecords;
 
   const personalTheme = useMemo(() => {
     if (theme !== "personal" || !myRecords.length) return null;
@@ -5676,6 +5680,11 @@ export default function VinylCrate() {
             >
               {theme === "dark" ? "🌑" : theme === "light" ? "☀" : theme === "system" ? "⊙" : "🎵"}
             </button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-stone-600 hover:text-stone-400 text-base transition-colors leading-none"
+              title="Settings"
+            >⚙</button>
             <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
           </div>
         </div>
@@ -5762,16 +5771,6 @@ export default function VinylCrate() {
                 </button>
               </div>
               <div className="flex-1" />
-              <button
-                onClick={() => setShowForSale((s) => !s)}
-                className={`px-3 py-1 rounded-lg text-xs border transition-all ${
-                  showForSale
-                    ? "bg-rose-900/25 border-rose-800/40 text-rose-300"
-                    : "border-stone-800 text-stone-600 hover:text-stone-400"
-                }`}
-              >
-                {showForSale ? "📋 For Sale" : "For Sale"}
-              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -6153,6 +6152,28 @@ export default function VinylCrate() {
                     </button>
                   </div>
                 )
+              )}
+              {!hideForSale && forSaleRecords.length > 0 && (
+                <>
+                  <div className="flex items-center gap-3 px-2 pt-5 pb-1">
+                    <div className="flex-1 h-px bg-stone-800/60" />
+                    <span className="text-stone-600 text-xs shrink-0">📋 For Sale · {forSaleRecords.length}</span>
+                    <div className="flex-1 h-px bg-stone-800/60" />
+                  </div>
+                  {forSaleRecords.map(r => (
+                    <RecordRow
+                      key={r.id}
+                      record={r}
+                      onClick={rec => setSelected(rec)}
+                      onGenreClick={toggleGenre}
+                      activeGenres={activeGenres}
+                      playCount={playCounts[r.id] || 0}
+                      bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
+                      onLogPlay={logPlay}
+                      onShowToast={showPlayToast}
+                    />
+                  ))}
+                </>
               )}
             </div>
           )}
@@ -6820,7 +6841,7 @@ export default function VinylCrate() {
             const topPlayed = Object.entries(playCounts)
               .sort((a, b) => b[1] - a[1])
               .slice(0, 5)
-              .map(([id, count]) => ({ record: collection?.find(r => String(r.id) === String(id)), count }))
+              .map(([id, count]) => ({ record: myRecords.find(r => String(r.id) === String(id)), count }))
               .filter(x => x.record);
             const maxPlays = topPlayed[0]?.count || 1;
             const genrePlayCounts = {};
@@ -7535,6 +7556,33 @@ export default function VinylCrate() {
           canvases={storyCanvases}
           onClose={() => { setShowStoryPreview(false); setStoryCanvases(null); }}
         />
+      )}
+
+      {showSettings && (
+        <div className="fixed inset-0 z-[70] flex flex-col justify-end" onClick={() => setShowSettings(false)}>
+          <div
+            className="w-full max-w-md mx-auto rounded-t-3xl border border-stone-800/60 pb-10 pt-5 px-5"
+            style={{ background: "var(--bg-surface, #0c0b09)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22 }} className="text-amber-50">Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="text-stone-600 hover:text-stone-400 text-xl leading-none">×</button>
+            </div>
+            <div className="flex items-center justify-between py-3.5 border-b border-stone-800/40">
+              <div>
+                <div className="text-stone-200 text-sm">Hide for-sale records</div>
+                <div className="text-stone-600 text-xs mt-0.5">Removes them from all views, including the list</div>
+              </div>
+              <button
+                onClick={() => setHideForSale(v => !v)}
+                className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ml-4 ${hideForSale ? "bg-amber-600" : "bg-stone-700"}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${hideForSale ? "translate-x-5" : "translate-x-0.5"}`} />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
