@@ -3586,210 +3586,196 @@ async function generateCollectionDNA(stats, username) {
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d");
 
-  // Background
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, "#0c0b09");
-  bg.addColorStop(1, "#1c1610");
-  ctx.fillStyle = bg;
+  // Load logo
+  const logoImg = await new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = '/icon-192.png';
+  });
+
+  // Multi-genre gradient — same language as session card
+  const sortedGenres = [...stats.topGenres].sort((a, b) => b.count - a.count);
+  const gradientColors = sortedGenres.slice(0, 4).flatMap(({ genre }) => getStoryGradient(genre));
+  if (gradientColors.length === 0) gradientColors.push('#1b1b2f', '#162447');
+
+  const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+  gradientColors.forEach((color, i) => {
+    bgGrad.addColorStop(i / (gradientColors.length - 1), color);
+  });
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
-  // Subtle warm vignette
-  const vig = ctx.createRadialGradient(W / 2, H * 0.3, 0, W / 2, H * 0.3, W * 0.9);
-  vig.addColorStop(0, "rgba(80,50,10,0.18)");
-  vig.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = vig;
-  ctx.fillRect(0, 0, W, H);
+  // Text shadow for readability on any gradient
+  ctx.shadowColor = 'rgba(0,0,0,0.65)';
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 2;
 
-  let curY = 160;
+  function cap(s) { return (s || '').replace(/\b\w/g, c => c.toUpperCase()); }
+  const TX = 80;
 
-  // ── TOP THIRD — title + username ─────────────────────────────────────────
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#fbbf24";
-  ctx.font = `bold 100px "Fraunces", serif`;
-  ctx.fillText("Your collection.", W / 2, curY);
-  curY += 60;
-  if (username) {
-    ctx.fillStyle = "#78716c";
-    ctx.font = `40px Georgia, serif`;
-    ctx.fillText(`@${username}`, W / 2, curY);
-    curY += 50;
+  // ── HEADER: title + decade + genre pills ──────────────────────────────────
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.font = `900 96px "Fraunces", serif`;
+  ctx.fillText('Your collection.', TX, 118);
+
+  // Decade badge + genre pills on same row (mirrors session card)
+  const pillH = 46;
+  let pillX = TX;
+  const pillY = 150;
+  ctx.font = `400 26px "DM Sans", sans-serif`;
+
+  const topDecade = stats.topDecades[0]?.decade;
+  if (topDecade) {
+    const badgeText = `Mostly ${topDecade}s`;
+    const bw = ctx.measureText(badgeText).width + 36;
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    canvasRoundRect(ctx, pillX, pillY, bw, pillH, pillH / 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
+    canvasRoundRect(ctx, pillX, pillY, bw, pillH, pillH / 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.80)';
+    ctx.fillText(badgeText, pillX + 18, pillY + 31);
+    pillX += bw + 10;
   }
-  ctx.fillStyle = "#44403c";
-  ctx.font = `32px Georgia, serif`;
-  ctx.fillText(`${stats.totalRecords} records · ${stats.totalPlays} plays`, W / 2, curY);
-  curY += 80;
+  for (const { genre } of sortedGenres.slice(0, 3)) {
+    const hex = getGenrePalette(genre).hex;
+    const tw = ctx.measureText(cap(genre)).width;
+    const pillW = tw + 30;
+    if (pillX + pillW > W - 80) break;
+    ctx.fillStyle = hex + '30';
+    canvasRoundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2); ctx.fill();
+    ctx.strokeStyle = hex + '55'; ctx.lineWidth = 1;
+    canvasRoundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2); ctx.stroke();
+    ctx.fillStyle = hex; ctx.textAlign = 'left';
+    ctx.fillText(cap(genre), pillX + 15, pillY + 30);
+    pillX += pillW + 10;
+  }
 
-  // Divider
-  ctx.strokeStyle = "#2c2820";
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(80, curY); ctx.lineTo(W - 80, curY); ctx.stroke();
-  curY += 48;
+  // Username + record count
+  let curY = pillY + pillH + 40;
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = `300 32px "DM Sans", sans-serif`;
+  ctx.textAlign = 'left';
+  const headerSub = username ? `@${username} · ${stats.totalRecords} records` : `${stats.totalRecords} records`;
+  ctx.fillText(headerSub, TX, curY);
+  curY += 70;
 
-  // ── GENRE DNA bar ─────────────────────────────────────────────────────────
+  // ── GENRE BAR ─────────────────────────────────────────────────────────────
   if (stats.topGenres.length > 0) {
-    ctx.fillStyle = "#57534e";
-    ctx.font = `bold 28px Georgia, serif`;
-    ctx.textAlign = "left";
-    ctx.fillText("YOUR SOUND", 80, curY);
-    curY += 40;
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('YOUR SOUND', TX, curY);
+    curY += 36;
 
     const totalGenreCount = stats.topGenres.reduce((s, g) => s + g.count, 0);
-    const barH = 48;
-    let barX = 80;
+    const barH = 54;
     const barW = W - 160;
+    let barX = TX;
 
     for (const { genre, count } of stats.topGenres) {
       const segW = Math.round((count / totalGenreCount) * barW);
       if (segW < 1) continue;
       const hex = getGenrePalette(genre).hex;
-      ctx.fillStyle = hex;
-      // First segment gets left rounded corners, last gets right
-      const isFirst = barX === 80;
-      const isLast = barX + segW >= 80 + barW - 2;
       ctx.save();
-      if (isFirst || isLast) {
-        ctx.beginPath();
-        const r = 8;
-        ctx.moveTo(barX + (isFirst ? r : 0), curY);
-        ctx.lineTo(barX + segW - (isLast ? r : 0), curY);
-        if (isLast) ctx.quadraticCurveTo(barX + segW, curY, barX + segW, curY + r);
-        else ctx.lineTo(barX + segW, curY);
-        ctx.lineTo(barX + segW, curY + barH - (isLast ? r : 0));
-        if (isLast) ctx.quadraticCurveTo(barX + segW, curY + barH, barX + segW - r, curY + barH);
-        else ctx.lineTo(barX + segW, curY + barH);
-        ctx.lineTo(barX + (isFirst ? r : 0), curY + barH);
-        if (isFirst) ctx.quadraticCurveTo(barX, curY + barH, barX, curY + barH - r);
-        else ctx.lineTo(barX, curY + barH);
-        ctx.lineTo(barX, curY + (isFirst ? r : 0));
-        if (isFirst) ctx.quadraticCurveTo(barX, curY, barX + r, curY);
-        ctx.closePath();
-        ctx.fill();
-      } else {
-        ctx.fillRect(barX, curY, segW, barH);
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = hex;
+      ctx.fillRect(barX, curY, segW, barH);
+      if (segW > 90) {
+        ctx.beginPath(); ctx.rect(barX, curY, segW, barH); ctx.clip();
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.font = `500 22px "DM Sans", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(cap(genre), barX + segW / 2, curY + 35);
       }
       ctx.restore();
-
-      // Label if wide enough
-      if (segW > 80) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(barX, curY, segW, barH);
-        ctx.clip();
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
-        ctx.font = `bold 22px Georgia, serif`;
-        ctx.textAlign = "center";
-        const g = genre.charAt(0).toUpperCase() + genre.slice(1);
-        ctx.fillText(g, barX + segW / 2, curY + 32);
-        ctx.restore();
-      }
       barX += segW;
     }
-    curY += barH + 60;
-  }
-
-  // ── DECADE SPREAD ─────────────────────────────────────────────────────────
-  if (stats.topDecades.length > 0) {
-    const maxDecCount = Math.max(...stats.topDecades.map((d) => d.count));
-    const topDec = stats.topDecades[0]?.decade;
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#57534e";
-    ctx.font = `bold 28px Georgia, serif`;
-    ctx.fillText("DECADES", 80, curY);
-    curY += 40;
-
-    let dx = 80;
-    for (const { decade, count } of stats.topDecades.slice(0, 7)) {
-      const isTop = String(decade) === String(topDec);
-      const ratio = count / maxDecCount;
-      const pillH = Math.round(40 + ratio * 20);
-      const label = `${String(decade).slice(2)}s`;
-      ctx.font = `bold 30px Georgia, serif`;
-      const tw = ctx.measureText(label).width;
-      const pillW = Math.max(tw + 32, 72);
-      const pillY = curY + (60 - pillH) / 2;
-
-      ctx.fillStyle = isTop ? "#fbbf24" : "#292524";
-      canvasRoundRect(ctx, dx, pillY, pillW, pillH, pillH / 2);
-      ctx.fill();
-
-      ctx.fillStyle = isTop ? "#1c1410" : "#78716c";
-      ctx.textAlign = "center";
-      ctx.fillText(label, dx + pillW / 2, pillY + pillH / 2 + 11);
-
-      dx += pillW + 12;
-      if (dx > W - 160) break;
-    }
-    curY += 100;
+    curY += barH + 70;
   }
 
   // ── TOP ARTISTS ───────────────────────────────────────────────────────────
-  if (stats.topArtists.length > 0) {
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#57534e";
-    ctx.font = `bold 28px Georgia, serif`;
-    ctx.fillText("MOST SPUN", 80, curY);
-    curY += 44;
+  ctx.fillStyle = 'rgba(255,255,255,0.40)';
+  ctx.font = `500 26px "DM Sans", sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.fillText('MOST SPUN', TX, curY);
+  curY += 52;
 
-    for (const { artist, count } of stats.topArtists.slice(0, 5)) {
-      ctx.fillStyle = "#d4c8b0";
-      ctx.font = `48px "Fraunces", serif`;
-      ctx.textAlign = "left";
-      const display = artist.length > 34 ? artist.slice(0, 32) + "…" : artist;
-      ctx.fillText(display, 80, curY);
-      ctx.fillStyle = "#57534e";
-      ctx.font = `28px Georgia, serif`;
-      ctx.textAlign = "right";
-      ctx.fillText(`${count}×`, W - 80, curY);
-      curY += 60;
-    }
-    curY += 20;
+  for (const { artist, count } of stats.topArtists.slice(0, 5)) {
+    if (curY > H - 380) break;
+    ctx.fillStyle = '#fef3c7';
+    ctx.font = `700 66px "Fraunces", serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText(artist.length > 26 ? artist.slice(0, 24) + '…' : artist, TX, curY);
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `300 30px "DM Sans", sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${count}×`, W - TX, curY);
+    curY += 78;
   }
 
   // ── AUDIO FINGERPRINT ─────────────────────────────────────────────────────
-  if (stats.audioProfile) {
+  if (stats.audioProfile && curY < H - 380) {
+    curY += 16;
     const { energy, valence, danceability } = stats.audioProfile;
-    const descriptors = [];
-    descriptors.push(energy > 0.7 ? "High Energy" : energy < 0.4 ? "Laid Back" : "Balanced");
-    descriptors.push(valence > 0.6 ? "Feel Good" : valence < 0.35 ? "Melancholic" : "Moody");
-    descriptors.push(danceability > 0.65 ? "Danceable" : danceability < 0.4 ? "Headphone Music" : "Groove-Ready");
-
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#57534e";
-    ctx.font = `bold 28px Georgia, serif`;
-    ctx.fillText("AUDIO FINGERPRINT", 80, curY);
-    curY += 44;
-
-    let px2 = 80;
+    const descriptors = [
+      energy > 0.7 ? 'High Energy' : energy < 0.4 ? 'Laid Back' : 'Balanced',
+      valence > 0.6 ? 'Feel Good' : valence < 0.35 ? 'Melancholic' : 'Moody',
+      danceability > 0.65 ? 'Danceable' : danceability < 0.4 ? 'Headphone Music' : 'Groove-Ready',
+    ];
+    ctx.font = `400 28px "DM Sans", sans-serif`;
+    let px = TX;
     for (const desc of descriptors) {
-      ctx.font = `bold 32px Georgia, serif`;
       const tw = ctx.measureText(desc).width;
-      const pillW = tw + 40;
-      if (px2 + pillW > W - 80) { px2 = 80; curY += 56; }
-      ctx.fillStyle = "#292524";
-      canvasRoundRect(ctx, px2, curY - 32, pillW, 48, 24);
-      ctx.fill();
-      ctx.fillStyle = "#a8a29e";
-      ctx.textAlign = "center";
-      ctx.fillText(desc, px2 + pillW / 2, curY);
-      px2 += pillW + 12;
+      const pillW = tw + 36;
+      if (px + pillW > W - TX) { px = TX; curY += 56; }
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      canvasRoundRect(ctx, px, curY - 30, pillW, 46, 23); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
+      canvasRoundRect(ctx, px, curY - 30, pillW, 46, 23); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      ctx.textAlign = 'center';
+      ctx.fillText(desc, px + pillW / 2, curY);
+      px += pillW + 10;
     }
-    curY += 56;
   }
 
-  // ── BRANDING FOOTER ───────────────────────────────────────────────────────
-  ctx.strokeStyle = "#262220";
+  // ── BRANDING FOOTER — identical to session card ────────────────────────────
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
   ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(80, H - 130); ctx.lineTo(W - 80, H - 130); ctx.stroke();
-  ctx.textAlign = "center";
-  if (username) {
-    ctx.fillStyle = "#57534e";
-    ctx.font = `30px Georgia, serif`;
-    ctx.fillText(`cratemate.app/crate/${username}`, W / 2, H - 86);
-  }
-  ctx.fillStyle = "#44403c";
-  ctx.font = `bold 28px Georgia, serif`;
-  ctx.fillText("CrateMate", W / 2, H - 46);
+  ctx.beginPath(); ctx.moveTo(80, H - 136); ctx.lineTo(W - 80, H - 136); ctx.stroke();
 
+  const LOGO = 76;
+  const LX = 80, LY = H - 122;
+  if (logoImg) {
+    ctx.save();
+    canvasRoundRect(ctx, LX, LY, LOGO, LOGO, 16);
+    ctx.clip();
+    ctx.drawImage(logoImg, LX, LY, LOGO, LOGO);
+    ctx.restore();
+  }
+
+  const textX = LX + LOGO + 20;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(255,255,255,0.60)';
+  ctx.font = `700 44px "Fraunces", serif`;
+  ctx.fillText('CrateMate', textX, LY + 44);
+  if (username) {
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.font = `300 28px "DM Sans", sans-serif`;
+    ctx.fillText(`@${username}`, textX, LY + 44 + 38);
+  }
+
+  // Total records — bottom-right
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.58)';
+  ctx.font = `500 26px "DM Sans", sans-serif`;
+  ctx.fillText(`${stats.totalRecords} records`, W - 80, LY + 56);
+
+  ctx.restore();
   return canvas;
 }
 
@@ -3868,8 +3854,8 @@ async function generateStoryCards(session, username) {
     const mm = String(sd.getMonth() + 1).padStart(2, '0');
     const yy = String(sd.getFullYear()).slice(-2);
     ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ctx.font = `300 26px "DM Sans", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.58)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
     ctx.fillText(`${dd}/${mm}/${yy}`, W - 80, LY + 56);
 
     ctx.restore();
