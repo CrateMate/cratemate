@@ -25,7 +25,7 @@ export default function RootLayout({ children }) {
       <html lang="en">
         <head>
           <link
-            href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&family=Playfair+Display:ital,wght@1,700&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,700;1,9..144,300;1,9..144,400;1,9..144,700&family=DM+Sans:wght@300;400;500&display=swap"
             rel="stylesheet"
           />
           <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />

@@ -201,7 +201,7 @@ export default function ArtistPage({ releaseId }) {
         <div className="absolute bottom-4 left-5 right-5">
           <h1
             className="text-amber-50 font-semibold leading-tight"
-            style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30 }}
+            style={{ fontFamily: "'Fraunces',serif", fontSize: 30 }}
           >
             {artistName}
           </h1>

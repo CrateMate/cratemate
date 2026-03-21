@@ -68,7 +68,7 @@ export default function LandingPage() {
             />
             <span
               className="text-2xl tracking-tight"
-              style={{ fontFamily: "'Cormorant Garamond', serif", color: "#fef3c7" }}
+              style={{ fontFamily: "'Fraunces', serif", color: "#fef3c7" }}
             >
               CrateMate
             </span>
@@ -77,7 +77,7 @@ export default function LandingPage() {
           <h1
             className="text-5xl md:text-6xl leading-tight"
             style={{
-              fontFamily: "'Playfair Display', serif",
+              fontFamily: "'Fraunces', serif",
               fontStyle: "italic",
               fontWeight: 700,
               color: "#fbbf24",
@@ -199,7 +199,7 @@ export default function LandingPage() {
               <div className="text-2xl">{icon}</div>
               <h3
                 className="text-lg font-semibold"
-                style={{ fontFamily: "'Cormorant Garamond', serif", color: "#fef3c7" }}
+                style={{ fontFamily: "'Fraunces', serif", color: "#fef3c7" }}
               >
                 {title}
               </h3>

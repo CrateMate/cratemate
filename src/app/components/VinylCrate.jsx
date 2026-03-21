@@ -102,7 +102,7 @@ function AddRecordModal({ onClose, onAdd }) {
       >
         <div className="flex items-center justify-between mb-4">
           <h2
-            style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20 }}
+            style={{ fontFamily: "'Fraunces',serif", fontSize: 20 }}
             className="text-amber-50"
           >
             Add a Record
@@ -1042,7 +1042,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
 
       {allGroups.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24 }} className="text-amber-100 mb-2">
+          <div style={{ fontFamily: "'Fraunces',serif", fontSize: 24 }} className="text-amber-100 mb-2">
             Your wantlist is empty
           </div>
           <div className="text-stone-600 text-sm max-w-xs">
@@ -1128,7 +1128,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
       <div className="flex-1 min-w-0">
         <div
           className="truncate text-amber-50 leading-snug"
-          style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 17 }}
+          style={{ fontFamily: "'Fraunces',serif", fontSize: 17 }}
         >
           {record.title}
         </div>
@@ -1324,7 +1324,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
           </button>
           <div className="absolute bottom-4 left-5 right-5">
             <div
-              style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26 }}
+              style={{ fontFamily: "'Fraunces',serif", fontSize: 26 }}
               className="text-amber-50 font-semibold leading-tight"
             >
               {record.title}
@@ -2138,7 +2138,7 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
         <CoverArt record={record} size={70} />
         <div>
           <div
-            style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21 }}
+            style={{ fontFamily: "'Fraunces',serif", fontSize: 21 }}
             className="text-amber-50 font-semibold leading-tight"
           >
             {record.title}
@@ -2856,7 +2856,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         <div className="absolute inset-0 z-10 flex flex-col" style={{ background: "rgba(0,0,0,0.92)" }}>
           <div className="flex flex-col h-full px-5 pt-12 pb-8">
             <div className="text-stone-500 text-xs uppercase tracking-widest mb-1">Session complete</div>
-            <div className="text-amber-50 text-2xl mb-4" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
+            <div className="text-amber-50 text-2xl mb-4" style={{ fontFamily: "'Fraunces',serif" }}>
               Save this listening session?
             </div>
             {/* Record list */}
@@ -2865,7 +2865,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                 <div key={`${rec.id}-${i}`} className="flex items-center gap-3 px-2.5 py-2 rounded-xl">
                   <CoverArt record={rec} size={32} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
+                    <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Fraunces',serif" }}>{rec.title}</div>
                     <div className="text-stone-500 text-xs truncate">{rec.artist}</div>
                   </div>
                   {i === 0 && (
@@ -3587,7 +3587,7 @@ async function generateCollectionDNA(stats, username) {
   // ── TOP THIRD — title + username ─────────────────────────────────────────
   ctx.textAlign = "center";
   ctx.fillStyle = "#fbbf24";
-  ctx.font = `italic bold 100px "Cormorant Garamond", Georgia, serif`;
+  ctx.font = `italic bold 100px "Fraunces", serif`;
   ctx.fillText("Your collection.", W / 2, curY);
   curY += 60;
   if (username) {
@@ -3714,7 +3714,7 @@ async function generateCollectionDNA(stats, username) {
 
     for (const { artist, count } of stats.topArtists.slice(0, 5)) {
       ctx.fillStyle = "#d4c8b0";
-      ctx.font = `48px "Cormorant Garamond", Georgia, serif`;
+      ctx.font = `48px "Fraunces", serif`;
       ctx.textAlign = "left";
       const display = artist.length > 34 ? artist.slice(0, 32) + "…" : artist;
       ctx.fillText(display, 80, curY);
@@ -3837,7 +3837,7 @@ async function generateStoryCards(session, username) {
     const textX = LX + LOGO + 20;
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.60)';
-    ctx.font = `italic 600 44px "Cormorant Garamond", Georgia, serif`;
+    ctx.font = `italic 600 44px "Fraunces", serif`;
     ctx.fillText('CrateMate', textX, LY + 44);
     if (username) {
       ctx.fillStyle = 'rgba(255,255,255,0.32)';
@@ -3934,7 +3934,7 @@ async function generateStoryCards(session, username) {
   ctx.textAlign = 'left';
 
   ctx.fillStyle = 'rgba(255,255,255,0.93)';
-  ctx.font = `italic 78px "Cormorant Garamond", Georgia, serif`;
+  ctx.font = `italic 78px "Fraunces", serif`;
   ctx.fillText(sessionTitle, TX, 112);
 
   // Decade badge + genre pills on the same row
@@ -4017,7 +4017,7 @@ async function generateStoryCards(session, username) {
     for (const group of mergedHearts.slice(0, maxArtists)) {
       if (ty > textBottom - 120) break;
       ctx.fillStyle = '#fef3c7';
-      ctx.font = `italic 70px "Cormorant Garamond", Georgia, serif`;
+      ctx.font = `italic 70px "Fraunces", serif`;
       ctx.fillText(group.artist.length > 26 ? group.artist.slice(0, 24) + '…' : group.artist, TX, ty);
       ty += 78;
       ctx.fillStyle = 'rgba(255,255,255,0.56)';
@@ -4038,7 +4038,7 @@ async function generateStoryCards(session, username) {
       ctx.fillText('Artists', TX, ty);
       ty += 72;
       ctx.fillStyle = '#fef3c7';
-      ctx.font = `italic 70px "Cormorant Garamond", Georgia, serif`;
+      ctx.font = `italic 70px "Fraunces", serif`;
       for (const artist of uniqueArtists) {
         if (ty > textBottom - 80) break;
         ctx.fillText(artist.length > 26 ? artist.slice(0, 24) + '…' : artist, TX, ty);
@@ -4199,7 +4199,7 @@ async function generateCrateSnapshot(shape, records, username, playCounts) {
   ctx.fillStyle = 'rgba(12,11,9,0.85)';
   ctx.fillRect(0, H - FOOTER_H, W, FOOTER_H);
   ctx.fillStyle = '#fbbf24';
-  ctx.font = `italic 600 34px "Cormorant Garamond", serif`;
+  ctx.font = `italic 600 34px "Fraunces", serif`;
   ctx.textAlign = 'left';
   ctx.fillText('CrateMate', 32, H - FOOTER_H + 42);
   ctx.fillStyle = '#a8a29e';
@@ -5803,7 +5803,7 @@ export default function VinylCrate() {
       >
         <img src="/icon-192.png" alt="" style={{ width: 56, height: 56, borderRadius: "50%", marginBottom: 20, animation: "spin 3s linear infinite" }} />
         <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24 }} className="text-amber-100 mb-2">
+        <div style={{ fontFamily: "'Fraunces',serif", fontSize: 24 }} className="text-amber-100 mb-2">
           Loading your crate...
         </div>
         {collectionError && <div className="text-red-500/70 text-sm mt-2">{collectionError}</div>}
@@ -5822,7 +5822,7 @@ export default function VinylCrate() {
         style={{ background: "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)", fontFamily: "'DM Sans',sans-serif" }}
       >
         <img src="/icon-192.png" alt="CrateMate" style={{ width: 64, height: 64, borderRadius: "50%", marginBottom: 24 }} />
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 36, lineHeight: 1 }} className="text-amber-50 mb-1">
+        <div style={{ fontFamily: "'Fraunces',serif", fontSize: 36, lineHeight: 1 }} className="text-amber-50 mb-1">
           CrateMate
         </div>
         <div className="text-stone-500 text-sm mb-10">
@@ -5896,7 +5896,7 @@ export default function VinylCrate() {
               {user?.firstName && (
                 <div className="text-xs uppercase tracking-widest text-amber-900 leading-none mb-1.5">{user.firstName}&apos;s</div>
               )}
-              <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, lineHeight: 1 }} className="text-amber-50">
+              <h1 style={{ fontFamily: "'Fraunces',serif", fontSize: 24, lineHeight: 1 }} className="text-amber-50">
                 CrateMate
               </h1>
             </div>
@@ -6149,7 +6149,7 @@ export default function VinylCrate() {
 
           {collection.length === 0 ? (
             <div className="flex-1 px-6 flex flex-col items-center justify-center text-center">
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26 }} className="text-amber-100 mb-2">
+              <div style={{ fontFamily: "'Fraunces',serif", fontSize: 26 }} className="text-amber-100 mb-2">
                 Your crate is empty
               </div>
               <div className="text-stone-600 text-sm mb-6 max-w-xs">
@@ -6564,7 +6564,7 @@ export default function VinylCrate() {
                         >
                           <CoverArt record={r} size={36} />
                           <div className="flex-1 min-w-0">
-                            <span className="text-amber-50 text-sm truncate block" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
+                            <span className="text-amber-50 text-sm truncate block" style={{ fontFamily: "'Fraunces',serif" }}>
                               {r.artist} — {r.title}
                             </span>
                           </div>
@@ -6970,7 +6970,7 @@ export default function VinylCrate() {
                             </div>
                             {/* Labels */}
                             <div className="flex-1 min-w-0">
-                              <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>
+                              <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Fraunces',serif" }}>
                                 {sessionDateLabel(session.startTime)}
                               </div>
                               <div className="text-stone-500 text-xs">{sessionDurationLabel(session.playCount, session.listeningSecs)}</div>
@@ -7000,7 +7000,7 @@ export default function VinylCrate() {
                                     className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-white/[0.04] transition-all">
                                     <CoverArt record={rec} size={36} />
                                     <div className="flex-1 min-w-0">
-                                      <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{rec.title}</div>
+                                      <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Fraunces',serif" }}>{rec.title}</div>
                                       <div className="text-stone-500 text-[10px] truncate">{rec.artist}</div>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0">
@@ -7194,13 +7194,13 @@ export default function VinylCrate() {
                       <div className="flex gap-2">
                         {weekListeningLabel && (
                           <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
-                            <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{weekListeningLabel}</div>
+                            <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{weekListeningLabel}</div>
                             <div className="text-stone-500 text-xs mt-0.5">this week</div>
                           </div>
                         )}
                         {totalListeningLabel && (
                           <div className="flex-1 bg-white/[0.04] rounded-xl p-3 text-center">
-                            <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{totalListeningLabel}</div>
+                            <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{totalListeningLabel}</div>
                             <div className="text-stone-500 text-xs mt-0.5">all time</div>
                           </div>
                         )}
@@ -7238,7 +7238,7 @@ export default function VinylCrate() {
                             <div key={r.id} className="flex items-center gap-2.5">
                               <CoverArt record={r} size={32} />
                               <div className="flex-1 min-w-0">
-                                <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{r.title}</div>
+                                <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Fraunces',serif" }}>{r.title}</div>
                                 <div className="mt-0.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
                                   <div className="h-full rounded-full bg-amber-700/60" style={{ width: `${Math.round((count / maxPlays) * 100)}%` }} />
                                 </div>
@@ -7320,7 +7320,7 @@ export default function VinylCrate() {
                                   <span className="text-lg shrink-0">🌙</span>
                                   <CoverArt record={midnightRecord} size={36} />
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{midnightRecord.title}</div>
+                                    <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Fraunces',serif" }}>{midnightRecord.title}</div>
                                     <div className="text-stone-600 text-xs">Midnight record</div>
                                   </div>
                                 </button>
@@ -7333,7 +7333,7 @@ export default function VinylCrate() {
                                   <span className="text-lg shrink-0">☕</span>
                                   <CoverArt record={sunMorningRecord} size={36} />
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Cormorant Garamond',serif" }}>{sunMorningRecord.title}</div>
+                                    <div className="text-amber-50 text-xs truncate" style={{ fontFamily: "'Fraunces',serif" }}>{sunMorningRecord.title}</div>
                                     <div className="text-stone-600 text-xs">Sunday morning album</div>
                                   </div>
                                 </button>
@@ -7862,7 +7862,7 @@ export default function VinylCrate() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22 }} className="text-amber-50">Settings</h2>
+              <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }} className="text-amber-50">Settings</h2>
               <button onClick={() => setShowSettings(false)} className="text-stone-600 hover:text-stone-400 text-xl leading-none">×</button>
             </div>
             <div className="flex items-center justify-between py-3.5 border-b border-stone-800/40">

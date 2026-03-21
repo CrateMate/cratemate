@@ -22,7 +22,7 @@ function PublicDetailCard({ record, onClose }) {
           <div className="flex-1 min-w-0 pt-1">
             <div
               className="text-amber-50 leading-tight truncate"
-              style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 22 }}
+              style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }}
             >
               {record.title}
             </div>
