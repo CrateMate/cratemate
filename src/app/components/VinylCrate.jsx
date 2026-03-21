@@ -1918,6 +1918,26 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
 }
 
 // Lookahead row packer — eliminates gaps by pulling forward tiles that fit leftover space
+// Percentile-based tile sizing — fairer than ratio-to-max when plays are bunched.
+// Unplayed records → always 1 unit.
+// Among played records: top 25% by count → 3 units, middle 50% → 2 units, bottom 25% → 1 unit.
+// Value-based percentile (not rank-based) so ties always land in the same tier.
+function computeTileSizes(records, playCounts) {
+  const withPlays = records.map(r => ({ record: r, plays: playCounts[r.id] || 0 }));
+  const playedCounts = withPlays.filter(t => t.plays > 0).map(t => t.plays).sort((a, b) => a - b);
+  const n = playedCounts.length;
+  const thresh3 = n > 0 ? playedCounts[Math.floor(n * 0.75)] : Infinity; // 75th percentile value
+  const thresh2 = n > 0 ? playedCounts[Math.floor(n * 0.25)] : Infinity; // 25th percentile value
+  return withPlays.map(({ record, plays }) => {
+    let units = 1;
+    if (plays > 0) {
+      if (plays >= thresh3) units = 3;
+      else if (plays >= thresh2) units = 2;
+    }
+    return { record, units, plays };
+  });
+}
+
 function packTileRows(tiles, totalUnits) {
   const remaining = [...tiles];
   const rows = [];
@@ -2004,23 +2024,7 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   const TOTAL_UNITS = 4;
   const GAP = 2;
 
-  // Compute tile sizes from play counts
-  const maxPlays = Math.max(...records.map(r => playCounts[r.id] || 0), 1);
-  const hasAnyPlays = records.some(r => (playCounts[r.id] || 0) > 0);
-
-  const tiles = records.map(r => {
-    const plays = playCounts[r.id] || 0;
-    let units;
-    if (!hasAnyPlays) {
-      units = 1;
-    } else {
-      const ratio = plays / maxPlays;
-      if (ratio > 0.5) units = 3;
-      else if (ratio > 0.15) units = 2;
-      else units = 1;
-    }
-    return { record: r, units, plays };
-  });
+  const tiles = computeTileSizes(records, playCounts);
 
   if (!containerWidth) {
     return <div ref={containerRef} className="flex-1" />;
@@ -3438,21 +3442,8 @@ async function generateTileExport(records, playCounts, mode = "full") {
   const PADDING = 8;
   const TARGET = 1080; // export resolution
 
-  // --- compute tile sizes (same 3-tier logic as TileView) ---
-  const maxPlays = Math.max(...records.map(r => playCounts[r.id] || 0), 1);
-  const hasAnyPlays = records.some(r => (playCounts[r.id] || 0) > 0);
-  const tiles = records.map(r => {
-    const plays = playCounts[r.id] || 0;
-    let units;
-    if (!hasAnyPlays) { units = 1; }
-    else {
-      const ratio = plays / maxPlays;
-      if (ratio > 0.5) units = 3;
-      else if (ratio > 0.15) units = 2;
-      else units = 1;
-    }
-    return { record: r, units, plays };
-  });
+  // --- compute tile sizes (percentile-based, same as TileView) ---
+  const tiles = computeTileSizes(records, playCounts);
 
   // Square mode: choose COLS so the grid is naturally ~square.
   // Total grid cells = Σ(units²). A square grid needs COLS² ≈ totalCells → COLS ≈ √totalCells.
