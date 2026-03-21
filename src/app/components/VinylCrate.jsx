@@ -2003,13 +2003,17 @@ export function TileView({ records, playCounts, onSelect, onShowToast }) {
     >
       {rows.map((row, ri) => {
         // Proportional sizing — tiles share the full row width by their unit count
-        // so the row always fills edge-to-edge regardless of which tiles landed in it
+        // so the row always fills edge-to-edge regardless of which tiles landed in it.
+        // Row height = the natural square size of the largest tile, so all tiles in a
+        // row share the same height and there are no vertical black gaps.
         const rowTotalUnits = row.reduce((s, t) => s + t.units, 0);
         const numGaps = row.length - 1;
         const availableWidth = containerWidth - numGaps * GAP;
+        const rowMaxUnits = Math.max(...row.map(t => t.units));
+        const rowHeight = Math.round((rowMaxUnits / rowTotalUnits) * availableWidth);
 
         return (
-          <div key={ri} className="flex items-end" style={{ gap: GAP, marginBottom: GAP }}>
+          <div key={ri} className="flex items-stretch" style={{ gap: GAP, marginBottom: GAP }}>
             {row.map(({ record, units, plays }) => {
               const tileSize = Math.round((units / rowTotalUnits) * availableWidth);
               const primaryGenre = getGenres(record)[0] || "";
@@ -2035,7 +2039,7 @@ export function TileView({ records, playCounts, onSelect, onShowToast }) {
                   onPointerLeave={() => clearTimeout(longPressTimer.current)}
                   style={{
                     width: tileSize,
-                    height: tileSize,
+                    height: rowHeight,
                     flexShrink: 0,
                     position: "relative",
                     overflow: "hidden",
