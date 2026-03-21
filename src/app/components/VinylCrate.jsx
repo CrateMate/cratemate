@@ -3594,7 +3594,7 @@ async function generateCollectionDNA(stats, username) {
     img.src = '/icon-192.png';
   });
 
-  // Multi-genre gradient — proportional to each genre's count
+  // Multi-genre gradient — proportional zones, smooth cross-blending
   const sortedGenres = [...stats.topGenres].sort((a, b) => b.count - a.count);
   const genreSlice = sortedGenres.slice(0, 4);
   const bgGrad = ctx.createLinearGradient(0, 0, W, H);
@@ -3606,11 +3606,9 @@ async function generateCollectionDNA(stats, username) {
     let pos = 0;
     genreSlice.forEach(({ genre, count }, i) => {
       const [c0, c1] = getStoryGradient(genre);
-      const span = count / total;
-      bgGrad.addColorStop(pos, c0);
-      const endPos = i === genreSlice.length - 1 ? 1 : pos + span;
-      bgGrad.addColorStop(endPos, c1);
-      pos += span;
+      bgGrad.addColorStop(pos, c0);            // genre starts at its proportional boundary
+      pos += count / total;
+      if (i === genreSlice.length - 1) bgGrad.addColorStop(1, c1); // last genre fades to its c1
     });
   }
   ctx.fillStyle = bgGrad;
@@ -3711,18 +3709,20 @@ async function generateCollectionDNA(stats, username) {
   ctx.font = `500 26px "DM Sans", sans-serif`;
   ctx.textAlign = 'left';
   ctx.fillText('FAVORITE ARTISTS', TX, curY);
-  curY += 52;
+  curY += 72;
 
   for (const { artist, count } of stats.topArtists.slice(0, 5)) {
     if (curY > H - 480) break;
+    // Strip Discogs disambiguation numbers e.g. "Miles Davis (3)"
+    const cleanName = artist.replace(/\s*\(\d+\)\s*$/, '').trim();
     ctx.fillStyle = '#fef3c7';
     ctx.font = `700 66px "Fraunces", serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(artist.length > 26 ? artist.slice(0, 24) + '…' : artist, TX, curY);
-    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.fillText(cleanName.length > 26 ? cleanName.slice(0, 24) + '…' : cleanName, TX, curY);
+    ctx.fillStyle = 'rgba(255,255,255,0.70)';
     ctx.font = `300 28px "DM Sans", sans-serif`;
     ctx.textAlign = 'right';
-    ctx.fillText(`${count} record${count !== 1 ? 's' : ''}`, W - TX, curY);
+    ctx.fillText(`${count}`, W - TX, curY);
     curY += 78;
   }
 
@@ -3773,9 +3773,15 @@ async function generateCollectionDNA(stats, username) {
     curY += THUMB + 28;
   }
 
-  // ── AUDIO FINGERPRINT ─────────────────────────────────────────────────────
+  // ── SOUND PROFILE ─────────────────────────────────────────────────────────
   if (stats.audioProfile && curY < H - 380) {
-    curY += 16;
+    curY += 28;
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('SOUND PROFILE', TX, curY);
+    curY += 50;
+
     const { energy, valence, danceability } = stats.audioProfile;
     const descriptors = [
       energy > 0.7 ? 'High Energy' : energy < 0.4 ? 'Laid Back' : 'Balanced',
@@ -3826,11 +3832,15 @@ async function generateCollectionDNA(stats, username) {
     ctx.fillText(`@${username}`, textX, LY + 44 + 38);
   }
 
-  // Total records — bottom-right
+  // Date — bottom-right (dd/mm/yy)
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yy = String(now.getFullYear()).slice(2);
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255,255,255,0.58)';
   ctx.font = `500 26px "DM Sans", sans-serif`;
-  ctx.fillText(`${stats.totalRecords} records`, W - 80, LY + 56);
+  ctx.fillText(`${dd}/${mm}/${yy}`, W - 80, LY + 56);
 
   ctx.restore();
   return canvas;
