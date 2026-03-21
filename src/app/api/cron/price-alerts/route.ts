@@ -8,12 +8,6 @@ import { discogsRequest, DISCOGS_API } from "@/lib/discogs";
 
 const QUALIFYING_CONDITIONS = new Set(["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)"]);
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT || "mailto:hello@cratemate.app",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
-
 async function fetchLivePrice(
   releaseId: number,
   tokenKey: string,
@@ -78,6 +72,12 @@ export async function GET(request: Request) {
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || "mailto:hello@cratemate.app",
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!
+  );
 
   const { data: thresholds, error: tErr } = await supabase
     .from("wantlist_price_thresholds")
