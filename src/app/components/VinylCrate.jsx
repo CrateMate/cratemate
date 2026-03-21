@@ -3859,6 +3859,167 @@ async function generateStoryCards(session, username) {
   return canvases;
 }
 
+// ─── Crate View Snapshot (tiles / honeycomb / grid) ──────────────────────────
+
+async function generateCrateSnapshot(shape, records, username, playCounts) {
+  const W = 1080, H = 1920;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  await document.fonts.ready;
+
+  // Background
+  ctx.fillStyle = '#0c0b09';
+  ctx.fillRect(0, 0, W, H);
+
+  const PADDING = 6;
+  const FOOTER_H = 90;
+  const drawH = H - FOOTER_H;
+  const maxRecords = Math.min(records.length, 80);
+  const recs = records.slice(0, maxRecords);
+
+  const artUrls = recs.map(r => (_artCache.get(r.id) || '') || r.thumb || null);
+  const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
+
+  function drawRounded(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.closePath();
+  }
+
+  if (shape === 'tiles') {
+    // Reproduce tile mosaic algorithm
+    const TOTAL_UNITS = 4;
+    const GAP = PADDING;
+    const maxPlays = Math.max(...recs.map(r => playCounts[r.id] || 0), 1);
+    const hasAnyPlays = recs.some(r => (playCounts[r.id] || 0) > 0);
+    const tiles = recs.map((r, i) => {
+      const plays = playCounts[r.id] || 0;
+      let units;
+      if (!hasAnyPlays) units = 1;
+      else {
+        const ratio = plays / maxPlays;
+        if (ratio > 0.5) units = 4;
+        else if (ratio > 0.15) units = 2;
+        else units = 1;
+      }
+      return { record: r, img: imgs[i], units, plays };
+    });
+    // Pack into rows
+    const rows = [];
+    let cur = [], curU = 0;
+    for (const t of tiles) {
+      if (curU + t.units > TOTAL_UNITS && cur.length > 0) {
+        rows.push(cur); cur = [t]; curU = t.units;
+      } else { cur.push(t); curU += t.units; }
+    }
+    if (cur.length) rows.push(cur);
+
+    const UNIT = (W - GAP * (TOTAL_UNITS - 1)) / TOTAL_UNITS;
+    let y = 0;
+    for (const row of rows) {
+      const rowMaxUnits = Math.max(...row.map(t => t.units));
+      const rowH = Math.round(rowMaxUnits * UNIT + (rowMaxUnits - 1) * GAP);
+      if (y + rowH > drawH) break;
+      let x = 0;
+      for (const { record, img, units, plays } of row) {
+        const tileSize = Math.round(units * UNIT + (units - 1) * GAP);
+        const tileY = y + rowH - tileSize; // align bottom
+        drawRounded(x, tileY, tileSize, tileSize, 4);
+        ctx.save(); ctx.clip();
+        if (img) {
+          ctx.drawImage(img, x, tileY, tileSize, tileSize);
+        } else {
+          const pg = getGenrePalette(getGenres(record)[0] || '');
+          ctx.fillStyle = pg.hex + '30';
+          ctx.fillRect(x, tileY, tileSize, tileSize);
+        }
+        // gradient overlay for large tiles
+        if (units >= 2) {
+          const grd = ctx.createLinearGradient(x, tileY, x, tileY + tileSize);
+          grd.addColorStop(0, 'rgba(0,0,0,0)');
+          grd.addColorStop(0.5, 'rgba(0,0,0,0)');
+          grd.addColorStop(1, 'rgba(0,0,0,0.75)');
+          ctx.fillStyle = grd;
+          ctx.fillRect(x, tileY, tileSize, tileSize);
+          const pad = Math.round(tileSize * 0.06);
+          ctx.fillStyle = '#fef3c7';
+          ctx.font = `600 ${Math.round(tileSize * 0.09)}px "DM Sans", sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.fillText(record.title || '', x + pad, tileY + tileSize - pad - Math.round(tileSize * 0.075) - 4);
+          ctx.fillStyle = '#a8a29e';
+          ctx.font = `${Math.round(tileSize * 0.075)}px "DM Sans", sans-serif`;
+          ctx.fillText(record.artist || '', x + pad, tileY + tileSize - pad);
+        }
+        // genre bar
+        const pg = getGenrePalette(getGenres(record)[0] || '');
+        ctx.fillStyle = pg.hex + '88';
+        ctx.fillRect(x, tileY, Math.round(tileSize * 0.05), tileSize);
+        // play badge
+        if (plays > 0) {
+          const badgeFs = Math.round(tileSize * 0.1);
+          ctx.font = `${badgeFs}px "DM Sans", sans-serif`;
+          const badgeTxt = `${plays}×`;
+          const bw = ctx.measureText(badgeTxt).width + 12;
+          ctx.fillStyle = 'rgba(0,0,0,0.65)';
+          drawRounded(x + tileSize - bw - 6, tileY + 6, bw, badgeFs + 6, 6);
+          ctx.fill();
+          ctx.fillStyle = '#fbbf24';
+          ctx.textAlign = 'right';
+          ctx.fillText(badgeTxt, x + tileSize - 6 - 3, tileY + 6 + badgeFs);
+        }
+        ctx.restore();
+        x += tileSize + GAP;
+      }
+      y += rowH + GAP;
+    }
+
+  } else {
+    // Honeycomb or Grid — render as a tight grid of squares
+    const cols = shape === 'grid' ? 4 : 5;
+    const cellSize = Math.floor((W - GAP * (cols - 1)) / cols);
+    const radius = shape === 'grid' ? 8 : 14;
+    let idx = 0;
+    let y = 0;
+    while (idx < recs.length && y + cellSize <= drawH) {
+      let x = 0;
+      for (let c = 0; c < cols && idx < recs.length; c++, idx++) {
+        const record = recs[idx];
+        const img = imgs[idx];
+        drawRounded(x, y, cellSize, cellSize, radius);
+        ctx.save(); ctx.clip();
+        if (img) {
+          ctx.drawImage(img, x, y, cellSize, cellSize);
+        } else {
+          const pg = getGenrePalette(getGenres(record)[0] || '');
+          ctx.fillStyle = pg.hex + '30';
+          ctx.fillRect(x, y, cellSize, cellSize);
+        }
+        ctx.restore();
+        x += cellSize + GAP;
+      }
+      y += cellSize + GAP;
+    }
+  }
+
+  // Footer branding
+  ctx.fillStyle = 'rgba(12,11,9,0.85)';
+  ctx.fillRect(0, H - FOOTER_H, W, FOOTER_H);
+  ctx.fillStyle = '#fbbf24';
+  ctx.font = `italic 600 34px "Cormorant Garamond", serif`;
+  ctx.textAlign = 'left';
+  ctx.fillText('CrateMate', 32, H - FOOTER_H + 42);
+  ctx.fillStyle = '#a8a29e';
+  ctx.font = `22px "DM Sans", sans-serif`;
+  ctx.fillText(username ? `@${username}` : '', 32, H - FOOTER_H + 68);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#57534e';
+  ctx.font = `20px "DM Sans", sans-serif`;
+  ctx.fillText('cratemate.app', W - 32, H - FOOTER_H + 56);
+
+  return canvas;
+}
+
 async function generateCrateStory(session, username) {
   const W = 1080, H = 1920;
   const canvas = document.createElement('canvas');
@@ -4178,6 +4339,7 @@ export default function VinylCrate() {
   const [previousTab, setPreviousTab] = useState(null);
 
   const [shareCopied, setShareCopied] = useState(false);
+  const [crateShareLoading, setCrateShareLoading] = useState(false);
   const [favTitles, setFavTitles] = useState({});
   const [page, setPage] = useState(1);
   const [infiniteScroll, setInfiniteScroll] = useState(false);
@@ -4217,7 +4379,7 @@ export default function VinylCrate() {
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, []);
+  }, [selected, viewMode]); // re-measure when header shows/hides (it shifts the tab row)
   const [expandedSessions, setExpandedSessions] = useState(new Set());
   const [trailSavePrompt, setTrailSavePrompt] = useState(false);
   const [trailSaving, setTrailSaving] = useState(false);
@@ -5534,7 +5696,7 @@ export default function VinylCrate() {
               Long-press any record to log a play and start your streak.
             </HintBanner>
           )}
-          {viewMode !== "drift" && <div className="px-4 space-y-2 mb-1">
+          {viewMode !== "drift" && !selected && <div className="px-4 space-y-2 mb-1">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -5784,25 +5946,35 @@ export default function VinylCrate() {
                 >
                   {previousTab === "stats" ? "← Stats" : "≡ List"}
                 </button>
-                {discogsConnected && (
-                  <button
-                    onClick={() => {
-                      if (!discogsUsername) return;
-                      navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}`);
-                      setShareCopied(true);
-                      setTimeout(() => setShareCopied(false), 2000);
-                    }}
-                    disabled={!discogsUsername}
-                    className={`px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border text-xs transition-colors ${
-                      discogsUsername
-                        ? "border-white/10 text-stone-400 hover:text-amber-300"
-                        : "border-white/5 text-stone-700 cursor-not-allowed"
-                    }`}
-                    title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
-                  >
-                    {shareCopied ? "Copied!" : "↗ Share"}
-                  </button>
-                )}
+                <button
+                  onClick={async () => {
+                    if (crateShareLoading) return;
+                    setCrateShareLoading(true);
+                    try {
+                      const canvas = await generateCrateSnapshot(honeycombShape, honeycombRecords, discogsUsername || '', playCounts);
+                      const shapeName = honeycombShape === 'tiles' ? 'tiles' : honeycombShape === 'grid' ? 'grid' : 'honeycomb';
+                      const fileName = `cratemate-${shapeName}.png`;
+                      canvas.toBlob(async (blob) => {
+                        if (!blob) return;
+                        const file = new File([blob], fileName, { type: 'image/png' });
+                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                          try { await navigator.share({ files: [file], title: 'My CrateMate Crate' }); } catch {}
+                        } else {
+                          const a = document.createElement('a');
+                          a.href = URL.createObjectURL(blob);
+                          a.download = fileName;
+                          a.click();
+                        }
+                        setCrateShareLoading(false);
+                      }, 'image/png');
+                    } catch { setCrateShareLoading(false); }
+                  }}
+                  disabled={crateShareLoading}
+                  className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-amber-300 text-xs transition-colors disabled:opacity-50"
+                  title="Export crate as image"
+                >
+                  {crateShareLoading ? "…" : "↗ Share"}
+                </button>
               </div>
               )}
               {/* Top-right: sort + shape toggles + hide button */}
