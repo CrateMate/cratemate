@@ -1,3 +1,5 @@
+export const runtime = "edge";
+
 const ALLOWED_HOSTS = [
   "i.discogs.com",
   "i1.sndcdn.com",
