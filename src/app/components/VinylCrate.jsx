@@ -3430,20 +3430,15 @@ function canvasRoundRect(ctx, x, y, w, h, r) {
 // Renders all tiles to an offscreen canvas and returns it.
 // Replicates the CSS Grid dense layout (TOTAL_UNITS=4 columns) so the export
 // matches what the user sees in the app.
-// mode: "full" = entire collection (tall image) | "square" = 1:1 crop, most-played first
+// mode: "full" = entire collection tall image | "square" = 1:1, all records, adaptive columns
 async function generateTileExport(records, playCounts, mode = "full") {
   await document.fonts.ready;
 
-  const COLS = 4;
   const GAP = 3;
   const PADDING = 8;
+  const TARGET = 1080; // export resolution
 
-  // Square mode uses a larger unit so the result fills a 1080×1080 canvas.
-  // Full mode uses a smaller unit to keep file sizes reasonable.
-  const TARGET_W = mode === "square" ? 1080 : 1080;
-  const UNIT = Math.floor((TARGET_W - PADDING * 2 - GAP * (COLS - 1)) / COLS);
-
-  // --- compute tile sizes (same logic as TileView) ---
+  // --- compute tile sizes (same 3-tier logic as TileView) ---
   const maxPlays = Math.max(...records.map(r => playCounts[r.id] || 0), 1);
   const hasAnyPlays = records.some(r => (playCounts[r.id] || 0) > 0);
   const tiles = records.map(r => {
@@ -3459,9 +3454,18 @@ async function generateTileExport(records, playCounts, mode = "full") {
     return { record: r, units, plays };
   });
 
+  // Square mode: choose COLS so the grid is naturally ~square.
+  // Total grid cells = Σ(units²). A square grid needs COLS² ≈ totalCells → COLS ≈ √totalCells.
+  // Full mode: fixed 4 columns (tall portrait, like the app).
+  const totalCells = tiles.reduce((sum, t) => sum + t.units * t.units, 0);
+  const COLS = mode === "square"
+    ? Math.max(4, Math.ceil(Math.sqrt(totalCells)))
+    : 4;
+
+  const UNIT = Math.floor((TARGET - PADDING * 2 - GAP * (COLS - 1)) / COLS);
+
   // --- simulate CSS Grid dense auto-placement ---
-  // grid is COLS wide, grows vertically as needed
-  const occupied = [];  // occupied[row][col] = true
+  const occupied = [];
   function isFree(startRow, startCol, span) {
     if (startCol + span > COLS) return false;
     for (let r = startRow; r < startRow + span; r++) {
@@ -3484,7 +3488,6 @@ async function generateTileExport(records, playCounts, mode = "full") {
   let cursor = { row: 0, col: 0 };
   for (const tile of tiles) {
     const span = tile.units;
-    // dense: scan from row 0 each time to fill gaps
     let placed = false;
     outer: for (let row = 0; row < cursor.row + span + 1; row++) {
       for (let col = 0; col <= COLS - span; col++) {
@@ -3500,25 +3503,20 @@ async function generateTileExport(records, playCounts, mode = "full") {
       }
     }
     if (!placed) {
-      // fallback: append at end
-      const row = (occupied.length || 0);
+      const row = occupied.length || 0;
       occupy(row, 0, span);
       placements.push({ tile, row, col: 0 });
     }
   }
 
+  const totalRows = occupied.length;
   const W = COLS * UNIT + (COLS - 1) * GAP + PADDING * 2;
-
-  // Square mode: clamp to rows that fit within W (1:1 canvas)
-  const maxRows = mode === "square"
-    ? Math.floor((W - PADDING * 2 + GAP) / (UNIT + GAP))
-    : occupied.length;
-  const visiblePlacements = mode === "square"
-    ? placements.filter(({ tile, row }) => row + tile.units <= maxRows)
-    : placements;
-
-  const totalRows = mode === "square" ? maxRows : occupied.length;
-  const H = mode === "square" ? W : totalRows * UNIT + (totalRows - 1) * GAP + PADDING * 2;
+  // Square: canvas is W×W (COLS ≈ totalRows so the grid fills it naturally).
+  // Full: canvas height matches actual content.
+  const H = mode === "square"
+    ? W
+    : totalRows * UNIT + (totalRows - 1) * GAP + PADDING * 2;
+  const visiblePlacements = placements; // all records always included
 
   // --- load all images ---
   const imgMap = new Map();
