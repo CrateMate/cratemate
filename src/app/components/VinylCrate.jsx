@@ -1169,7 +1169,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures, contentTop }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1306,7 +1306,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   const heroIsUpgraded = heroBase && heroHi && heroHi !== heroBase;
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
-    <div className="fixed inset-x-0 bottom-0 top-36 bg-black/80 backdrop-blur-sm z-50">
+    <div className="fixed inset-x-0 bottom-0 bg-black/80 backdrop-blur-sm z-50" style={{ top: contentTop != null ? `${contentTop}px` : "9rem" }}>
       <button className="absolute inset-0" onClick={onClose} aria-label="Close" />
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col">
         <div
@@ -4204,6 +4204,20 @@ export default function VinylCrate() {
   const [storyCanvases, setStoryCanvases] = useState(null);
   const [showStoryPreview, setShowStoryPreview] = useState(false);
   const [dnaGenerating, setDnaGenerating] = useState(false);
+  const [controlsHidden, setControlsHidden] = useState(false);
+  const tabRowRef = useRef(null);
+  const [contentTop, setContentTop] = useState(null);
+
+  useEffect(() => {
+    function measure() {
+      if (tabRowRef.current) {
+        setContentTop(tabRowRef.current.getBoundingClientRect().bottom);
+      }
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   const [expandedSessions, setExpandedSessions] = useState(new Set());
   const [trailSavePrompt, setTrailSavePrompt] = useState(false);
   const [trailSaving, setTrailSaving] = useState(false);
@@ -5489,7 +5503,7 @@ export default function VinylCrate() {
         </div>
       )}
 
-      <div className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${selected || viewMode === "drift" ? "relative z-[60]" : ""}`}>
+      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${selected || viewMode === "drift" ? "relative z-[60]" : ""}`}>
         {[
           ["crate", "⏺ Crate"],
           ["wants", "◇ Wants"],
@@ -5759,6 +5773,7 @@ export default function VinylCrate() {
               />
               )}
               {/* Top-left: back to list + share */}
+              {!controlsHidden && (
               <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
                 <button
                   onClick={() => {
@@ -5789,21 +5804,21 @@ export default function VinylCrate() {
                   </button>
                 )}
               </div>
-              {/* Top-right: sort + shape toggles */}
+              )}
+              {/* Top-right: sort + shape toggles + hide button */}
+              {!controlsHidden && (
               <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2">
-                {honeycombShape !== "tiles" && (
-                  <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
-                    {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
-                      <button
-                        key={val}
-                        onClick={() => setHoneycombSort(val)}
-                        className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                  {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
+                    <button
+                      key={val}
+                      onClick={() => setHoneycombSort(val)}
+                      className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                   <button onClick={() => setHoneycombShape("honeycomb")}
                     className={`px-3 py-1.5 text-xs transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⬡</button>
@@ -5812,9 +5827,22 @@ export default function VinylCrate() {
                   <button onClick={() => setHoneycombShape("tiles")}
                     className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "tiles" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>▦</button>
                 </div>
+                <button
+                  onClick={() => setControlsHidden(true)}
+                  className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                  title="Hide controls"
+                >👁</button>
               </div>
+              )}
+              {controlsHidden && (
+                <button
+                  onClick={() => setControlsHidden(false)}
+                  className="absolute top-4 right-4 z-50 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                  title="Show controls"
+                >👁</button>
+              )}
               {/* Stat filter badge + Clear all */}
-              {(statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
+              {!controlsHidden && (statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
                 <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2">
                   {statFilterLabel && (
                     <button
@@ -5836,7 +5864,7 @@ export default function VinylCrate() {
                 </div>
               )}
               {/* Unified genre + decade filter strip — bottom */}
-              {(() => {
+              {!controlsHidden && (() => {
                 const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
                 const hasGenres = genres.length > 0;
                 const hasDecades = decades.length > 0;
@@ -5884,6 +5912,7 @@ export default function VinylCrate() {
                 );
               })()}
               {/* Bottom-center: zoom + screensaver */}
+              {!controlsHidden && (
               <div className="absolute left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 3.5rem)" }}>
                 <button
                   onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
@@ -5907,6 +5936,7 @@ export default function VinylCrate() {
                   ⟳
                 </button>
               </div>
+              )}
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-3 pb-8 space-y-0.5">
@@ -7325,6 +7355,7 @@ export default function VinylCrate() {
             setSelected(null);
           }}
           spotifyFeatures={spotifyFeatures}
+          contentTop={contentTop}
         />
       )}
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
