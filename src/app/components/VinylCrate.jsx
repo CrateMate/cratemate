@@ -1924,6 +1924,149 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   );
 }
 
+function TileView({ records, playCounts, onSelect }) {
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setContainerWidth(el.clientWidth);
+    const ro = new ResizeObserver(() => setContainerWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const TOTAL_UNITS = 4;
+  const GAP = 2;
+
+  // Compute tile sizes from play counts
+  const maxPlays = Math.max(...records.map(r => playCounts[r.id] || 0), 1);
+  const hasAnyPlays = records.some(r => (playCounts[r.id] || 0) > 0);
+
+  const tiles = records.map(r => {
+    const plays = playCounts[r.id] || 0;
+    let units;
+    if (!hasAnyPlays) {
+      units = 1;
+    } else {
+      const ratio = plays / maxPlays;
+      if (ratio > 0.5) units = 4;
+      else if (ratio > 0.15) units = 2;
+      else units = 1;
+    }
+    return { record: r, units, plays };
+  });
+
+  // Greedy row packing — row height = largest tile in row
+  const rows = [];
+  let currentRow = [];
+  let currentUnits = 0;
+  for (const tile of tiles) {
+    if (currentUnits + tile.units > TOTAL_UNITS && currentRow.length > 0) {
+      rows.push(currentRow);
+      currentRow = [tile];
+      currentUnits = tile.units;
+    } else {
+      currentRow.push(tile);
+      currentUnits += tile.units;
+    }
+  }
+  if (currentRow.length > 0) rows.push(currentRow);
+
+  if (!containerWidth) {
+    return <div ref={containerRef} className="flex-1" />;
+  }
+
+  const UNIT = (containerWidth - GAP * (TOTAL_UNITS - 1)) / TOTAL_UNITS;
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-y-auto overflow-x-hidden pb-8"
+      style={{ scrollbarWidth: "none" }}
+    >
+      {rows.map((row, ri) => {
+        const rowMaxUnits = Math.max(...row.map(t => t.units));
+        const rowH = Math.round(rowMaxUnits * UNIT + (rowMaxUnits - 1) * GAP);
+
+        return (
+          <div key={ri} className="flex items-end" style={{ gap: GAP, marginBottom: GAP }}>
+            {row.map(({ record, units, plays }) => {
+              const tileSize = Math.round(units * UNIT + (units - 1) * GAP);
+              const primaryGenre = getGenres(record)[0] || "";
+              const genreHex = getGenrePalette(primaryGenre).hex;
+              const artUrl = _artCache.get(record.id) || record.thumb || null;
+
+              return (
+                <div
+                  key={record.id}
+                  onClick={() => onSelect(record)}
+                  style={{
+                    width: tileSize,
+                    height: tileSize,
+                    flexShrink: 0,
+                    position: "relative",
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    background: "#0c0b09",
+                    alignSelf: "flex-end",
+                  }}
+                >
+                  {/* Art */}
+                  {artUrl ? (
+                    <img
+                      src={artUrl}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                  ) : (
+                    <div style={{ width: "100%", height: "100%", background: `${genreHex}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontSize: tileSize * 0.3, opacity: 0.3 }}>◇</span>
+                    </div>
+                  )}
+
+                  {/* Bottom gradient + title (always for large tiles, hover for small) */}
+                  {units >= 2 && (
+                    <div style={{
+                      position: "absolute", inset: 0,
+                      background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)",
+                      display: "flex", flexDirection: "column", justifyContent: "flex-end",
+                      padding: Math.round(tileSize * 0.06),
+                    }}>
+                      <div style={{ color: "#fef3c7", fontSize: Math.round(tileSize * 0.09), fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {record.title}
+                      </div>
+                      <div style={{ color: "#a8a29e", fontSize: Math.round(tileSize * 0.075), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
+                        {record.artist}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Genre accent top-left bar */}
+                  <div style={{ position: "absolute", top: 0, left: 0, width: Math.round(tileSize * 0.05), height: "100%", background: `${genreHex}55` }} />
+
+                  {/* Play count badge */}
+                  {plays > 0 && (
+                    <div style={{
+                      position: "absolute", top: 6, right: 6,
+                      background: "rgba(0,0,0,0.65)", borderRadius: 8,
+                      padding: "1px 6px", fontSize: Math.round(tileSize * 0.1),
+                      color: "#fbbf24", lineHeight: 1.4,
+                    }}>
+                      {plays}×
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
   if (!reco) return null;
   const { record, reason, label } = reco;
@@ -5587,6 +5730,14 @@ export default function VinylCrate() {
             </div>
           ) : viewMode === "drift" ? (
             <div className="flex-1 flex flex-col relative overflow-hidden">
+              {honeycombShape === "tiles" ? (
+                <TileView
+                  key="tiles"
+                  records={honeycombRecords}
+                  playCounts={playCounts}
+                  onSelect={(rec) => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
+                />
+              ) : (
               <HoneycombView
                 key={honeycombSort + honeycombShape}
                 records={honeycombRecords}
@@ -5606,6 +5757,7 @@ export default function VinylCrate() {
                   setScreensaverEnabled(next);
                 }}
               />
+              )}
               {/* Top-left: back to list + share */}
               <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
                 <button
@@ -5639,22 +5791,26 @@ export default function VinylCrate() {
               </div>
               {/* Top-right: sort + shape toggles */}
               <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2">
-                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
-                  {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
-                    <button
-                      key={val}
-                      onClick={() => setHoneycombSort(val)}
-                      className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                {honeycombShape !== "tiles" && (
+                  <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                    {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
+                      <button
+                        key={val}
+                        onClick={() => setHoneycombSort(val)}
+                        className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                   <button onClick={() => setHoneycombShape("honeycomb")}
                     className={`px-3 py-1.5 text-xs transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⬡</button>
                   <button onClick={() => setHoneycombShape("grid")}
                     className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "grid" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⊞</button>
+                  <button onClick={() => setHoneycombShape("tiles")}
+                    className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "tiles" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>▦</button>
                 </div>
               </div>
               {/* Stat filter badge + Clear all */}
