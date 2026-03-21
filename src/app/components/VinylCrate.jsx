@@ -4363,11 +4363,18 @@ export default function VinylCrate() {
   const PAGE_SIZE = 25;
   const sentinelRef = useRef(null);
 
-  // Now Playing — persisted to localStorage
-  const [nowPlaying, setNowPlaying] = useState(() => {
-    try { const s = localStorage.getItem("cratemate_now_playing"); return s ? JSON.parse(s) : null; } catch { return null; }
+  // Now Playing — derived from playSessions (DB-backed, cross-browser)
+  // Only the dismissed session ID is local (per-device UI hint)
+  const [dismissedSessionId, setDismissedSessionId] = useState(() => {
+    try { return localStorage.getItem("cratemate_np_dismissed") || null; } catch { return null; }
   });
   const [, setNowPlayingTick] = useState(0); // force re-render every minute for relative time
+  const nowPlaying = useMemo(() => {
+    const last = playSessions[0];
+    if (!last || last.id === dismissedSessionId) return null;
+    const record = (collection || []).find(r => String(r.id) === String(last.record_id));
+    return record ? { record, loggedAt: last.played_at } : null;
+  }, [playSessions, collection, dismissedSessionId]);
   useEffect(() => {
     if (!nowPlaying) return;
     const id = setInterval(() => setNowPlayingTick(t => t + 1), 60000);
@@ -4608,10 +4615,6 @@ export default function VinylCrate() {
   async function handleDoubleTap(record) {
     try {
       const sessionId = await logPlay(record.id);
-      const loggedAt = new Date().toISOString();
-      const np = { record, loggedAt };
-      setNowPlaying(np);
-      try { localStorage.setItem("cratemate_now_playing", JSON.stringify(np)); } catch {}
       clearTimeout(undoTimerRef.current);
       setUndoPending({ record, sessionId });
       undoTimerRef.current = setTimeout(() => setUndoPending(null), 4000);
@@ -4638,8 +4641,6 @@ export default function VinylCrate() {
       });
       return next;
     });
-    setNowPlaying(prev => prev?.record?.id === record.id ? null : prev);
-    try { localStorage.removeItem("cratemate_now_playing"); } catch {}
   }
 
   async function handleShareStory(session) {
@@ -7662,7 +7663,11 @@ export default function VinylCrate() {
               className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
             >▷ Session</button>
             <button
-              onClick={() => { setNowPlaying(null); try { localStorage.removeItem("cratemate_now_playing"); } catch {} }}
+              onClick={() => {
+                const sid = playSessions[0]?.id;
+                setDismissedSessionId(sid);
+                try { localStorage.setItem("cratemate_np_dismissed", sid || ""); } catch {}
+              }}
               className="text-stone-600 hover:text-stone-400 text-lg leading-none shrink-0 transition-colors"
             >×</button>
           </div>
