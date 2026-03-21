@@ -3780,7 +3780,6 @@ async function generateStoryCards(session, username) {
   const W = 1080, H = 1920;
   const records = session.records;
 
-  // Load art (up to 20 for the wall)
   const artCount = Math.min(records.length, 20);
   const artUrls = records.slice(0, artCount).map(r => (_artCache.get(r.id) || '') || r.thumb || null);
   const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
@@ -3800,9 +3799,15 @@ async function generateStoryCards(session, username) {
   years.forEach(y => { const d = Math.floor(y / 10) * 10; decadeCounts[d] = (decadeCounts[d] || 0) + 1; });
   const topDecade = Object.entries(decadeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
 
-  function makeCanvas() {
-    const c = document.createElement('canvas'); c.width = W; c.height = H; return c;
-  }
+  // Session title — "Saturday Evening Session" or "March 21 Session"
+  const sd = new Date(session.startTime);
+  const hr = sd.getHours();
+  const timeOfDay = hr < 5 ? 'Night' : hr < 12 ? 'Morning' : hr < 17 ? 'Afternoon' : hr < 21 ? 'Evening' : 'Night';
+  const isToday = sd.toDateString() === new Date().toDateString();
+  const sessionTitle = isToday
+    ? `${sd.toLocaleDateString('en-US', { weekday: 'long' })} ${timeOfDay} Session`
+    : `${sd.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} Session`;
+
   function cap(s) { return (s || '').replace(/\b\w/g, c => c.toUpperCase()); }
 
   function drawBranding(ctx) {
@@ -3823,307 +3828,184 @@ async function generateStoryCards(session, username) {
     ctx.restore();
   }
 
-  const canvases = [];
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CARD 1 — "The Session"
-  // Blurred art BG · crisp art wall · editorial left-aligned text panel
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    const canvas = makeCanvas();
-    const ctx = canvas.getContext('2d');
+  // ── 1. Genre gradient background (whole card) ──
+  const bgGrad = ctx.createLinearGradient(0, 0, W * 0.7, H);
+  bgGrad.addColorStop(0, grad0);
+  bgGrad.addColorStop(1, grad1);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
 
-    // Base background
-    ctx.fillStyle = '#0c0b09';
-    ctx.fillRect(0, 0, W, H);
-
-    // Blurred first album art — fills whole card for depth + color
-    if (imgs[0]) {
+  // ── 2. Art wall ──
+  const WALL_H = 1080;
+  const cols = artCount === 1 ? 1 : artCount <= 4 ? 2 : 3;
+  const GAP = 3;
+  const CELL = Math.floor((W - GAP * (cols - 1)) / cols);
+  let artIdx = 0, wallY = 0;
+  while (wallY < WALL_H && artIdx < artCount) {
+    for (let c = 0; c < cols && artIdx < artCount; c++, artIdx++) {
+      const x = c * (CELL + GAP);
+      const clipH = Math.min(CELL, WALL_H - wallY);
       ctx.save();
-      ctx.filter = 'blur(32px)';
-      ctx.globalAlpha = 0.32;
-      ctx.drawImage(imgs[0], -80, -80, W + 160, H + 160);
-      ctx.filter = 'none';
-      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.rect(x, wallY, CELL, clipH);
+      ctx.clip();
+      if (imgs[artIdx]) {
+        ctx.drawImage(imgs[artIdx], x, wallY, CELL, CELL);
+      } else {
+        ctx.fillStyle = getGenrePalette(getGenres(records[artIdx])[0] || '').hex + '20';
+        ctx.fillRect(x, wallY, CELL, clipH);
+      }
       ctx.restore();
     }
-
-    // Dark overlay — heavier at bottom for text legibility
-    const overlay = ctx.createLinearGradient(0, 0, 0, H);
-    overlay.addColorStop(0, 'rgba(0,0,0,0.38)');
-    overlay.addColorStop(0.42, 'rgba(0,0,0,0.52)');
-    overlay.addColorStop(0.68, 'rgba(12,11,9,0.88)');
-    overlay.addColorStop(1,    'rgba(12,11,9,1)');
-    ctx.fillStyle = overlay;
-    ctx.fillRect(0, 0, W, H);
-
-    // Crisp art wall — hard-edge tiles, editorial look
-    const WALL_H = 1060;
-    const cols = artCount === 1 ? 1 : artCount <= 4 ? 2 : 3;
-    const GAP = 3;
-    const CELL = Math.floor((W - GAP * (cols - 1)) / cols);
-    let artIdx = 0, wallY = 0;
-    while (wallY < WALL_H && artIdx < artCount) {
-      for (let c = 0; c < cols && artIdx < artCount; c++, artIdx++) {
-        const x = c * (CELL + GAP);
-        const clipH = Math.min(CELL, WALL_H - wallY);
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(x, wallY, CELL, clipH);
-        ctx.clip();
-        if (imgs[artIdx]) {
-          ctx.drawImage(imgs[artIdx], x, wallY, CELL, CELL);
-        } else {
-          ctx.fillStyle = getGenrePalette(getGenres(records[artIdx])[0] || '').hex + '20';
-          ctx.fillRect(x, wallY, CELL, clipH);
-        }
-        ctx.restore();
-      }
-      wallY += CELL + GAP;
-    }
-
-    // Gradient fade — art wall bleeds into dark panel
-    const fade = ctx.createLinearGradient(0, WALL_H - 300, 0, WALL_H + 80);
-    fade.addColorStop(0, 'rgba(12,11,9,0)');
-    fade.addColorStop(1, 'rgba(12,11,9,1)');
-    ctx.fillStyle = fade;
-    ctx.fillRect(0, WALL_H - 300, W, 380);
-
-    // Text panel — left-aligned, editorial
-    const TX = 80;
-    let ty = WALL_H + 68;
-
-    // Collect hearted tracks from session records
-    const heartedGroups = records
-      .map(r => ({
-        artist: r.artist || '',
-        tracks: (r.favorite_tracks || [])
-          .map(ft => { const t = typeof ft === 'object' ? ft : { key: ft, title: ft }; return (t.title && t.title !== t.key) ? t.title : null; })
-          .filter(Boolean),
-      }))
-      .filter(g => g.tracks.length > 0);
-
-    // Merge duplicate artists
-    const mergedHearts = [];
-    for (const g of heartedGroups) {
-      const last = mergedHearts[mergedHearts.length - 1];
-      if (last && last.artist === g.artist) last.tracks.push(...g.tracks);
-      else mergedHearts.push({ artist: g.artist, tracks: [...g.tracks] });
-    }
-
-    ctx.textAlign = 'left';
-
-    if (mergedHearts.length > 0) {
-      // ♥ label
-      ctx.fillStyle = 'rgba(251,191,36,0.55)'; // amber, muted
-      ctx.font = `400 28px "DM Sans", sans-serif`;
-      ctx.fillText('♥  hearted tonight', TX, ty);
-      ty += 52;
-
-      // Artist + tracks list
-      for (const group of mergedHearts.slice(0, 3)) {
-        if (ty > H - 280) break;
-        // Artist
-        ctx.fillStyle = '#fef3c7';
-        ctx.font = `italic 68px "Cormorant Garamond", Georgia, serif`;
-        const artistTrunc = group.artist.length > 26 ? group.artist.slice(0, 24) + '…' : group.artist;
-        ctx.fillText(artistTrunc, TX, ty);
-        ty += 74;
-        // Tracks
-        ctx.fillStyle = 'rgba(255,255,255,0.48)';
-        ctx.font = `300 34px "DM Sans", sans-serif`;
-        for (const track of group.tracks.slice(0, 3)) {
-          if (ty > H - 280) break;
-          const trackTrunc = track.length > 32 ? track.slice(0, 30) + '…' : track;
-          ctx.fillText(trackTrunc, TX + 18, ty);
-          ty += 44;
-        }
-        ty += 14;
-      }
-    } else {
-      // Fallback: session date/time as headline
-      const d = new Date(session.startTime);
-      const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
-      const h = d.getHours();
-      const timeOfDay = h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening';
-      const isToday = d.toDateString() === new Date().toDateString();
-      const headline = isToday ? `${dayName}\n${timeOfDay}` : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-      ctx.fillStyle = '#fef3c7';
-      ctx.font = `italic 108px "Cormorant Garamond", Georgia, serif`;
-      for (const line of headline.split('\n')) {
-        ctx.fillText(line, TX, ty);
-        ty += 116;
-      }
-    }
-
-    ty += 18;
-
-    // Duration
-    if (session.listeningSecs) {
-      ctx.fillStyle = '#78716c';
-      ctx.font = `300 38px "DM Sans", sans-serif`;
-      ctx.fillText(formatListeningTime(session.listeningSecs), TX, ty);
-      ty += 56;
-    }
-    ty += 18;
-
-    // Genre pills
-    if (sortedGenres.length > 0) {
-      const pillH = 50;
-      let pillX = TX;
-      ctx.font = `400 28px "DM Sans", sans-serif`;
-      for (const [genre] of sortedGenres.slice(0, 3)) {
-        const hex = getGenrePalette(genre).hex;
-        const tw = ctx.measureText(cap(genre)).width;
-        const pillW = tw + 36;
-        ctx.fillStyle = hex + '28';
-        canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
-        ctx.fill();
-        ctx.strokeStyle = hex + '45';
-        ctx.lineWidth = 1;
-        canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
-        ctx.stroke();
-        ctx.fillStyle = hex;
-        ctx.textAlign = 'left';
-        ctx.fillText(cap(genre), pillX + 18, ty + 35);
-        pillX += pillW + 10;
-      }
-    }
-
-    drawBranding(ctx);
-    canvases.push(canvas);
+    wallY += CELL + GAP;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CARD 2 — "The Vinyl"
-  // Genre gradient · actual vinyl record · genre identity
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    const canvas = makeCanvas();
-    const ctx = canvas.getContext('2d');
+  // ── 3. Top strip overlay — title legibility ──
+  const topFade = ctx.createLinearGradient(0, 0, 0, 190);
+  topFade.addColorStop(0, 'rgba(0,0,0,0.78)');
+  topFade.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = topFade;
+  ctx.fillRect(0, 0, W, 190);
 
-    // Vivid genre gradient background
-    const bgGrad = ctx.createLinearGradient(0, 0, W * 0.5, H);
-    bgGrad.addColorStop(0, grad0);
-    bgGrad.addColorStop(1, grad1);
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, W, H);
+  // ── 4. Bottom fade — art into text panel ──
+  const bottomFade = ctx.createLinearGradient(0, WALL_H - 320, 0, WALL_H + 60);
+  bottomFade.addColorStop(0, 'rgba(0,0,0,0)');
+  bottomFade.addColorStop(1, 'rgba(0,0,0,0.96)');
+  ctx.fillStyle = bottomFade;
+  ctx.fillRect(0, WALL_H - 320, W, 380);
 
-    // Radial vignette — center luminous, edges dark
-    const vignette = ctx.createRadialGradient(W / 2, H * 0.37, H * 0.17, W / 2, H * 0.37, H * 0.72);
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.62)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, W, H);
+  // Text panel area — genre color tints through at ~5%
+  ctx.fillStyle = 'rgba(0,0,0,0.92)';
+  ctx.fillRect(0, WALL_H + 55, W, H - WALL_H - 55);
 
-    // ── Vinyl record ──
-    const VCX = W / 2, VCY = 660;
-    const VINYL_R = 365, LABEL_R = 158, HOLE_R = 13;
+  // ── 5. Session title (over top of art wall) ──
+  const TX = 80;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.font = `300 34px "DM Sans", sans-serif`;
+  ctx.fillText(sessionTitle, TX, 80);
 
-    // Disc
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(VCX, VCY, VINYL_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#040404';
-    ctx.fill();
-    ctx.restore();
-
-    // Groove lines — concentric, subtle opacity variation
-    ctx.save();
-    for (let r = VINYL_R - 10; r > LABEL_R + 20; r -= 9) {
-      ctx.beginPath();
-      ctx.arc(VCX, VCY, r, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,255,255,${r % 27 < 4 ? 0.026 : 0.011})`;
-      ctx.lineWidth = 0.7;
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Outer rim highlight
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(VCX, VCY, VINYL_R - 2, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.restore();
-
-    // Album art label — circular crop of first cover
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(VCX, VCY, LABEL_R, 0, Math.PI * 2);
-    ctx.clip();
-    if (imgs[0]) {
-      ctx.drawImage(imgs[0], VCX - LABEL_R, VCY - LABEL_R, LABEL_R * 2, LABEL_R * 2);
-    } else {
-      ctx.fillStyle = getGenrePalette(primaryGenre).hex + '50';
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Label border ring
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(VCX, VCY, LABEL_R, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-
-    // Spindle hole
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(VCX, VCY, HOLE_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#070707';
+  // Decade badge inline right of title
+  if (topDecade) {
+    ctx.font = `300 34px "DM Sans", sans-serif`;
+    const titleW = ctx.measureText(sessionTitle).width;
+    const badgeText = `${topDecade}s`;
+    ctx.font = `500 24px "DM Sans", sans-serif`;
+    const bw = ctx.measureText(badgeText).width + 22;
+    const bh = 34;
+    const bx = TX + titleW + 14;
+    const by = 80 - 24;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    canvasRoundRect(ctx, bx, by, bw, bh, bh / 2);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
+    canvasRoundRect(ctx, bx, by, bw, bh, bh / 2);
     ctx.stroke();
-    ctx.restore();
+    ctx.fillStyle = 'rgba(255,255,255,0.70)';
+    ctx.fillText(badgeText, bx + 11, 80 - 5);
+  }
 
-    // ── Text below vinyl ──
-    let ty = VCY + VINYL_R + 78;
-    ctx.textAlign = 'center';
+  // ── 6. Text panel ──
+  let ty = WALL_H + 72;
 
-    if (primaryGenre) {
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.font = `italic bold 148px "Cormorant Garamond", Georgia, serif`;
-      ctx.fillText(cap(primaryGenre), W / 2, ty);
-      ty += 152;
+  // Hearted tracks
+  const heartedGroups = records
+    .map(r => ({
+      artist: r.artist || '',
+      tracks: (r.favorite_tracks || [])
+        .map(ft => { const t = typeof ft === 'object' ? ft : { key: ft, title: ft }; return (t.title && t.title !== t.key) ? t.title : null; })
+        .filter(Boolean),
+    }))
+    .filter(g => g.tracks.length > 0);
+  const mergedHearts = [];
+  for (const g of heartedGroups) {
+    const last = mergedHearts[mergedHearts.length - 1];
+    if (last && last.artist === g.artist) last.tracks.push(...g.tracks);
+    else mergedHearts.push({ artist: g.artist, tracks: [...g.tracks] });
+  }
 
-      const secondGenre = sortedGenres[1]?.[0];
-      if (secondGenre) {
-        ctx.fillStyle = 'rgba(255,255,255,0.42)';
-        ctx.font = `italic 80px "Cormorant Garamond", Georgia, serif`;
-        ctx.fillText(cap(secondGenre), W / 2, ty);
-        ty += 98;
+  ctx.textAlign = 'left';
+
+  if (mergedHearts.length > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.font = `400 28px "DM Sans", sans-serif`;
+    ctx.fillText('Fave tracks', TX, ty);
+    ty += 50;
+
+    for (const group of mergedHearts.slice(0, 3)) {
+      if (ty > H - 280) break;
+      ctx.fillStyle = '#fef3c7';
+      ctx.font = `italic 68px "Cormorant Garamond", Georgia, serif`;
+      ctx.fillText(group.artist.length > 26 ? group.artist.slice(0, 24) + '…' : group.artist, TX, ty);
+      ty += 74;
+      ctx.fillStyle = 'rgba(255,255,255,0.46)';
+      ctx.font = `300 34px "DM Sans", sans-serif`;
+      for (const track of group.tracks.slice(0, 3)) {
+        if (ty > H - 280) break;
+        ctx.fillText(track.length > 32 ? track.slice(0, 30) + '…' : track, TX + 18, ty);
+        ty += 44;
+      }
+      ty += 12;
+    }
+  } else {
+    // Fallback — show artists from the session
+    const uniqueArtists = [...new Set(records.map(r => r.artist).filter(Boolean))].slice(0, 4);
+    if (uniqueArtists.length > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.32)';
+      ctx.font = `400 28px "DM Sans", sans-serif`;
+      ctx.fillText('Artists', TX, ty);
+      ty += 50;
+      ctx.fillStyle = '#fef3c7';
+      ctx.font = `italic 68px "Cormorant Garamond", Georgia, serif`;
+      for (const artist of uniqueArtists) {
+        if (ty > H - 280) break;
+        ctx.fillText(artist.length > 26 ? artist.slice(0, 24) + '…' : artist, TX, ty);
+        ty += 78;
       }
     }
+  }
 
-    // Decade badge
-    if (topDecade) {
-      ty += 8;
-      const pillText = `Mostly ${topDecade}s`;
-      ctx.font = `400 34px "DM Sans", sans-serif`;
-      const tw = ctx.measureText(pillText).width;
-      const pillW = tw + 52, pillH = 58;
-      const pillX = W / 2 - pillW / 2;
-      ctx.fillStyle = 'rgba(255,255,255,0.13)';
+  ty += 20;
+
+  // Duration
+  if (session.listeningSecs) {
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.font = `300 38px "DM Sans", sans-serif`;
+    ctx.fillText(formatListeningTime(session.listeningSecs), TX, ty);
+    ty += 56;
+  }
+  ty += 16;
+
+  // Genre pills
+  if (sortedGenres.length > 0) {
+    const pillH = 50;
+    let pillX = TX;
+    ctx.font = `400 28px "DM Sans", sans-serif`;
+    for (const [genre] of sortedGenres.slice(0, 3)) {
+      const hex = getGenrePalette(genre).hex;
+      const tw = ctx.measureText(cap(genre)).width;
+      const pillW = tw + 36;
+      ctx.fillStyle = hex + '28';
       canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.strokeStyle = hex + '45';
       ctx.lineWidth = 1;
       canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.88)';
-      ctx.fillText(pillText, W / 2, ty + 39);
+      ctx.fillStyle = hex;
+      ctx.textAlign = 'left';
+      ctx.fillText(cap(genre), pillX + 18, ty + 35);
+      pillX += pillW + 10;
     }
-
-    drawBranding(ctx);
-    canvases.push(canvas);
   }
 
-  return canvases;
+  drawBranding(ctx);
+  return [canvas];
 }
 
 // ─── Crate View Snapshot (tiles / honeycomb / grid) ──────────────────────────
