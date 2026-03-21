@@ -3782,7 +3782,15 @@ async function generateStoryCards(session, username) {
 
   const artCount = Math.min(records.length, 20);
   const artUrls = records.slice(0, artCount).map(r => (_artCache.get(r.id) || '') || r.thumb || null);
-  const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
+  const [imgs, logoImg] = await Promise.all([
+    Promise.all(artUrls.map(loadImgForCanvas)),
+    new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = '/icon-192.png';
+    }),
+  ]);
 
   // Genre analysis
   const genreCounts = {};
@@ -3812,18 +3820,33 @@ async function generateStoryCards(session, username) {
 
   function drawBranding(ctx) {
     ctx.save();
+    // Separator
     ctx.strokeStyle = 'rgba(255,255,255,0.07)';
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(80, H - 108); ctx.lineTo(W - 80, H - 108); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(80, H - 126); ctx.lineTo(W - 80, H - 126); ctx.stroke();
+
+    const LOGO = 56;
+    const LX = 80, LY = H - 106;
+
+    // Logo icon
+    if (logoImg) {
+      ctx.save();
+      canvasRoundRect(ctx, LX, LY, LOGO, LOGO, 13);
+      ctx.clip();
+      ctx.drawImage(logoImg, LX, LY, LOGO, LOGO);
+      ctx.restore();
+    }
+
+    // CrateMate + @username stacked, aligned to logo
+    const textX = LX + LOGO + 16;
     ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = `italic 600 32px "Cormorant Garamond", Georgia, serif`;
-    ctx.fillText('CrateMate', 80, H - 58);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = `italic 600 42px "Cormorant Garamond", Georgia, serif`;
+    ctx.fillText('CrateMate', textX, LY + 32);
     if (username) {
-      ctx.textAlign = 'right';
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.font = `300 24px "DM Sans", sans-serif`;
-      ctx.fillText(`cratemate.app/@${username}`, W - 80, H - 58);
+      ctx.fillStyle = 'rgba(255,255,255,0.30)';
+      ctx.font = `300 26px "DM Sans", sans-serif`;
+      ctx.fillText(`@${username}`, textX, LY + LOGO - 4);
     }
     ctx.restore();
   }
