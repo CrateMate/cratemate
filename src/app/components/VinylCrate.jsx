@@ -1924,7 +1924,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   );
 }
 
-function TileView({ records, playCounts, onSelect }) {
+export function TileView({ records, playCounts, onSelect }) {
   const containerRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -5946,35 +5946,26 @@ export default function VinylCrate() {
                 >
                   {previousTab === "stats" ? "← Stats" : "≡ List"}
                 </button>
-                <button
-                  onClick={async () => {
-                    if (crateShareLoading) return;
-                    setCrateShareLoading(true);
-                    try {
-                      const canvas = await generateCrateSnapshot(honeycombShape, honeycombRecords, discogsUsername || '', playCounts);
-                      const shapeName = honeycombShape === 'tiles' ? 'tiles' : honeycombShape === 'grid' ? 'grid' : 'honeycomb';
-                      const fileName = `cratemate-${shapeName}.png`;
-                      canvas.toBlob(async (blob) => {
-                        if (!blob) return;
-                        const file = new File([blob], fileName, { type: 'image/png' });
-                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                          try { await navigator.share({ files: [file], title: 'My CrateMate Crate' }); } catch {}
-                        } else {
-                          const a = document.createElement('a');
-                          a.href = URL.createObjectURL(blob);
-                          a.download = fileName;
-                          a.click();
-                        }
-                        setCrateShareLoading(false);
-                      }, 'image/png');
-                    } catch { setCrateShareLoading(false); }
-                  }}
-                  disabled={crateShareLoading}
-                  className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-amber-300 text-xs transition-colors disabled:opacity-50"
-                  title="Export crate as image"
-                >
-                  {crateShareLoading ? "…" : "↗ Share"}
-                </button>
+                {discogsConnected && (
+                  <button
+                    onClick={() => {
+                      if (!discogsUsername) return;
+                      const view = honeycombShape === "grid" ? "grid" : honeycombShape === "tiles" ? "tiles" : "honeycomb";
+                      navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}?view=${view}`);
+                      setShareCopied(true);
+                      setTimeout(() => setShareCopied(false), 2000);
+                    }}
+                    disabled={!discogsUsername}
+                    className={`px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border text-xs transition-colors ${
+                      discogsUsername
+                        ? "border-white/10 text-stone-400 hover:text-amber-300"
+                        : "border-white/5 text-stone-700 cursor-not-allowed"
+                    }`}
+                    title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
+                  >
+                    {shareCopied ? "Copied!" : "↗ Share"}
+                  </button>
+                )}
               </div>
               )}
               {/* Top-right: sort + shape toggles + hide button */}
