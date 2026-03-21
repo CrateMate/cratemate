@@ -3891,24 +3891,81 @@ async function generateStoryCards(session, username) {
 
     // Text panel — left-aligned, editorial
     const TX = 80;
-    let ty = WALL_H + 72;
+    let ty = WALL_H + 68;
 
-    // Record count
-    const rWord = records.length === 1 ? 'record' : 'records';
+    // Collect hearted tracks from session records
+    const heartedGroups = records
+      .map(r => ({
+        artist: r.artist || '',
+        tracks: (r.favorite_tracks || [])
+          .map(ft => { const t = typeof ft === 'object' ? ft : { key: ft, title: ft }; return (t.title && t.title !== t.key) ? t.title : null; })
+          .filter(Boolean),
+      }))
+      .filter(g => g.tracks.length > 0);
+
+    // Merge duplicate artists
+    const mergedHearts = [];
+    for (const g of heartedGroups) {
+      const last = mergedHearts[mergedHearts.length - 1];
+      if (last && last.artist === g.artist) last.tracks.push(...g.tracks);
+      else mergedHearts.push({ artist: g.artist, tracks: [...g.tracks] });
+    }
+
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#fef3c7';
-    ctx.font = `italic 116px "Cormorant Garamond", Georgia, serif`;
-    ctx.fillText(`${records.length} ${rWord}`, TX, ty);
-    ty += 122;
+
+    if (mergedHearts.length > 0) {
+      // ♥ label
+      ctx.fillStyle = 'rgba(251,191,36,0.55)'; // amber, muted
+      ctx.font = `400 28px "DM Sans", sans-serif`;
+      ctx.fillText('♥  hearted tonight', TX, ty);
+      ty += 52;
+
+      // Artist + tracks list
+      for (const group of mergedHearts.slice(0, 3)) {
+        if (ty > H - 280) break;
+        // Artist
+        ctx.fillStyle = '#fef3c7';
+        ctx.font = `italic 68px "Cormorant Garamond", Georgia, serif`;
+        const artistTrunc = group.artist.length > 26 ? group.artist.slice(0, 24) + '…' : group.artist;
+        ctx.fillText(artistTrunc, TX, ty);
+        ty += 74;
+        // Tracks
+        ctx.fillStyle = 'rgba(255,255,255,0.48)';
+        ctx.font = `300 34px "DM Sans", sans-serif`;
+        for (const track of group.tracks.slice(0, 3)) {
+          if (ty > H - 280) break;
+          const trackTrunc = track.length > 32 ? track.slice(0, 30) + '…' : track;
+          ctx.fillText(trackTrunc, TX + 18, ty);
+          ty += 44;
+        }
+        ty += 14;
+      }
+    } else {
+      // Fallback: session date/time as headline
+      const d = new Date(session.startTime);
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+      const h = d.getHours();
+      const timeOfDay = h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening';
+      const isToday = d.toDateString() === new Date().toDateString();
+      const headline = isToday ? `${dayName}\n${timeOfDay}` : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+      ctx.fillStyle = '#fef3c7';
+      ctx.font = `italic 108px "Cormorant Garamond", Georgia, serif`;
+      for (const line of headline.split('\n')) {
+        ctx.fillText(line, TX, ty);
+        ty += 116;
+      }
+    }
+
+    ty += 18;
 
     // Duration
     if (session.listeningSecs) {
       ctx.fillStyle = '#78716c';
-      ctx.font = `300 40px "DM Sans", sans-serif`;
+      ctx.font = `300 38px "DM Sans", sans-serif`;
       ctx.fillText(formatListeningTime(session.listeningSecs), TX, ty);
-      ty += 58;
+      ty += 56;
     }
-    ty += 22;
+    ty += 18;
 
     // Genre pills
     if (sortedGenres.length > 0) {
