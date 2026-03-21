@@ -3427,6 +3427,183 @@ function canvasRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// Renders all tiles to an offscreen canvas and returns it.
+// Replicates the CSS Grid dense layout (TOTAL_UNITS=4 columns) so the export
+// matches what the user sees in the app.
+async function generateTileExport(records, playCounts) {
+  await document.fonts.ready;
+
+  const COLS = 4;
+  const UNIT = 120;   // px per grid unit — high enough for readable art
+  const GAP = 3;
+  const PADDING = 8;  // outer margin
+
+  // --- compute tile sizes (same logic as TileView) ---
+  const maxPlays = Math.max(...records.map(r => playCounts[r.id] || 0), 1);
+  const hasAnyPlays = records.some(r => (playCounts[r.id] || 0) > 0);
+  const tiles = records.map(r => {
+    const plays = playCounts[r.id] || 0;
+    let units;
+    if (!hasAnyPlays) { units = 1; }
+    else {
+      const ratio = plays / maxPlays;
+      if (ratio > 0.5) units = 3;
+      else if (ratio > 0.15) units = 2;
+      else units = 1;
+    }
+    return { record: r, units, plays };
+  });
+
+  // --- simulate CSS Grid dense auto-placement ---
+  // grid is COLS wide, grows vertically as needed
+  const occupied = [];  // occupied[row][col] = true
+  function isFree(startRow, startCol, span) {
+    if (startCol + span > COLS) return false;
+    for (let r = startRow; r < startRow + span; r++) {
+      for (let c = startCol; c < startCol + span; c++) {
+        if (occupied[r]?.[c]) return false;
+      }
+    }
+    return true;
+  }
+  function occupy(startRow, startCol, span) {
+    for (let r = startRow; r < startRow + span; r++) {
+      if (!occupied[r]) occupied[r] = [];
+      for (let c = startCol; c < startCol + span; c++) {
+        occupied[r][c] = true;
+      }
+    }
+  }
+
+  const placements = [];
+  let cursor = { row: 0, col: 0 };
+  for (const tile of tiles) {
+    const span = tile.units;
+    // dense: scan from row 0 each time to fill gaps
+    let placed = false;
+    outer: for (let row = 0; row < cursor.row + span + 1; row++) {
+      for (let col = 0; col <= COLS - span; col++) {
+        if (isFree(row, col, span)) {
+          occupy(row, col, span);
+          placements.push({ tile, row, col });
+          if (row > cursor.row || (row === cursor.row && col >= cursor.col)) {
+            cursor = { row, col: col + span >= COLS ? row + span : row, col2: col + span };
+          }
+          placed = true;
+          break outer;
+        }
+      }
+    }
+    if (!placed) {
+      // fallback: append at end
+      const row = (occupied.length || 0);
+      occupy(row, 0, span);
+      placements.push({ tile, row, col: 0 });
+    }
+  }
+
+  const totalRows = occupied.length;
+  const W = COLS * UNIT + (COLS - 1) * GAP + PADDING * 2;
+  const H = totalRows * UNIT + (totalRows - 1) * GAP + PADDING * 2;
+
+  // --- load all images ---
+  const imgMap = new Map();
+  await Promise.all(placements.map(async ({ tile }) => {
+    if (imgMap.has(tile.record.id)) return;
+    const url = _artCache.get(tile.record.id) || tile.record.thumb || null;
+    const img = await loadImgForCanvas(url);
+    imgMap.set(tile.record.id, img);
+  }));
+
+  // --- draw ---
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  ctx.fillStyle = "#0c0b09";
+  ctx.fillRect(0, 0, W, H);
+
+  for (const { tile, row, col } of placements) {
+    const { record, units, plays } = tile;
+    const px = PADDING + col * (UNIT + GAP);
+    const py = PADDING + row * (UNIT + GAP);
+    const size = units * UNIT + (units - 1) * GAP;
+
+    const primaryGenre = getGenres(record)[0] || "";
+    const genreHex = getGenrePalette(primaryGenre).hex;
+    const img = imgMap.get(record.id);
+
+    // clip to rounded rect
+    ctx.save();
+    canvasRoundRect(ctx, px, py, size, size, 6);
+    ctx.clip();
+
+    // art or genre placeholder
+    if (img) {
+      ctx.drawImage(img, px, py, size, size);
+    } else {
+      ctx.fillStyle = `${genreHex}28`;
+      ctx.fillRect(px, py, size, size);
+      ctx.fillStyle = `${genreHex}60`;
+      ctx.font = `${Math.round(size * 0.3)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("◇", px + size / 2, py + size / 2);
+    }
+
+    // gradient + title for large tiles
+    if (units >= 2) {
+      const grad = ctx.createLinearGradient(px, py + size, px, py + size * 0.45);
+      grad.addColorStop(0, "rgba(0,0,0,0.82)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(px, py, size, size);
+
+      const pad = Math.round(size * 0.06);
+      ctx.fillStyle = "#fef3c7";
+      ctx.font = `600 ${Math.round(size * 0.09)}px "DM Sans", sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      const titleY = py + size - pad - Math.round(size * 0.09);
+      const maxW = size - pad * 2;
+      ctx.fillText(record.title || "", px + pad, titleY, maxW);
+
+      ctx.fillStyle = "#a8a29e";
+      ctx.font = `${Math.round(size * 0.075)}px "DM Sans", sans-serif`;
+      ctx.fillText(record.artist || "", px + pad, py + size - pad, maxW);
+    }
+
+    // genre accent bar (left edge)
+    ctx.fillStyle = `${genreHex}66`;
+    ctx.fillRect(px, py, Math.round(size * 0.05), size);
+
+    ctx.restore();
+
+    // play count badge
+    if (plays > 0) {
+      const badgeFont = Math.max(10, Math.round(size * 0.1));
+      ctx.font = `${badgeFont}px "DM Sans", sans-serif`;
+      const label = `${plays}×`;
+      const tw = ctx.measureText(label).width;
+      const bw = tw + 10;
+      const bh = badgeFont + 6;
+      const bx = px + size - bw - 5;
+      const by = py + 5;
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      canvasRoundRect(ctx, bx, by, bw, bh, 5);
+      ctx.fill();
+      ctx.fillStyle = "#fbbf24";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, bx + 5, by + bh / 2);
+    }
+  }
+
+  return canvas;
+}
+
 // Returns honeycomb positions sorted center-outward, matching HoneycombView layout
 function honeycombPositions(count, BASE_SIZE) {
   const COL_STEP = BASE_SIZE * 0.76;
@@ -4461,6 +4638,7 @@ export default function VinylCrate() {
   const [storyGenerating, setStoryGenerating] = useState(false);
   const [storyCanvases, setStoryCanvases] = useState(null);
   const [showStoryPreview, setShowStoryPreview] = useState(false);
+  const [tileExporting, setTileExporting] = useState(false);
   const [dnaGenerating, setDnaGenerating] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
   const tabRowRef = useRef(null);
@@ -6085,6 +6263,34 @@ export default function VinylCrate() {
                     title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
                   >
                     {shareCopied ? "Copied!" : "↗ Share"}
+                  </button>
+                )}
+                {honeycombShape === "tiles" && (
+                  <button
+                    disabled={tileExporting}
+                    onClick={async () => {
+                      if (tileExporting) return;
+                      setTileExporting(true);
+                      try {
+                        const canvas = await generateTileExport(honeycombRecords, playCounts);
+                        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+                        const filename = "my-crate.png";
+                        const file = new File([blob], filename, { type: "image/png" });
+                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                          await navigator.share({ files: [file] });
+                        } else {
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = filename; a.click();
+                          URL.revokeObjectURL(url);
+                        }
+                      } catch {}
+                      setTileExporting(false);
+                    }}
+                    className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-xs transition-colors text-stone-400 hover:text-amber-300 disabled:text-stone-700"
+                    title="Save as image"
+                  >
+                    {tileExporting ? "Saving…" : "⬇ Save image"}
                   </button>
                 )}
               </div>
