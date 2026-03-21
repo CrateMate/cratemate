@@ -4581,6 +4581,16 @@ export default function VinylCrate() {
   const [controlsHidden, setControlsHidden] = useState(false);
   const tabRowRef = useRef(null);
   const forSaleRef = useRef(null);
+  const [forSaleForced, setForSaleForced] = useState(false);
+  useEffect(() => {
+    if (!forSaleForced || !forSaleRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (!entry.isIntersecting) setForSaleForced(false); },
+      { threshold: 0 }
+    );
+    observer.observe(forSaleRef.current);
+    return () => observer.disconnect();
+  }, [forSaleForced]);
   const [contentTop, setContentTop] = useState(null);
 
   useEffect(() => {
@@ -5889,7 +5899,7 @@ export default function VinylCrate() {
                   className="text-stone-500 hover:text-amber-400 transition-colors text-left"
                   onClick={() => {
                     setTab("crate");
-                    setHideForSale(false);
+                    setForSaleForced(true);
                     setTimeout(() => forSaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
                   }}
                 >
@@ -6429,7 +6439,7 @@ export default function VinylCrate() {
                   </div>
                 )
               )}
-              {!hideForSale && forSaleRecords.length > 0 && (
+              {(!hideForSale || forSaleForced) && forSaleRecords.length > 0 && (
                 <>
                   <div ref={forSaleRef} className="flex items-center gap-3 px-2 pt-5 pb-1">
                     <div className="flex-1 h-px bg-stone-800/60" />
