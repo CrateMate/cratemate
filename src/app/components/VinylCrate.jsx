@@ -2002,13 +2002,16 @@ export function TileView({ records, playCounts, onSelect, onShowToast }) {
       style={{ scrollbarWidth: "none" }}
     >
       {rows.map((row, ri) => {
-        const rowMaxUnits = Math.max(...row.map(t => t.units));
-        const rowH = Math.round(rowMaxUnits * UNIT + (rowMaxUnits - 1) * GAP);
+        // Proportional sizing — tiles share the full row width by their unit count
+        // so the row always fills edge-to-edge regardless of which tiles landed in it
+        const rowTotalUnits = row.reduce((s, t) => s + t.units, 0);
+        const numGaps = row.length - 1;
+        const availableWidth = containerWidth - numGaps * GAP;
 
         return (
           <div key={ri} className="flex items-end" style={{ gap: GAP, marginBottom: GAP }}>
             {row.map(({ record, units, plays }) => {
-              const tileSize = Math.round(units * UNIT + (units - 1) * GAP);
+              const tileSize = Math.round((units / rowTotalUnits) * availableWidth);
               const primaryGenre = getGenres(record)[0] || "";
               const genreHex = getGenrePalette(primaryGenre).hex;
               const artUrl = _artCache.get(record.id) || record.thumb || null;
