@@ -3867,31 +3867,50 @@ async function generateStoryCards(session, username) {
   ctx.fillStyle = 'rgba(0,0,0,0.48)';
   ctx.fillRect(0, 0, W, HEADER_H);
 
-  // ── 3. Art wall — dynamic height, only complete rows, never cropped ──
-  const cols = artCount === 1 ? 1 : artCount <= 4 ? 2 : 3;
-  const GAP = 3;
-  const CELL = Math.floor((W - GAP * (cols - 1)) / cols);
+  // ── 3. Art wall — up to 6 tiles, "+N more" for overflow, never cropped ──
+  const TILE_CAP = 6;
+  const hasOverflow = artCount > TILE_CAP;
+  const displayTiles = hasOverflow ? TILE_CAP : artCount; // always ≤ 6
+  const overflowCount = artCount - (TILE_CAP - 1); // records hidden (shown as "+N")
+
+  const cols = displayTiles <= 1 ? 1 : displayTiles <= 4 ? 2 : 3;
+  const GAP = 6;
+  const WALL_INSET = 12;
+  const CELL = Math.floor((W - 2 * WALL_INSET - GAP * (cols - 1)) / cols);
   const BRANDING_H = 142;
   const isLong = artCount > 4;
   const MIN_TEXT_H = isLong ? 340 : 460;
   const maxWallBottom = H - BRANDING_H - MIN_TEXT_H;
 
-  let artIdx = 0, wallY = HEADER_H, actualWallBottom = HEADER_H;
-  while (artIdx < artCount) {
-    if (wallY + CELL > maxWallBottom) break; // no room for a full row — stop
-    for (let c = 0; c < cols && artIdx < artCount; c++, artIdx++) {
-      const x = c * (CELL + GAP);
+  let tileIdx = 0, wallY = HEADER_H, actualWallBottom = HEADER_H;
+  while (tileIdx < displayTiles) {
+    if (wallY + CELL > maxWallBottom) break;
+    for (let c = 0; c < cols && tileIdx < displayTiles; c++, tileIdx++) {
+      const x = WALL_INSET + c * (CELL + GAP);
+      const isPlusTile = hasOverflow && tileIdx === displayTiles - 1;
       ctx.save();
       ctx.beginPath();
       ctx.rect(x, wallY, CELL, CELL);
       ctx.clip();
-      if (imgs[artIdx]) {
-        ctx.drawImage(imgs[artIdx], x, wallY, CELL, CELL);
+      if (isPlusTile) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(x, wallY, CELL, CELL);
+      } else if (imgs[tileIdx]) {
+        ctx.drawImage(imgs[tileIdx], x, wallY, CELL, CELL);
       } else {
-        ctx.fillStyle = getGenrePalette(getGenres(records[artIdx])[0] || '').hex + '20';
+        ctx.fillStyle = getGenrePalette(getGenres(records[tileIdx])[0] || '').hex + '20';
         ctx.fillRect(x, wallY, CELL, CELL);
       }
       ctx.restore();
+      if (isPlusTile) {
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(255,255,255,0.72)';
+        ctx.font = `300 56px "DM Sans", sans-serif`;
+        ctx.fillText(`+${overflowCount}`, x + CELL / 2, wallY + CELL / 2 - 8);
+        ctx.fillStyle = 'rgba(255,255,255,0.38)';
+        ctx.font = `300 28px "DM Sans", sans-serif`;
+        ctx.fillText('more', x + CELL / 2, wallY + CELL / 2 + 40);
+      }
     }
     wallY += CELL + GAP;
     actualWallBottom = wallY;
