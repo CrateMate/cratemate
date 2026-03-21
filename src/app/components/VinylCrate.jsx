@@ -1944,11 +1944,25 @@ function packTileRows(tiles, totalUnits) {
 }
 
 export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
-  const containerRef = useRef(null);
+  const containerRef = useRef(null); // outer scroll container
+  const innerRef = useRef(null);     // inner grid (for width measurement)
   const [containerWidth, setContainerWidth] = useState(0);
   const lastTapTime = useRef(0);
   const lastTapRecordId = useRef(null);
   const singleTapTimer = useRef(null);
+
+  // Momentum scrolling
+  const pointerStartY = useRef(0);
+  const pointerLastY = useRef(0);
+  const pointerVelY = useRef(0);
+  const pointerTs = useRef(0);
+  const momentumRaf = useRef(null);
+  const isDragging = useRef(false);
+
+  // Idle screensaver auto-pan
+  const idleTimer = useRef(null);
+  const screensaverRaf = useRef(null);
+  const screensaverDir = useRef(1); // 1 = down, -1 = up
 
   useEffect(() => {
     const el = containerRef.current;
@@ -1958,6 +1972,71 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  function cancelMomentum() {
+    cancelAnimationFrame(momentumRaf.current);
+    cancelAnimationFrame(screensaverRaf.current);
+    clearTimeout(idleTimer.current);
+  }
+
+  function startIdleTimer() {
+    clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(startScreensaver, 8000);
+  }
+
+  function startScreensaver() {
+    const el = containerRef.current;
+    if (!el) return;
+    const SPEED = 0.6; // px per frame
+    function step() {
+      if (!containerRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+      const maxScroll = scrollHeight - clientHeight;
+      if (maxScroll <= 0) return; // not scrollable yet
+      containerRef.current.scrollTop += SPEED * screensaverDir.current;
+      if (containerRef.current.scrollTop >= maxScroll) screensaverDir.current = -1;
+      if (containerRef.current.scrollTop <= 0) screensaverDir.current = 1;
+      screensaverRaf.current = requestAnimationFrame(step);
+    }
+    screensaverRaf.current = requestAnimationFrame(step);
+  }
+
+  function onPointerDown(e) {
+    cancelMomentum();
+    isDragging.current = true;
+    pointerStartY.current = e.clientY;
+    pointerLastY.current = e.clientY;
+    pointerVelY.current = 0;
+    pointerTs.current = Date.now();
+  }
+
+  function onPointerMove(e) {
+    if (!isDragging.current) return;
+    const dy = e.clientY - pointerLastY.current;
+    pointerVelY.current = dy / Math.max(Date.now() - pointerTs.current, 1);
+    pointerLastY.current = e.clientY;
+    pointerTs.current = Date.now();
+  }
+
+  function onPointerUp() {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    let vel = -pointerVelY.current * 16; // px per frame (16ms)
+    const el = containerRef.current;
+    if (!el || Math.abs(vel) < 0.5) { startIdleTimer(); return; }
+    function momentum() {
+      vel *= 0.94;
+      el.scrollTop += vel;
+      if (Math.abs(vel) > 0.5) momentumRaf.current = requestAnimationFrame(momentum);
+      else startIdleTimer();
+    }
+    momentumRaf.current = requestAnimationFrame(momentum);
+  }
+
+  useEffect(() => {
+    startIdleTimer();
+    return () => { cancelMomentum(); clearTimeout(idleTimer.current); };
+  }, [records.length]);
 
   const TOTAL_UNITS = 4;
   const GAP = 2;
@@ -1990,19 +2069,32 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   const UNIT = Math.round((containerWidth - GAP * (TOTAL_UNITS - 1)) / TOTAL_UNITS);
 
   return (
+    // Outer: native scroll container — preserves long-screenshot support
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden pb-8"
-      style={{
-        display: "grid",
-        gridTemplateColumns: `repeat(${TOTAL_UNITS}, ${UNIT}px)`,
-        gridAutoRows: `${UNIT}px`,
-        gap: GAP,
-        gridAutoFlow: "dense",
-        alignContent: "start",
-        scrollbarWidth: "none",
-      }}
+      className="flex-1 overflow-y-auto overflow-x-hidden"
+      style={{ scrollbarWidth: "none" }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onScroll={() => { cancelAnimationFrame(screensaverRaf.current); }}
+      onTouchStart={() => { cancelMomentum(); startIdleTimer(); }}
     >
+      {/* Inner: CSS grid — measured for width */}
+      <div
+        ref={innerRef}
+        className="pb-8"
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${TOTAL_UNITS}, ${UNIT}px)`,
+          gridAutoRows: `${UNIT}px`,
+          gap: GAP,
+          gridAutoFlow: "dense",
+          alignContent: "start",
+        }}
+      >
       {tiles.map(({ record, units, plays }) => {
         const tileSize = units * UNIT + (units - 1) * GAP; // pixel size of this tile
         const primaryGenre = getGenres(record)[0] || "";
@@ -2013,6 +2105,8 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
           <div
             key={record.id}
             onClick={() => {
+              // Suppress tap if it was actually a drag
+              if (Math.abs(pointerLastY.current - pointerStartY.current) > 8) return;
               const now = Date.now();
               if (now - lastTapTime.current < 300 && lastTapRecordId.current === record.id) {
                 clearTimeout(singleTapTimer.current);
@@ -2032,7 +2126,7 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
               overflow: "hidden",
               cursor: "pointer",
               background: "#0c0b09",
-              touchAction: "manipulation",
+              touchAction: "pan-y",
             }}
           >
             {/* Art */}
@@ -2082,6 +2176,7 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
