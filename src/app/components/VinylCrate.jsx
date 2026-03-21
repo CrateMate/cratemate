@@ -3873,7 +3873,7 @@ async function generateStoryCards(session, username) {
   const displayTiles = hasOverflow ? TILE_CAP : artCount; // always ≤ 6
   const overflowCount = artCount - (TILE_CAP - 1); // records hidden (shown as "+N")
 
-  const cols = displayTiles <= 1 ? 1 : displayTiles <= 4 ? 2 : 3;
+  const cols = displayTiles <= 1 ? 1 : displayTiles <= 2 ? 2 : 3;
   const GAP = 6;
   const WALL_INSET = 12;
   const CELL = Math.floor((W - 2 * WALL_INSET - GAP * (cols - 1)) / cols);
@@ -3933,46 +3933,44 @@ async function generateStoryCards(session, username) {
   ctx.font = `italic 78px "Cormorant Garamond", Georgia, serif`;
   ctx.fillText(sessionTitle, TX, 112);
 
-  let headerY = 142;
+  // Decade badge + genre pills on the same row
+  const pillH = 44;
+  ctx.font = `400 24px "DM Sans", sans-serif`;
+  let pillX = TX;
+  const pillY = 142;
+
   if (topDecade) {
     const badgeText = `Mostly ${topDecade}s`;
-    ctx.font = `400 30px "DM Sans", sans-serif`;
     const bw = ctx.measureText(badgeText).width + 36;
-    const bh = 46;
     ctx.fillStyle = 'rgba(255,255,255,0.14)';
-    canvasRoundRect(ctx, TX, headerY, bw, bh, bh / 2);
+    canvasRoundRect(ctx, pillX, pillY, bw, pillH, pillH / 2);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.22)';
     ctx.lineWidth = 1;
-    canvasRoundRect(ctx, TX, headerY, bw, bh, bh / 2);
+    canvasRoundRect(ctx, pillX, pillY, bw, pillH, pillH / 2);
     ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.80)';
-    ctx.fillText(badgeText, TX + 18, headerY + 31);
-    headerY += bh + 14;
+    ctx.fillText(badgeText, pillX + 18, pillY + 30);
+    pillX += bw + 10;
   }
 
-  // Genre pills in header zone (below decade badge)
-  if (sortedGenres.length > 0) {
-    const pillH = 44;
-    let pillX = TX;
-    ctx.font = `400 24px "DM Sans", sans-serif`;
-    for (const [genre] of sortedGenres.slice(0, 3)) {
-      const hex = getGenrePalette(genre).hex;
-      const tw = ctx.measureText(cap(genre)).width;
-      const pillW = tw + 30;
-      if (pillX + pillW > W - 80) break;
-      ctx.fillStyle = hex + '30';
-      canvasRoundRect(ctx, pillX, headerY, pillW, pillH, pillH / 2);
-      ctx.fill();
-      ctx.strokeStyle = hex + '55';
-      ctx.lineWidth = 1;
-      canvasRoundRect(ctx, pillX, headerY, pillW, pillH, pillH / 2);
-      ctx.stroke();
-      ctx.fillStyle = hex;
-      ctx.textAlign = 'left';
-      ctx.fillText(cap(genre), pillX + 15, headerY + 30);
-      pillX += pillW + 10;
-    }
+  // Genre pills on same row as decade
+  for (const [genre] of sortedGenres.slice(0, 3)) {
+    const hex = getGenrePalette(genre).hex;
+    const tw = ctx.measureText(cap(genre)).width;
+    const pillW = tw + 30;
+    if (pillX + pillW > W - 80) break;
+    ctx.fillStyle = hex + '30';
+    canvasRoundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fill();
+    ctx.strokeStyle = hex + '55';
+    ctx.lineWidth = 1;
+    canvasRoundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.stroke();
+    ctx.fillStyle = hex;
+    ctx.textAlign = 'left';
+    ctx.fillText(cap(genre), pillX + 15, pillY + 30);
+    pillX += pillW + 10;
   }
 
   // ── 6. Text panel content ──
@@ -4008,9 +4006,9 @@ async function generateStoryCards(session, username) {
 
   if (mergedHearts.length > 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
-    ctx.font = `300 32px "DM Sans", sans-serif`;
+    ctx.font = `300 36px "DM Sans", sans-serif`;
     ctx.fillText('Fave tracks', TX, ty);
-    ty += 54;
+    ty += 72;
 
     for (const group of mergedHearts.slice(0, maxArtists)) {
       if (ty > textBottom - 120) break;
@@ -4032,9 +4030,9 @@ async function generateStoryCards(session, username) {
     const uniqueArtists = [...new Set(records.map(r => r.artist).filter(Boolean))].slice(0, isLong ? 3 : 5);
     if (uniqueArtists.length > 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.40)';
-      ctx.font = `300 32px "DM Sans", sans-serif`;
+      ctx.font = `300 36px "DM Sans", sans-serif`;
       ctx.fillText('Artists', TX, ty);
-      ty += 54;
+      ty += 72;
       ctx.fillStyle = '#fef3c7';
       ctx.font = `italic 70px "Cormorant Garamond", Georgia, serif`;
       for (const artist of uniqueArtists) {
@@ -4582,6 +4580,7 @@ export default function VinylCrate() {
   const [dnaGenerating, setDnaGenerating] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
   const tabRowRef = useRef(null);
+  const forSaleRef = useRef(null);
   const [contentTop, setContentTop] = useState(null);
 
   useEffect(() => {
@@ -5879,12 +5878,24 @@ export default function VinylCrate() {
               {user?.firstName && (
                 <div className="text-xs uppercase tracking-widest text-amber-900 leading-none mb-1.5">{user.firstName}&apos;s</div>
               )}
-              <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, lineHeight: 1 }} className="text-amber-50">
+              <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 24, lineHeight: 1 }} className="text-amber-50">
                 CrateMate
               </h1>
             </div>
-            <div className="text-stone-600 text-xs mt-1">
-              {myRecords.length} records · {forSaleRecords.length} for sale
+            <div className="text-stone-600 text-xs mt-0.5 leading-tight">
+              <div>{myRecords.length} records</div>
+              {forSaleRecords.length > 0 && (
+                <button
+                  className="text-stone-500 hover:text-amber-400 transition-colors text-left"
+                  onClick={() => {
+                    setTab("crate");
+                    setHideForSale(false);
+                    setTimeout(() => forSaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+                  }}
+                >
+                  {forSaleRecords.length} for sale ↓
+                </button>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 pt-1">
@@ -6420,7 +6431,7 @@ export default function VinylCrate() {
               )}
               {!hideForSale && forSaleRecords.length > 0 && (
                 <>
-                  <div className="flex items-center gap-3 px-2 pt-5 pb-1">
+                  <div ref={forSaleRef} className="flex items-center gap-3 px-2 pt-5 pb-1">
                     <div className="flex-1 h-px bg-stone-800/60" />
                     <span className="text-stone-600 text-xs shrink-0">📋 For Sale · {forSaleRecords.length}</span>
                     <div className="flex-1 h-px bg-stone-800/60" />
