@@ -3594,15 +3594,25 @@ async function generateCollectionDNA(stats, username) {
     img.src = '/icon-192.png';
   });
 
-  // Multi-genre gradient — same language as session card
+  // Multi-genre gradient — proportional to each genre's count
   const sortedGenres = [...stats.topGenres].sort((a, b) => b.count - a.count);
-  const gradientColors = sortedGenres.slice(0, 4).flatMap(({ genre }) => getStoryGradient(genre));
-  if (gradientColors.length === 0) gradientColors.push('#1b1b2f', '#162447');
-
+  const genreSlice = sortedGenres.slice(0, 4);
   const bgGrad = ctx.createLinearGradient(0, 0, W, H);
-  gradientColors.forEach((color, i) => {
-    bgGrad.addColorStop(i / (gradientColors.length - 1), color);
-  });
+  if (genreSlice.length === 0) {
+    bgGrad.addColorStop(0, '#1b1b2f');
+    bgGrad.addColorStop(1, '#162447');
+  } else {
+    const total = genreSlice.reduce((s, g) => s + g.count, 0);
+    let pos = 0;
+    genreSlice.forEach(({ genre, count }, i) => {
+      const [c0, c1] = getStoryGradient(genre);
+      const span = count / total;
+      bgGrad.addColorStop(pos, c0);
+      const endPos = i === genreSlice.length - 1 ? 1 : pos + span;
+      bgGrad.addColorStop(endPos, c1);
+      pos += span;
+    });
+  }
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
@@ -3696,24 +3706,71 @@ async function generateCollectionDNA(stats, username) {
     curY += barH + 70;
   }
 
-  // ── TOP ARTISTS ───────────────────────────────────────────────────────────
+  // ── FAVORITE ARTISTS ──────────────────────────────────────────────────────
   ctx.fillStyle = 'rgba(255,255,255,0.40)';
   ctx.font = `500 26px "DM Sans", sans-serif`;
   ctx.textAlign = 'left';
-  ctx.fillText('MOST SPUN', TX, curY);
+  ctx.fillText('FAVORITE ARTISTS', TX, curY);
   curY += 52;
 
   for (const { artist, count } of stats.topArtists.slice(0, 5)) {
-    if (curY > H - 380) break;
+    if (curY > H - 480) break;
     ctx.fillStyle = '#fef3c7';
     ctx.font = `700 66px "Fraunces", serif`;
     ctx.textAlign = 'left';
     ctx.fillText(artist.length > 26 ? artist.slice(0, 24) + '…' : artist, TX, curY);
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
-    ctx.font = `300 30px "DM Sans", sans-serif`;
+    ctx.font = `300 28px "DM Sans", sans-serif`;
     ctx.textAlign = 'right';
-    ctx.fillText(`${count}×`, W - TX, curY);
+    ctx.fillText(`${count} record${count !== 1 ? 's' : ''}`, W - TX, curY);
     curY += 78;
+  }
+
+  // ── FAVORITE RECORDS (by hearts) ─────────────────────────────────────────
+  if (stats.favoriteRecords && stats.favoriteRecords.length > 0 && curY < H - 480) {
+    curY += 20;
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('FAVORITE RECORDS', TX, curY);
+    curY += 30;
+
+    const THUMB = 120;
+    const GAP = 16;
+    const cols = Math.min(stats.favoriteRecords.length, 6);
+    const totalW = cols * THUMB + (cols - 1) * GAP;
+    const startX = TX;
+
+    // Load thumbnails
+    const thumbImgs = await Promise.all(
+      stats.favoriteRecords.map(rec => rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null))
+    );
+
+    thumbImgs.forEach((img, i) => {
+      if (i >= cols) return;
+      const tx = startX + i * (THUMB + GAP);
+      const ty = curY;
+      ctx.save();
+      ctx.shadowColor = 'transparent';
+      canvasRoundRect(ctx, tx, ty, THUMB, THUMB, 14);
+      ctx.clip();
+      if (img) {
+        ctx.drawImage(img, tx, ty, THUMB, THUMB);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(tx, ty, THUMB, THUMB);
+      }
+      ctx.restore();
+      // Heart badge
+      ctx.fillStyle = 'rgba(220,38,38,0.85)';
+      canvasRoundRect(ctx, tx + THUMB - 38, ty + THUMB - 30, 34, 24, 8); ctx.fill();
+      ctx.fillStyle = 'white';
+      ctx.font = `500 16px "DM Sans", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`♥${stats.favoriteRecords[i].heartCount}`, tx + THUMB - 21, ty + THUMB - 13);
+    });
+
+    curY += THUMB + 28;
   }
 
   // ── AUDIO FINGERPRINT ─────────────────────────────────────────────────────
@@ -7366,14 +7423,20 @@ export default function VinylCrate() {
                           const topGenresList = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([genre, count]) => ({ genre, count }));
                           const topDecadesList = Object.entries(decades).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([decade, count]) => ({ decade, count }));
                           const artistCounts = {};
-                          myRecords.forEach(r => { if (r.artist) artistCounts[r.artist] = (artistCounts[r.artist] || 0) + (playCounts[r.id] || 1); });
+                          myRecords.forEach(r => { if (r.artist) artistCounts[r.artist] = (artistCounts[r.artist] || 0) + 1; });
                           const topArtistsList = Object.entries(artistCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([artist, count]) => ({ artist, count }));
+                          const favoriteRecordsList = [...myRecords]
+                            .filter(r => (r.favorite_tracks || []).length > 0)
+                            .sort((a, b) => (b.favorite_tracks || []).length - (a.favorite_tracks || []).length)
+                            .slice(0, 6)
+                            .map(r => ({ id: r.id, title: r.title, artist: r.artist, thumb: r.thumb, heartCount: (r.favorite_tracks || []).length }));
                           const avg = (key) => spotifyData.reduce((s, f) => s + (f[key] || 0), 0) / (spotifyData.length || 1);
                           const audioProfile = spotifyData.length > 0 ? { energy: avg("energy"), valence: avg("valence"), danceability: avg("danceability") } : null;
                           const stats = {
                             topGenres: topGenresList,
                             topDecades: topDecadesList,
                             topArtists: topArtistsList,
+                            favoriteRecords: favoriteRecordsList,
                             audioProfile,
                             totalRecords: myRecords.length,
                             totalPlays: Object.values(playCounts).reduce((s, v) => s + v, 0),
