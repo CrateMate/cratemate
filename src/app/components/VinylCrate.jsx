@@ -2113,37 +2113,8 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
               </div>
             )}
 
-            {/* Bottom gradient + title (large tiles only) */}
-            {units >= 2 && (
-              <div style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%)",
-                display: "flex", flexDirection: "column", justifyContent: "flex-end",
-                padding: Math.round(tileSize * 0.06),
-              }}>
-                <div style={{ color: "#fef3c7", fontSize: Math.round(tileSize * 0.09), fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {record.title}
-                </div>
-                <div style={{ color: "#a8a29e", fontSize: Math.round(tileSize * 0.075), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
-                  {record.artist}
-                </div>
-              </div>
-            )}
-
             {/* Genre accent top-left bar */}
             <div style={{ position: "absolute", top: 0, left: 0, width: Math.round(tileSize * 0.05), height: "100%", background: `${genreHex}55` }} />
-
-            {/* Play count badge */}
-            {plays > 0 && (
-              <div style={{
-                position: "absolute", top: 6, right: 6,
-                background: "rgba(0,0,0,0.65)", borderRadius: 8,
-                padding: "1px 6px", fontSize: Math.round(tileSize * 0.1),
-                color: "#fbbf24", lineHeight: 1.4,
-              }}>
-                {plays}×
-              </div>
-            )}
           </div>
         );
       })}
@@ -3561,51 +3532,11 @@ async function generateTileExport(records, playCounts, mode = "full") {
     }
 
     // gradient + title for large tiles
-    if (units >= 2) {
-      const grad = ctx.createLinearGradient(px, py + size, px, py + size * 0.45);
-      grad.addColorStop(0, "rgba(0,0,0,0.82)");
-      grad.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(px, py, size, size);
-
-      const pad = Math.round(size * 0.06);
-      ctx.fillStyle = "#fef3c7";
-      ctx.font = `600 ${Math.round(size * 0.09)}px "DM Sans", sans-serif`;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      const titleY = py + size - pad - Math.round(size * 0.09);
-      const maxW = size - pad * 2;
-      ctx.fillText(record.title || "", px + pad, titleY, maxW);
-
-      ctx.fillStyle = "#a8a29e";
-      ctx.font = `${Math.round(size * 0.075)}px "DM Sans", sans-serif`;
-      ctx.fillText(record.artist || "", px + pad, py + size - pad, maxW);
-    }
-
     // genre accent bar (left edge)
     ctx.fillStyle = `${genreHex}66`;
     ctx.fillRect(px, py, Math.round(size * 0.05), size);
 
     ctx.restore();
-
-    // play count badge
-    if (plays > 0) {
-      const badgeFont = Math.max(10, Math.round(size * 0.1));
-      ctx.font = `${badgeFont}px "DM Sans", sans-serif`;
-      const label = `${plays}×`;
-      const tw = ctx.measureText(label).width;
-      const bw = tw + 10;
-      const bh = badgeFont + 6;
-      const bx = px + size - bw - 5;
-      const by = py + 5;
-      ctx.fillStyle = "rgba(0,0,0,0.65)";
-      canvasRoundRect(ctx, bx, by, bw, bh, 5);
-      ctx.fill();
-      ctx.fillStyle = "#fbbf24";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, bx + 5, by + bh / 2);
-    }
   }
 
   return canvas;
