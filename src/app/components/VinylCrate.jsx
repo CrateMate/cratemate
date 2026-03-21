@@ -3871,8 +3871,6 @@ async function generateStoryCards(session, username) {
 
   // ── 2. Header zone — clear space at top for title/decade/pills ──
   const HEADER_H = 270;
-  ctx.fillStyle = 'rgba(0,0,0,0.48)';
-  ctx.fillRect(0, 0, W, HEADER_H);
 
   // ── 3. Art wall — up to 6 tiles, "+N more" for overflow, never cropped ──
   const TILE_CAP = 6;
