@@ -1924,6 +1924,32 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   );
 }
 
+// Lookahead row packer — eliminates gaps by pulling forward tiles that fit leftover space
+function packTileRows(tiles, totalUnits) {
+  const remaining = [...tiles];
+  const rows = [];
+  while (remaining.length > 0) {
+    const row = [];
+    let rowUnits = 0;
+    row.push(remaining.shift());
+    rowUnits += row[0].units;
+    let filled = true;
+    while (filled && rowUnits < totalUnits) {
+      filled = false;
+      const space = totalUnits - rowUnits;
+      const idx = remaining.findIndex(t => t.units <= space);
+      if (idx !== -1) {
+        const [tile] = remaining.splice(idx, 1);
+        row.push(tile);
+        rowUnits += tile.units;
+        filled = true;
+      }
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 export function TileView({ records, playCounts, onSelect, onShowToast }) {
   const containerRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -1960,21 +1986,8 @@ export function TileView({ records, playCounts, onSelect, onShowToast }) {
     return { record: r, units, plays };
   });
 
-  // Greedy row packing — row height = largest tile in row
-  const rows = [];
-  let currentRow = [];
-  let currentUnits = 0;
-  for (const tile of tiles) {
-    if (currentUnits + tile.units > TOTAL_UNITS && currentRow.length > 0) {
-      rows.push(currentRow);
-      currentRow = [tile];
-      currentUnits = tile.units;
-    } else {
-      currentRow.push(tile);
-      currentUnits += tile.units;
-    }
-  }
-  if (currentRow.length > 0) rows.push(currentRow);
+  // Lookahead row packing — pulls forward tiles that fill leftover space to eliminate gaps
+  const rows = packTileRows(tiles, TOTAL_UNITS);
 
   if (!containerWidth) {
     return <div ref={containerRef} className="flex-1" />;
@@ -3921,15 +3934,8 @@ async function generateCrateSnapshot(shape, records, username, playCounts) {
       }
       return { record: r, img: imgs[i], units, plays };
     });
-    // Pack into rows
-    const rows = [];
-    let cur = [], curU = 0;
-    for (const t of tiles) {
-      if (curU + t.units > TOTAL_UNITS && cur.length > 0) {
-        rows.push(cur); cur = [t]; curU = t.units;
-      } else { cur.push(t); curU += t.units; }
-    }
-    if (cur.length) rows.push(cur);
+    // Lookahead row packing — eliminates gaps
+    const rows = packTileRows(tiles, TOTAL_UNITS);
 
     const UNIT = (W - GAP * (TOTAL_UNITS - 1)) / TOTAL_UNITS;
     let y = 0;
