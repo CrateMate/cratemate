@@ -3779,273 +3779,287 @@ async function generateStoryCards(session, username) {
   await document.fonts.ready;
   const W = 1080, H = 1920;
   const records = session.records;
-  const count = Math.min(records.length, 19);
 
-  const artUrls = records.slice(0, count).map(r => (_artCache.get(r.id) || '') || r.thumb || null);
+  // Load art (up to 20 for the wall)
+  const artCount = Math.min(records.length, 20);
+  const artUrls = records.slice(0, artCount).map(r => (_artCache.get(r.id) || '') || r.thumb || null);
   const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
 
-  const topGenre = getGenres(records[0])[0] || '';
-  const [grad0, grad1] = getStoryGradient(topGenre);
+  // Genre analysis
+  const genreCounts = {};
+  records.forEach(r => getGenres(r).slice(0, 2).forEach(g => {
+    if (g) genreCounts[g] = (genreCounts[g] || 0) + 1;
+  }));
+  const sortedGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
+  const primaryGenre = sortedGenres[0]?.[0] || '';
+  const [grad0, grad1] = getStoryGradient(primaryGenre);
 
-  function makeBrandedCanvas() {
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    return canvas;
+  // Decade analysis
+  const years = records.map(r => r.year_original || r.year_pressed).filter(Boolean).map(Number);
+  const decadeCounts = {};
+  years.forEach(y => { const d = Math.floor(y / 10) * 10; decadeCounts[d] = (decadeCounts[d] || 0) + 1; });
+  const topDecade = Object.entries(decadeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  function makeCanvas() {
+    const c = document.createElement('canvas'); c.width = W; c.height = H; return c;
   }
+  function cap(s) { return (s || '').replace(/\b\w/g, c => c.toUpperCase()); }
 
   function drawBranding(ctx) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(80, H - 100); ctx.lineTo(W - 80, H - 100); ctx.stroke();
-    ctx.textAlign = 'center';
+    ctx.beginPath(); ctx.moveTo(80, H - 108); ctx.lineTo(W - 80, H - 108); ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = `italic 600 32px "Cormorant Garamond", Georgia, serif`;
+    ctx.fillText('CrateMate', 80, H - 58);
     if (username) {
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = '26px Georgia, serif';
-      ctx.fillText(`cratemate.app/crate/${username}`, W / 2, H - 64);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.font = `300 24px "DM Sans", sans-serif`;
+      ctx.fillText(`cratemate.app/@${username}`, W - 80, H - 58);
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = 'bold 24px Georgia, serif';
-    ctx.fillText('CrateMate', W / 2, H - 36);
     ctx.restore();
   }
 
   const canvases = [];
 
-  // ── Card 1: "The Session" ──────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CARD 1 — "The Session"
+  // Blurred art BG · crisp art wall · editorial left-aligned text panel
+  // ═══════════════════════════════════════════════════════════════════════════
   {
-    const canvas = makeBrandedCanvas();
+    const canvas = makeCanvas();
     const ctx = canvas.getContext('2d');
 
-    // Full-bleed blurred bg from first album art
-    if (imgs[0]) {
-      ctx.save();
-      ctx.filter = 'blur(40px)';
-      ctx.drawImage(imgs[0], -60, -60, W + 120, H + 120);
-      ctx.filter = 'none';
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#0c0b09';
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    // Dark overlay
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    // Base background
+    ctx.fillStyle = '#0c0b09';
     ctx.fillRect(0, 0, W, H);
 
-    // Diagonal color splash (top-genre)
-    ctx.save();
-    ctx.rotate(-0.35);
-    const splash = ctx.createLinearGradient(-300, -200, 800, 600);
-    splash.addColorStop(0, grad0 + 'cc');
-    splash.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = splash;
-    ctx.fillRect(-400, -400, W + 800, H + 800);
-    ctx.restore();
+    // Blurred first album art — fills whole card for depth + color
+    if (imgs[0]) {
+      ctx.save();
+      ctx.filter = 'blur(32px)';
+      ctx.globalAlpha = 0.32;
+      ctx.drawImage(imgs[0], -80, -80, W + 160, H + 160);
+      ctx.filter = 'none';
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
 
-    // CrateMate wordmark + date top
-    const dateStr = new Date(session.startTime).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = 'bold 28px Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('CrateMate · ' + dateStr, W / 2, 100);
+    // Dark overlay — heavier at bottom for text legibility
+    const overlay = ctx.createLinearGradient(0, 0, 0, H);
+    overlay.addColorStop(0, 'rgba(0,0,0,0.38)');
+    overlay.addColorStop(0.42, 'rgba(0,0,0,0.52)');
+    overlay.addColorStop(0.68, 'rgba(12,11,9,0.88)');
+    overlay.addColorStop(1,    'rgba(12,11,9,1)');
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, W, H);
 
-    // Giant record count
-    const recordWord = records.length === 1 ? 'record' : 'records';
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold 140px "Cormorant Garamond", Georgia, serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`${records.length}`, W / 2, H / 2 - 60);
-    ctx.font = `60px "Cormorant Garamond", Georgia, serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText(recordWord, W / 2, H / 2 + 20);
+    // Crisp art wall — hard-edge tiles, editorial look
+    const WALL_H = 1060;
+    const cols = artCount === 1 ? 1 : artCount <= 4 ? 2 : 3;
+    const GAP = 3;
+    const CELL = Math.floor((W - GAP * (cols - 1)) / cols);
+    let artIdx = 0, wallY = 0;
+    while (wallY < WALL_H && artIdx < artCount) {
+      for (let c = 0; c < cols && artIdx < artCount; c++, artIdx++) {
+        const x = c * (CELL + GAP);
+        const clipH = Math.min(CELL, WALL_H - wallY);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, wallY, CELL, clipH);
+        ctx.clip();
+        if (imgs[artIdx]) {
+          ctx.drawImage(imgs[artIdx], x, wallY, CELL, CELL);
+        } else {
+          ctx.fillStyle = getGenrePalette(getGenres(records[artIdx])[0] || '').hex + '20';
+          ctx.fillRect(x, wallY, CELL, clipH);
+        }
+        ctx.restore();
+      }
+      wallY += CELL + GAP;
+    }
+
+    // Gradient fade — art wall bleeds into dark panel
+    const fade = ctx.createLinearGradient(0, WALL_H - 300, 0, WALL_H + 80);
+    fade.addColorStop(0, 'rgba(12,11,9,0)');
+    fade.addColorStop(1, 'rgba(12,11,9,1)');
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, WALL_H - 300, W, 380);
+
+    // Text panel — left-aligned, editorial
+    const TX = 80;
+    let ty = WALL_H + 72;
+
+    // Record count
+    const rWord = records.length === 1 ? 'record' : 'records';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fef3c7';
+    ctx.font = `italic 116px "Cormorant Garamond", Georgia, serif`;
+    ctx.fillText(`${records.length} ${rWord}`, TX, ty);
+    ty += 122;
 
     // Duration
     if (session.listeningSecs) {
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = '50px Georgia, serif';
-      ctx.fillText(formatListeningTime(session.listeningSecs), W / 2, H / 2 + 92);
+      ctx.fillStyle = '#78716c';
+      ctx.font = `300 40px "DM Sans", sans-serif`;
+      ctx.fillText(formatListeningTime(session.listeningSecs), TX, ty);
+      ty += 58;
     }
+    ty += 22;
 
-    // Bottom mosaic of ALL covers
-    const mosaicCount = count;
-    const MOSAIC_COLS = mosaicCount <= 4 ? mosaicCount : mosaicCount <= 8 ? Math.ceil(mosaicCount / 2) : Math.ceil(mosaicCount / 3);
-    const MOSAIC_ROWS = Math.ceil(mosaicCount / MOSAIC_COLS);
-    const MOSAIC_AREA_H = H * 0.32;
-    const MOSAIC_Y_START = H - MOSAIC_AREA_H - 120;
-    const CELL_SIZE = Math.min(Math.floor((W - 40) / MOSAIC_COLS), Math.floor(MOSAIC_AREA_H / MOSAIC_ROWS));
-    const GAP = 6;
-    const CELL = CELL_SIZE - GAP;
-    const gridW2 = MOSAIC_COLS * CELL_SIZE;
-    const gridH2 = MOSAIC_ROWS * CELL_SIZE;
-    const mosaicX = (W - gridW2) / 2;
-    const mosaicY = MOSAIC_Y_START + (MOSAIC_AREA_H - gridH2) / 2;
-
-    for (let i = 0; i < mosaicCount; i++) {
-      const col = i % MOSAIC_COLS;
-      const row = Math.floor(i / MOSAIC_COLS);
-      const x = Math.round(mosaicX + col * CELL_SIZE + GAP / 2);
-      const y = Math.round(mosaicY + row * CELL_SIZE + GAP / 2);
-      const r = 6;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(x + r, y); ctx.lineTo(x + CELL - r, y);
-      ctx.quadraticCurveTo(x + CELL, y, x + CELL, y + r);
-      ctx.lineTo(x + CELL, y + CELL - r);
-      ctx.quadraticCurveTo(x + CELL, y + CELL, x + CELL - r, y + CELL);
-      ctx.lineTo(x + r, y + CELL);
-      ctx.quadraticCurveTo(x, y + CELL, x, y + CELL - r);
-      ctx.lineTo(x, y + r);
-      ctx.quadraticCurveTo(x, y, x + r, y);
-      ctx.closePath();
-      ctx.clip();
-      if (imgs[i]) {
-        ctx.drawImage(imgs[i], x, y, CELL, CELL);
-      } else {
-        ctx.fillStyle = '#1c1814';
+    // Genre pills
+    if (sortedGenres.length > 0) {
+      const pillH = 50;
+      let pillX = TX;
+      ctx.font = `400 28px "DM Sans", sans-serif`;
+      for (const [genre] of sortedGenres.slice(0, 3)) {
+        const hex = getGenrePalette(genre).hex;
+        const tw = ctx.measureText(cap(genre)).width;
+        const pillW = tw + 36;
+        ctx.fillStyle = hex + '28';
+        canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
         ctx.fill();
+        ctx.strokeStyle = hex + '45';
+        ctx.lineWidth = 1;
+        canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
+        ctx.stroke();
+        ctx.fillStyle = hex;
+        ctx.textAlign = 'left';
+        ctx.fillText(cap(genre), pillX + 18, ty + 35);
+        pillX += pillW + 10;
       }
-      ctx.restore();
     }
 
     drawBranding(ctx);
     canvases.push(canvas);
   }
 
-  // ── Card 2: "Your Sound" ──────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CARD 2 — "The Vinyl"
+  // Genre gradient · actual vinyl record · genre identity
+  // ═══════════════════════════════════════════════════════════════════════════
   {
-    const canvas = makeBrandedCanvas();
+    const canvas = makeCanvas();
     const ctx = canvas.getContext('2d');
 
-    // Vivid gradient background
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, grad0);
-    bg.addColorStop(1, grad1);
-    ctx.fillStyle = bg;
+    // Vivid genre gradient background
+    const bgGrad = ctx.createLinearGradient(0, 0, W * 0.5, H);
+    bgGrad.addColorStop(0, grad0);
+    bgGrad.addColorStop(1, grad1);
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, W, H);
 
-    // Genre breakdown
-    const genreCounts = {};
-    records.forEach(r => getGenres(r).forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; }));
-    const sorted = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
-    const primaryGenre = sorted[0]?.[0] || topGenre;
-    const secondGenre = sorted[1]?.[0] || null;
+    // Radial vignette — center luminous, edges dark
+    const vignette = ctx.createRadialGradient(W / 2, H * 0.37, H * 0.17, W / 2, H * 0.37, H * 0.72);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.62)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
 
-    // Decade
-    const years = records.map(r => r.year_original || r.year_pressed).filter(Boolean).map(Number);
-    const decadeCounts = {};
-    years.forEach(y => { const d = Math.floor(y / 10) * 10; decadeCounts[d] = (decadeCounts[d] || 0) + 1; });
-    const topDecade = Object.entries(decadeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+    // ── Vinyl record ──
+    const VCX = W / 2, VCY = 660;
+    const VINYL_R = 365, LABEL_R = 158, HOLE_R = 13;
 
-    // Giant genre name
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffffff';
-    const g1Display = primaryGenre.charAt(0).toUpperCase() + primaryGenre.slice(1);
-    ctx.font = `italic bold 110px "Cormorant Garamond", Georgia, serif`;
-    ctx.fillText(g1Display, W / 2, H / 2 - 60);
+    // Disc
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(VCX, VCY, VINYL_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#040404';
+    ctx.fill();
+    ctx.restore();
 
-    if (secondGenre) {
-      const g2Display = secondGenre.charAt(0).toUpperCase() + secondGenre.slice(1);
-      ctx.font = `italic 70px "Cormorant Garamond", Georgia, serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(g2Display, W / 2, H / 2 + 40);
-    }
-
-    // Decade pill
-    if (topDecade) {
-      const pillText = `Mostly ${topDecade}s`;
-      ctx.font = 'bold 38px Georgia, serif';
-      const tw = ctx.measureText(pillText).width;
-      const px = W / 2 - tw / 2 - 24;
-      const py = H / 2 + (secondGenre ? 120 : 60);
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      canvasRoundRect(ctx, px, py - 30, tw + 48, 52, 26);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(pillText, W / 2, py + 14);
-    }
-
-    // Bottom row of small cover circles
-    const circleRecords = imgs.slice(0, Math.min(6, imgs.length));
-    const CR = 54;
-    const totalCircleW = circleRecords.length * (CR * 2 + 12) - 12;
-    let cx2 = (W - totalCircleW) / 2;
-    const cy2 = H - 260;
-    for (let i = 0; i < circleRecords.length; i++) {
-      const img = circleRecords[i];
-      ctx.save();
+    // Groove lines — concentric, subtle opacity variation
+    ctx.save();
+    for (let r = VINYL_R - 10; r > LABEL_R + 20; r -= 9) {
       ctx.beginPath();
-      ctx.arc(cx2 + CR, cy2, CR, 0, Math.PI * 2);
-      ctx.clip();
-      if (img) {
-        ctx.drawImage(img, cx2, cy2 - CR, CR * 2, CR * 2);
-      } else {
-        ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        ctx.fill();
-      }
-      ctx.restore();
-      cx2 += CR * 2 + 12;
+      ctx.arc(VCX, VCY, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,255,255,${r % 27 < 4 ? 0.026 : 0.011})`;
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
     }
+    ctx.restore();
 
-    drawBranding(ctx);
-    canvases.push(canvas);
-  }
+    // Outer rim highlight
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(VCX, VCY, VINYL_R - 2, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
 
-  // ── Card 3: "Favorites" (only if hearted tracks exist) ────────────────────
-  const heartedGroups = records
-    .map(r => ({
-      artist: r.artist || r.title || '',
-      tracks: (r.favorite_tracks || [])
-        .map(ft => { const t = typeof ft === 'object' ? ft : { key: ft, title: ft }; return (t.title && t.title !== t.key) ? t.title : null; })
-        .filter(Boolean),
-    }))
-    .filter(g => g.tracks.length > 0);
+    // Album art label — circular crop of first cover
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(VCX, VCY, LABEL_R, 0, Math.PI * 2);
+    ctx.clip();
+    if (imgs[0]) {
+      ctx.drawImage(imgs[0], VCX - LABEL_R, VCY - LABEL_R, LABEL_R * 2, LABEL_R * 2);
+    } else {
+      ctx.fillStyle = getGenrePalette(primaryGenre).hex + '50';
+      ctx.fill();
+    }
+    ctx.restore();
 
-  if (heartedGroups.length > 0) {
-    const canvas = makeBrandedCanvas();
-    const ctx = canvas.getContext('2d');
+    // Label border ring
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(VCX, VCY, LABEL_R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
 
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#881337');
-    bg.addColorStop(1, '#be123c');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    // Spindle hole
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(VCX, VCY, HOLE_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#070707';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
 
-    // Large semi-transparent heart glyph
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.font = '280px Georgia, serif';
+    // ── Text below vinyl ──
+    let ty = VCY + VINYL_R + 78;
     ctx.textAlign = 'center';
-    ctx.fillText('♥', W / 2, H / 2 + 100);
 
-    // Favorites title
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `bold 80px "Cormorant Garamond", Georgia, serif`;
-    ctx.fillText('Favorites', W / 2, 260);
+    if (primaryGenre) {
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.font = `italic bold 148px "Cormorant Garamond", Georgia, serif`;
+      ctx.fillText(cap(primaryGenre), W / 2, ty);
+      ty += 152;
 
-    // Artist + tracks
-    let nextY = 360;
-    const mergedGroups = [];
-    for (const g of heartedGroups) {
-      const last = mergedGroups[mergedGroups.length - 1];
-      if (last && last.artist === g.artist) last.tracks.push(...g.tracks);
-      else mergedGroups.push({ artist: g.artist, tracks: [...g.tracks] });
-    }
-    for (const group of mergedGroups.slice(0, 4)) {
-      if (nextY > H - 250) break;
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.font = `bold 52px "Cormorant Garamond", Georgia, serif`;
-      const ad = group.artist.length > 28 ? group.artist.slice(0, 26) + '…' : group.artist;
-      ctx.fillText(ad, W / 2, nextY);
-      nextY += 62;
-      ctx.fillStyle = 'rgba(255,255,255,0.65)';
-      ctx.font = `italic 42px "Cormorant Garamond", Georgia, serif`;
-      for (const track of group.tracks.slice(0, 3)) {
-        if (nextY > H - 250) break;
-        const td = track.length > 34 ? track.slice(0, 32) + '…' : track;
-        ctx.fillText(td, W / 2, nextY);
-        nextY += 54;
+      const secondGenre = sortedGenres[1]?.[0];
+      if (secondGenre) {
+        ctx.fillStyle = 'rgba(255,255,255,0.42)';
+        ctx.font = `italic 80px "Cormorant Garamond", Georgia, serif`;
+        ctx.fillText(cap(secondGenre), W / 2, ty);
+        ty += 98;
       }
-      nextY += 16;
+    }
+
+    // Decade badge
+    if (topDecade) {
+      ty += 8;
+      const pillText = `Mostly ${topDecade}s`;
+      ctx.font = `400 34px "DM Sans", sans-serif`;
+      const tw = ctx.measureText(pillText).width;
+      const pillW = tw + 52, pillH = 58;
+      const pillX = W / 2 - pillW / 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.13)';
+      canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 1;
+      canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.88)';
+      ctx.fillText(pillText, W / 2, ty + 39);
     }
 
     drawBranding(ctx);
