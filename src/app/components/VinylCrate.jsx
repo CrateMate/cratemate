@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { useTheme } from "./ThemeProvider";
+import StoryPreviewModal from "./StoryPreviewModal";
 
 function HintBanner({ children, onDismiss }) {
   return (
@@ -187,6 +188,34 @@ const GENRE_PALETTE = {
   "funk":             { tw: "bg-orange-900/40 text-orange-300 border-orange-800/40",  hex: "#f97316" },
   "latin":            { tw: "bg-orange-900/40 text-orange-300 border-orange-800/40",  hex: "#ea580c" },
 };
+
+const STORY_GENRE_GRADIENTS = {
+  "jazz": ["#0f4c75","#1b6ca8"], "blues": ["#1a237e","#283593"],
+  "soul": ["#bf360c","#e64a19"], "funk": ["#e65100","#ff6f00"],
+  "rock": ["#b71c1c","#c62828"], "electronic": ["#4a148c","#6a1b9a"],
+  "hip hop": ["#212121","#f9a825"], "pop": ["#880e4f","#ad1457"],
+  "classical": ["#1a237e","#37474f"], "_default": ["#1b1b2f","#162447"],
+};
+
+function getStoryGradient(genre) {
+  const key = (genre || "").toLowerCase().trim();
+  if (STORY_GENRE_GRADIENTS[key]) return STORY_GENRE_GRADIENTS[key];
+  for (const [k, v] of Object.entries(STORY_GENRE_GRADIENTS)) {
+    if (k !== "_default" && key.includes(k)) return v;
+  }
+  return STORY_GENRE_GRADIENTS["_default"];
+}
+
+function extractDominantColor(img) {
+  try {
+    const c = document.createElement("canvas");
+    c.width = 1; c.height = 1;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, 1, 1);
+    const d = ctx.getImageData(0, 0, 1, 1).data;
+    return [d[0], d[1], d[2]];
+  } catch { return [30, 25, 20]; }
+}
 
 const GENRE_FALLBACK = [
   { tw: "bg-teal-900/40 text-teal-300 border-teal-800/40",          hex: "#2dd4bf" },
@@ -696,7 +725,7 @@ function WantReleaseRow({ release, onPriceLoaded }) {
   );
 }
 
-function WantGroupRow({ group, expanded, onToggle }) {
+function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSaveThreshold, onRemoveThreshold }) {
   const rep = group.representative;
   const genres = (rep?.genres || "").split(",").map((g) => g.trim()).filter(Boolean);
   const marketplaceUrl = group.master_id
@@ -705,6 +734,8 @@ function WantGroupRow({ group, expanded, onToggle }) {
   const longPressTimer = useRef(null);
   const didLongPress = useRef(false);
   const [loadedPrices, setLoadedPrices] = useState({});
+  const [showBellForm, setShowBellForm] = useState(false);
+  const [bellInput, setBellInput] = useState("");
 
   const minPrice = Object.values(loadedPrices).reduce((best, p) => {
     if (!best || p.min_price < best.min_price) return p;
@@ -785,11 +816,55 @@ function WantGroupRow({ group, expanded, onToggle }) {
             {bestDeal && <DealBadge dealPct={bestDeal.deal_pct} />}
           </div>
         </div>
-        <div className="flex flex-col items-center gap-0.5 shrink-0 px-1">
+        <div className="flex flex-col items-center gap-1 shrink-0 px-1">
           <span className="text-stone-600 text-xs">{expanded ? "▲" : "▼"}</span>
-          <span className="text-stone-700 text-[9px]">↗</span>
+          {pushEnabled && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowBellForm(v => !v); }}
+              className={`text-xs leading-none ${threshold ? "text-amber-400" : "text-stone-700 hover:text-amber-500"} transition-colors`}
+              title={threshold ? `Alert: below $${threshold.threshold_price}` : "Set price alert"}
+            >
+              🔔
+            </button>
+          )}
         </div>
       </div>
+      {showBellForm && pushEnabled && (
+        <div
+          className="px-3 pb-2 pt-1 border-t border-stone-800/40 flex items-center gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {threshold ? (
+            <>
+              <span className="text-[11px] text-amber-400 flex-1">Alert: below ${Number(threshold.threshold_price).toFixed(2)}</span>
+              <button
+                onClick={() => { onRemoveThreshold?.(); setShowBellForm(false); }}
+                className="text-[11px] px-2 py-1 rounded-lg border border-stone-700 text-stone-500 hover:text-rose-400 hover:border-rose-900/40 transition-colors"
+              >Remove</button>
+            </>
+          ) : (
+            <>
+              <span className="text-[11px] text-stone-500 shrink-0">Alert below $</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={bellInput}
+                onChange={(e) => setBellInput(e.target.value)}
+                placeholder="e.g. 15.00"
+                className="flex-1 bg-stone-900 border border-stone-700 rounded-lg px-2 py-1 text-xs text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
+              />
+              <button
+                onClick={() => {
+                  const price = parseFloat(bellInput);
+                  if (!isNaN(price) && price > 0) { onSaveThreshold?.(price); setShowBellForm(false); }
+                }}
+                className="text-[11px] px-2 py-1 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-300 hover:bg-amber-900/50 transition-colors"
+              >Save</button>
+            </>
+          )}
+        </div>
+      )}
       {expanded && group.releases.length > 0 && (
         <div className="px-3 pb-3 space-y-1.5 border-t border-stone-800/40 pt-2">
           {group.releases.map((r) => (
@@ -809,7 +884,7 @@ function WantGroupRow({ group, expanded, onToggle }) {
 
 const WANTS_PAGE_SIZE = 25;
 
-function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove }) {
+function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold }) {
   const [wantsPage, setWantsPage] = useState(1);
   const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(true);
   const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
@@ -860,6 +935,14 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           style={{ backgroundColor: "var(--bg-input)" }}
         />
       </div>
+      {/* iOS Home Screen guidance */}
+      {typeof navigator !== "undefined" && /iPhone|iPad/i.test(navigator.userAgent) && !window.navigator.standalone && (
+        <div className="px-4 pt-1 pb-0">
+          <div className="text-[11px] text-amber-700 bg-amber-950/30 border border-amber-900/30 rounded-lg px-3 py-2">
+            Add CrateMate to your Home Screen to enable price alerts on iOS.
+          </div>
+        </div>
+      )}
       <div className="px-4 py-1 flex items-center gap-2 flex-wrap">
         <button
           onClick={onStartImport}
@@ -868,6 +951,14 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
         >
           {isImporting ? "Importing…" : "↓ Import Wantlist"}
         </button>
+        {pushPermission !== "granted" && (
+          <button
+            onClick={onSubscribePush}
+            className="text-xs px-3 py-1.5 rounded-lg border border-amber-900/40 bg-amber-950/20 text-amber-500 hover:bg-amber-900/30 hover:text-amber-300 transition-all"
+          >
+            🔔 Enable price alerts
+          </button>
+        )}
         {allGroups.length > 0 && (
           <button
             onClick={() => { setWantsInfiniteScroll(s => !s); setWantsPage(1); setWantsVisible(WANTS_PAGE_SIZE); }}
@@ -917,6 +1008,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
         <div className="flex-1 overflow-y-auto px-4 pb-8">
           {visibleGroups.map((group) => {
             const key = group.master_id ? `master_${group.master_id}` : `release_${group.representative?.release_id}`;
+            const repId = group.representative?.release_id;
             return (
               <WantGroupRow
                 key={key}
@@ -931,6 +1023,10 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
                   });
                 }}
                 onRemove={onRemove}
+                pushEnabled={pushPermission === "granted" && pushSubscribed}
+                threshold={repId ? priceThresholds.get(repId) : null}
+                onSaveThreshold={repId ? (price) => onSaveThreshold(repId, price) : null}
+                onRemoveThreshold={repId ? () => onRemoveThreshold(repId) : null}
               />
             );
           })}
@@ -1407,7 +1503,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   );
 }
 
-export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onShowToast, screensaverEnabled = true, onToggleScreensaver }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onShowToast, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb" }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -1431,7 +1527,8 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   const screensaverVel = useRef({ x: 0, y: 0 });
 
   const BASE_SIZE = Math.round(180 * zoom);
-  const COL_STEP = BASE_SIZE * 0.76;
+  const isGrid = shape === "grid";
+  const COL_STEP = isGrid ? BASE_SIZE * 0.82 : BASE_SIZE * 0.76;
   const ROW_STEP = BASE_SIZE * 0.88;
   const CIRCLE_RADIUS = BASE_SIZE * 4.8; // controls how wide the circular grid is
 
@@ -1441,9 +1538,11 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   for (let col = -RANGE; col <= RANGE; col++) {
     for (let row = -RANGE; row <= RANGE; row++) {
       const px = col * COL_STEP;
-      const py = row * ROW_STEP + (((col % 2) + 2) % 2 === 1 ? ROW_STEP / 2 : 0);
+      const rowOffset = isGrid ? 0 : (((col % 2) + 2) % 2 === 1 ? ROW_STEP / 2 : 0);
+      const py = row * ROW_STEP + rowOffset;
       const dist = Math.hypot(px, py);
-      if (dist <= CIRCLE_RADIUS) {
+      const inBounds = isGrid ? (Math.abs(col) <= 5 && Math.abs(row) <= 4) : dist <= CIRCLE_RADIUS;
+      if (inBounds) {
         allPositions.push({ col, row, px, py, dist });
       }
     }
@@ -1744,7 +1843,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                 style={{
                   width: "100%",
                   height: "100%",
-                  borderRadius: 14,
+                  borderRadius: isGrid ? 8 : 14,
                   overflow: "hidden",
                   boxShadow: isFocused
                     ? `0 0 0 3px rgba(${rgb},0.55), 0 8px 28px rgba(0,0,0,0.7)`
@@ -3078,6 +3177,500 @@ function honeycombPositions(count, BASE_SIZE) {
   return positions.slice(0, count);
 }
 
+async function generateCollectionDNA(stats, username) {
+  await document.fonts.ready;
+  const W = 1080, H = 1920;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#0c0b09");
+  bg.addColorStop(1, "#1c1610");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle warm vignette
+  const vig = ctx.createRadialGradient(W / 2, H * 0.3, 0, W / 2, H * 0.3, W * 0.9);
+  vig.addColorStop(0, "rgba(80,50,10,0.18)");
+  vig.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  let curY = 160;
+
+  // ── TOP THIRD — title + username ─────────────────────────────────────────
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = `italic bold 100px "Cormorant Garamond", Georgia, serif`;
+  ctx.fillText("Your collection.", W / 2, curY);
+  curY += 60;
+  if (username) {
+    ctx.fillStyle = "#78716c";
+    ctx.font = `40px Georgia, serif`;
+    ctx.fillText(`@${username}`, W / 2, curY);
+    curY += 50;
+  }
+  ctx.fillStyle = "#44403c";
+  ctx.font = `32px Georgia, serif`;
+  ctx.fillText(`${stats.totalRecords} records · ${stats.totalPlays} plays`, W / 2, curY);
+  curY += 80;
+
+  // Divider
+  ctx.strokeStyle = "#2c2820";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(80, curY); ctx.lineTo(W - 80, curY); ctx.stroke();
+  curY += 48;
+
+  // ── GENRE DNA bar ─────────────────────────────────────────────────────────
+  if (stats.topGenres.length > 0) {
+    ctx.fillStyle = "#57534e";
+    ctx.font = `bold 28px Georgia, serif`;
+    ctx.textAlign = "left";
+    ctx.fillText("YOUR SOUND", 80, curY);
+    curY += 40;
+
+    const totalGenreCount = stats.topGenres.reduce((s, g) => s + g.count, 0);
+    const barH = 48;
+    let barX = 80;
+    const barW = W - 160;
+
+    for (const { genre, count } of stats.topGenres) {
+      const segW = Math.round((count / totalGenreCount) * barW);
+      if (segW < 1) continue;
+      const hex = getGenrePalette(genre).hex;
+      ctx.fillStyle = hex;
+      // First segment gets left rounded corners, last gets right
+      const isFirst = barX === 80;
+      const isLast = barX + segW >= 80 + barW - 2;
+      ctx.save();
+      if (isFirst || isLast) {
+        ctx.beginPath();
+        const r = 8;
+        ctx.moveTo(barX + (isFirst ? r : 0), curY);
+        ctx.lineTo(barX + segW - (isLast ? r : 0), curY);
+        if (isLast) ctx.quadraticCurveTo(barX + segW, curY, barX + segW, curY + r);
+        else ctx.lineTo(barX + segW, curY);
+        ctx.lineTo(barX + segW, curY + barH - (isLast ? r : 0));
+        if (isLast) ctx.quadraticCurveTo(barX + segW, curY + barH, barX + segW - r, curY + barH);
+        else ctx.lineTo(barX + segW, curY + barH);
+        ctx.lineTo(barX + (isFirst ? r : 0), curY + barH);
+        if (isFirst) ctx.quadraticCurveTo(barX, curY + barH, barX, curY + barH - r);
+        else ctx.lineTo(barX, curY + barH);
+        ctx.lineTo(barX, curY + (isFirst ? r : 0));
+        if (isFirst) ctx.quadraticCurveTo(barX, curY, barX + r, curY);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillRect(barX, curY, segW, barH);
+      }
+      ctx.restore();
+
+      // Label if wide enough
+      if (segW > 80) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(barX, curY, segW, barH);
+        ctx.clip();
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.font = `bold 22px Georgia, serif`;
+        ctx.textAlign = "center";
+        const g = genre.charAt(0).toUpperCase() + genre.slice(1);
+        ctx.fillText(g, barX + segW / 2, curY + 32);
+        ctx.restore();
+      }
+      barX += segW;
+    }
+    curY += barH + 60;
+  }
+
+  // ── DECADE SPREAD ─────────────────────────────────────────────────────────
+  if (stats.topDecades.length > 0) {
+    const maxDecCount = Math.max(...stats.topDecades.map((d) => d.count));
+    const topDec = stats.topDecades[0]?.decade;
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#57534e";
+    ctx.font = `bold 28px Georgia, serif`;
+    ctx.fillText("DECADES", 80, curY);
+    curY += 40;
+
+    let dx = 80;
+    for (const { decade, count } of stats.topDecades.slice(0, 7)) {
+      const isTop = String(decade) === String(topDec);
+      const ratio = count / maxDecCount;
+      const pillH = Math.round(40 + ratio * 20);
+      const label = `${String(decade).slice(2)}s`;
+      ctx.font = `bold 30px Georgia, serif`;
+      const tw = ctx.measureText(label).width;
+      const pillW = Math.max(tw + 32, 72);
+      const pillY = curY + (60 - pillH) / 2;
+
+      ctx.fillStyle = isTop ? "#fbbf24" : "#292524";
+      canvasRoundRect(ctx, dx, pillY, pillW, pillH, pillH / 2);
+      ctx.fill();
+
+      ctx.fillStyle = isTop ? "#1c1410" : "#78716c";
+      ctx.textAlign = "center";
+      ctx.fillText(label, dx + pillW / 2, pillY + pillH / 2 + 11);
+
+      dx += pillW + 12;
+      if (dx > W - 160) break;
+    }
+    curY += 100;
+  }
+
+  // ── TOP ARTISTS ───────────────────────────────────────────────────────────
+  if (stats.topArtists.length > 0) {
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#57534e";
+    ctx.font = `bold 28px Georgia, serif`;
+    ctx.fillText("MOST SPUN", 80, curY);
+    curY += 44;
+
+    for (const { artist, count } of stats.topArtists.slice(0, 5)) {
+      ctx.fillStyle = "#d4c8b0";
+      ctx.font = `48px "Cormorant Garamond", Georgia, serif`;
+      ctx.textAlign = "left";
+      const display = artist.length > 34 ? artist.slice(0, 32) + "…" : artist;
+      ctx.fillText(display, 80, curY);
+      ctx.fillStyle = "#57534e";
+      ctx.font = `28px Georgia, serif`;
+      ctx.textAlign = "right";
+      ctx.fillText(`${count}×`, W - 80, curY);
+      curY += 60;
+    }
+    curY += 20;
+  }
+
+  // ── AUDIO FINGERPRINT ─────────────────────────────────────────────────────
+  if (stats.audioProfile) {
+    const { energy, valence, danceability } = stats.audioProfile;
+    const descriptors = [];
+    descriptors.push(energy > 0.7 ? "High Energy" : energy < 0.4 ? "Laid Back" : "Balanced");
+    descriptors.push(valence > 0.6 ? "Feel Good" : valence < 0.35 ? "Melancholic" : "Moody");
+    descriptors.push(danceability > 0.65 ? "Danceable" : danceability < 0.4 ? "Headphone Music" : "Groove-Ready");
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#57534e";
+    ctx.font = `bold 28px Georgia, serif`;
+    ctx.fillText("AUDIO FINGERPRINT", 80, curY);
+    curY += 44;
+
+    let px2 = 80;
+    for (const desc of descriptors) {
+      ctx.font = `bold 32px Georgia, serif`;
+      const tw = ctx.measureText(desc).width;
+      const pillW = tw + 40;
+      if (px2 + pillW > W - 80) { px2 = 80; curY += 56; }
+      ctx.fillStyle = "#292524";
+      canvasRoundRect(ctx, px2, curY - 32, pillW, 48, 24);
+      ctx.fill();
+      ctx.fillStyle = "#a8a29e";
+      ctx.textAlign = "center";
+      ctx.fillText(desc, px2 + pillW / 2, curY);
+      px2 += pillW + 12;
+    }
+    curY += 56;
+  }
+
+  // ── BRANDING FOOTER ───────────────────────────────────────────────────────
+  ctx.strokeStyle = "#262220";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(80, H - 130); ctx.lineTo(W - 80, H - 130); ctx.stroke();
+  ctx.textAlign = "center";
+  if (username) {
+    ctx.fillStyle = "#57534e";
+    ctx.font = `30px Georgia, serif`;
+    ctx.fillText(`cratemate.app/crate/${username}`, W / 2, H - 86);
+  }
+  ctx.fillStyle = "#44403c";
+  ctx.font = `bold 28px Georgia, serif`;
+  ctx.fillText("CrateMate", W / 2, H - 46);
+
+  return canvas;
+}
+
+async function generateStoryCards(session, username) {
+  await document.fonts.ready;
+  const W = 1080, H = 1920;
+  const records = session.records;
+  const count = Math.min(records.length, 19);
+
+  const artUrls = records.slice(0, count).map(r => (_artCache.get(r.id) || '') || r.thumb || null);
+  const imgs = await Promise.all(artUrls.map(loadImgForCanvas));
+
+  const topGenre = getGenres(records[0])[0] || '';
+  const [grad0, grad1] = getStoryGradient(topGenre);
+
+  function makeBrandedCanvas() {
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    return canvas;
+  }
+
+  function drawBranding(ctx) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(80, H - 100); ctx.lineTo(W - 80, H - 100); ctx.stroke();
+    ctx.textAlign = 'center';
+    if (username) {
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '26px Georgia, serif';
+      ctx.fillText(`cratemate.app/crate/${username}`, W / 2, H - 64);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = 'bold 24px Georgia, serif';
+    ctx.fillText('CrateMate', W / 2, H - 36);
+    ctx.restore();
+  }
+
+  const canvases = [];
+
+  // ── Card 1: "The Session" ──────────────────────────────────────────────────
+  {
+    const canvas = makeBrandedCanvas();
+    const ctx = canvas.getContext('2d');
+
+    // Full-bleed blurred bg from first album art
+    if (imgs[0]) {
+      ctx.save();
+      ctx.filter = 'blur(40px)';
+      ctx.drawImage(imgs[0], -60, -60, W + 120, H + 120);
+      ctx.filter = 'none';
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#0c0b09';
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Diagonal color splash (top-genre)
+    ctx.save();
+    ctx.rotate(-0.35);
+    const splash = ctx.createLinearGradient(-300, -200, 800, 600);
+    splash.addColorStop(0, grad0 + 'cc');
+    splash.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = splash;
+    ctx.fillRect(-400, -400, W + 800, H + 800);
+    ctx.restore();
+
+    // CrateMate wordmark + date top
+    const dateStr = new Date(session.startTime).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = 'bold 28px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CrateMate · ' + dateStr, W / 2, 100);
+
+    // Giant record count
+    const recordWord = records.length === 1 ? 'record' : 'records';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold 140px "Cormorant Garamond", Georgia, serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${records.length}`, W / 2, H / 2 - 60);
+    ctx.font = `60px "Cormorant Garamond", Georgia, serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillText(recordWord, W / 2, H / 2 + 20);
+
+    // Duration
+    if (session.listeningSecs) {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.font = '50px Georgia, serif';
+      ctx.fillText(formatListeningTime(session.listeningSecs), W / 2, H / 2 + 92);
+    }
+
+    // Bottom mosaic of ALL covers
+    const mosaicCount = count;
+    const MOSAIC_COLS = mosaicCount <= 4 ? mosaicCount : mosaicCount <= 8 ? Math.ceil(mosaicCount / 2) : Math.ceil(mosaicCount / 3);
+    const MOSAIC_ROWS = Math.ceil(mosaicCount / MOSAIC_COLS);
+    const MOSAIC_AREA_H = H * 0.32;
+    const MOSAIC_Y_START = H - MOSAIC_AREA_H - 120;
+    const CELL_SIZE = Math.min(Math.floor((W - 40) / MOSAIC_COLS), Math.floor(MOSAIC_AREA_H / MOSAIC_ROWS));
+    const GAP = 6;
+    const CELL = CELL_SIZE - GAP;
+    const gridW2 = MOSAIC_COLS * CELL_SIZE;
+    const gridH2 = MOSAIC_ROWS * CELL_SIZE;
+    const mosaicX = (W - gridW2) / 2;
+    const mosaicY = MOSAIC_Y_START + (MOSAIC_AREA_H - gridH2) / 2;
+
+    for (let i = 0; i < mosaicCount; i++) {
+      const col = i % MOSAIC_COLS;
+      const row = Math.floor(i / MOSAIC_COLS);
+      const x = Math.round(mosaicX + col * CELL_SIZE + GAP / 2);
+      const y = Math.round(mosaicY + row * CELL_SIZE + GAP / 2);
+      const r = 6;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + CELL - r, y);
+      ctx.quadraticCurveTo(x + CELL, y, x + CELL, y + r);
+      ctx.lineTo(x + CELL, y + CELL - r);
+      ctx.quadraticCurveTo(x + CELL, y + CELL, x + CELL - r, y + CELL);
+      ctx.lineTo(x + r, y + CELL);
+      ctx.quadraticCurveTo(x, y + CELL, x, y + CELL - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.clip();
+      if (imgs[i]) {
+        ctx.drawImage(imgs[i], x, y, CELL, CELL);
+      } else {
+        ctx.fillStyle = '#1c1814';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    drawBranding(ctx);
+    canvases.push(canvas);
+  }
+
+  // ── Card 2: "Your Sound" ──────────────────────────────────────────────────
+  {
+    const canvas = makeBrandedCanvas();
+    const ctx = canvas.getContext('2d');
+
+    // Vivid gradient background
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, grad0);
+    bg.addColorStop(1, grad1);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Genre breakdown
+    const genreCounts = {};
+    records.forEach(r => getGenres(r).forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; }));
+    const sorted = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]);
+    const primaryGenre = sorted[0]?.[0] || topGenre;
+    const secondGenre = sorted[1]?.[0] || null;
+
+    // Decade
+    const years = records.map(r => r.year_original || r.year_pressed).filter(Boolean).map(Number);
+    const decadeCounts = {};
+    years.forEach(y => { const d = Math.floor(y / 10) * 10; decadeCounts[d] = (decadeCounts[d] || 0) + 1; });
+    const topDecade = Object.entries(decadeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+    // Giant genre name
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    const g1Display = primaryGenre.charAt(0).toUpperCase() + primaryGenre.slice(1);
+    ctx.font = `italic bold 110px "Cormorant Garamond", Georgia, serif`;
+    ctx.fillText(g1Display, W / 2, H / 2 - 60);
+
+    if (secondGenre) {
+      const g2Display = secondGenre.charAt(0).toUpperCase() + secondGenre.slice(1);
+      ctx.font = `italic 70px "Cormorant Garamond", Georgia, serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText(g2Display, W / 2, H / 2 + 40);
+    }
+
+    // Decade pill
+    if (topDecade) {
+      const pillText = `Mostly ${topDecade}s`;
+      ctx.font = 'bold 38px Georgia, serif';
+      const tw = ctx.measureText(pillText).width;
+      const px = W / 2 - tw / 2 - 24;
+      const py = H / 2 + (secondGenre ? 120 : 60);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      canvasRoundRect(ctx, px, py - 30, tw + 48, 52, 26);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(pillText, W / 2, py + 14);
+    }
+
+    // Bottom row of small cover circles
+    const circleRecords = imgs.slice(0, Math.min(6, imgs.length));
+    const CR = 54;
+    const totalCircleW = circleRecords.length * (CR * 2 + 12) - 12;
+    let cx2 = (W - totalCircleW) / 2;
+    const cy2 = H - 260;
+    for (let i = 0; i < circleRecords.length; i++) {
+      const img = circleRecords[i];
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx2 + CR, cy2, CR, 0, Math.PI * 2);
+      ctx.clip();
+      if (img) {
+        ctx.drawImage(img, cx2, cy2 - CR, CR * 2, CR * 2);
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx.fill();
+      }
+      ctx.restore();
+      cx2 += CR * 2 + 12;
+    }
+
+    drawBranding(ctx);
+    canvases.push(canvas);
+  }
+
+  // ── Card 3: "Favorites" (only if hearted tracks exist) ────────────────────
+  const heartedGroups = records
+    .map(r => ({
+      artist: r.artist || r.title || '',
+      tracks: (r.favorite_tracks || [])
+        .map(ft => { const t = typeof ft === 'object' ? ft : { key: ft, title: ft }; return (t.title && t.title !== t.key) ? t.title : null; })
+        .filter(Boolean),
+    }))
+    .filter(g => g.tracks.length > 0);
+
+  if (heartedGroups.length > 0) {
+    const canvas = makeBrandedCanvas();
+    const ctx = canvas.getContext('2d');
+
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#881337');
+    bg.addColorStop(1, '#be123c');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Large semi-transparent heart glyph
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.font = '280px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('♥', W / 2, H / 2 + 100);
+
+    // Favorites title
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold 80px "Cormorant Garamond", Georgia, serif`;
+    ctx.fillText('Favorites', W / 2, 260);
+
+    // Artist + tracks
+    let nextY = 360;
+    const mergedGroups = [];
+    for (const g of heartedGroups) {
+      const last = mergedGroups[mergedGroups.length - 1];
+      if (last && last.artist === g.artist) last.tracks.push(...g.tracks);
+      else mergedGroups.push({ artist: g.artist, tracks: [...g.tracks] });
+    }
+    for (const group of mergedGroups.slice(0, 4)) {
+      if (nextY > H - 250) break;
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = `bold 52px "Cormorant Garamond", Georgia, serif`;
+      const ad = group.artist.length > 28 ? group.artist.slice(0, 26) + '…' : group.artist;
+      ctx.fillText(ad, W / 2, nextY);
+      nextY += 62;
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.font = `italic 42px "Cormorant Garamond", Georgia, serif`;
+      for (const track of group.tracks.slice(0, 3)) {
+        if (nextY > H - 250) break;
+        const td = track.length > 34 ? track.slice(0, 32) + '…' : track;
+        ctx.fillText(td, W / 2, nextY);
+        nextY += 54;
+      }
+      nextY += 16;
+    }
+
+    drawBranding(ctx);
+    canvases.push(canvas);
+  }
+
+  return canvases;
+}
+
 async function generateCrateStory(session, username) {
   const W = 1080, H = 1920;
   const canvas = document.createElement('canvas');
@@ -3386,6 +3979,10 @@ export default function VinylCrate() {
   const [viewMode, setViewMode] = useState("list");
   const [honeycombSort, setHoneycombSort] = useState("year");
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
+  const [honeycombShape, setHoneycombShape] = useState(() => {
+    try { return localStorage.getItem("cratemate_hc_shape") || "honeycomb"; } catch { return "honeycomb"; }
+  });
+  useEffect(() => { try { localStorage.setItem("cratemate_hc_shape", honeycombShape); } catch {} }, [honeycombShape]);
   const [activeDecade, setActiveDecade] = useState(new Set());
   const [activeFormat, setActiveFormat] = useState(null);
   const [activeLabel, setActiveLabel] = useState(null);
@@ -3416,6 +4013,9 @@ export default function VinylCrate() {
   const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
   const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
   const [storyGenerating, setStoryGenerating] = useState(false);
+  const [storyCanvases, setStoryCanvases] = useState(null);
+  const [showStoryPreview, setShowStoryPreview] = useState(false);
+  const [dnaGenerating, setDnaGenerating] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState(new Set());
   const [trailSavePrompt, setTrailSavePrompt] = useState(false);
   const [trailSaving, setTrailSaving] = useState(false);
@@ -3462,6 +4062,77 @@ export default function VinylCrate() {
   const [wantlist, setWantlist] = useState(null);
   const [wantlistImportJob, setWantlistImportJob] = useState(null);
   const [expandedMasters, setExpandedMasters] = useState(new Set());
+
+  // Push notifications
+  const [pushPermission, setPushPermission] = useState(() =>
+    typeof Notification !== "undefined" ? Notification.permission : "default"
+  );
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [priceThresholds, setPriceThresholds] = useState(new Map()); // release_id → row
+
+  async function subscribeToPush() {
+    try {
+      const permission = await Notification.requestPermission();
+      setPushPermission(permission);
+      if (permission !== "granted") return;
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) { setPushSubscribed(true); return; }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+      });
+      const json = sub.toJSON();
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+      });
+      setPushSubscribed(true);
+    } catch (err) {
+      console.error("Push subscribe failed:", err);
+    }
+  }
+
+  async function savePriceThreshold(releaseId, price) {
+    const res = await fetch("/api/push/threshold", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ release_id: releaseId, threshold_price: price }),
+    });
+    if (res.ok) {
+      const row = await res.json();
+      setPriceThresholds(prev => { const m = new Map(prev); m.set(releaseId, row); return m; });
+    }
+  }
+
+  async function removePriceThreshold(releaseId) {
+    await fetch("/api/push/threshold", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ release_id: releaseId }),
+    });
+    setPriceThresholds(prev => { const m = new Map(prev); m.delete(releaseId); return m; });
+  }
+
+  // Load push sub status + thresholds when wantlist tab opens
+  useEffect(() => {
+    if (tab !== "wants") return;
+    if (typeof Notification !== "undefined") setPushPermission(Notification.permission);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription())
+        .then(sub => { if (sub) setPushSubscribed(true); })
+        .catch(() => {});
+    }
+    fetch("/api/push/threshold")
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => {
+        const m = new Map();
+        for (const row of rows) m.set(row.release_id, row);
+        setPriceThresholds(m);
+      })
+      .catch(() => {});
+  }, [tab]);
 
   // Feature 4 — Offline
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -3552,19 +4223,9 @@ export default function VinylCrate() {
     if (storyGenerating) return;
     setStoryGenerating(true);
     try {
-      const canvas = await generateCrateStory(session, discogsUsername);
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      const filename = `crate-story-${new Date(session.startTime).toISOString().slice(0, 10)}.png`;
-      if (navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'image/png' })] })) {
-        await navigator.share({ files: [new File([blob], filename, { type: 'image/png' })] });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
+      const canvases = await generateStoryCards(session, discogsUsername);
+      setStoryCanvases(canvases);
+      setShowStoryPreview(true);
     } catch (err) {
       if (err?.name !== 'AbortError') console.error('Story export failed:', err);
     } finally {
@@ -4882,10 +5543,11 @@ export default function VinylCrate() {
           ) : viewMode === "drift" ? (
             <div className="flex-1 flex flex-col relative overflow-hidden">
               <HoneycombView
-                key={honeycombSort}
+                key={honeycombSort + honeycombShape}
                 records={honeycombRecords}
                 playCounts={playCounts}
                 zoom={honeycombZoom}
+                shape={honeycombShape}
                 onSelect={(rec) => {
                   setSelected(rec);
                   if (!rec.for_sale) setLastPlayed(rec);
@@ -4930,17 +5592,25 @@ export default function VinylCrate() {
                   </button>
                 )}
               </div>
-              {/* Top-right: sort toggle */}
-              <div className="absolute top-4 right-4 z-50 flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
-                {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
-                  <button
-                    key={val}
-                    onClick={() => setHoneycombSort(val)}
-                    className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+              {/* Top-right: sort + shape toggles */}
+              <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2">
+                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                  {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
+                    <button
+                      key={val}
+                      onClick={() => setHoneycombSort(val)}
+                      className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                  <button onClick={() => setHoneycombShape("honeycomb")}
+                    className={`px-3 py-1.5 text-xs transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⬡</button>
+                  <button onClick={() => setHoneycombShape("grid")}
+                    className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "grid" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⊞</button>
+                </div>
               </div>
               {/* Stat filter badge + Clear all */}
               {(statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
@@ -5647,6 +6317,12 @@ export default function VinylCrate() {
           wantlistImportJob={wantlistImportJob}
           expandedMasters={expandedMasters}
           setExpandedMasters={setExpandedMasters}
+          pushPermission={pushPermission}
+          pushSubscribed={pushSubscribed}
+          onSubscribePush={subscribeToPush}
+          priceThresholds={priceThresholds}
+          onSaveThreshold={savePriceThreshold}
+          onRemoveThreshold={removePriceThreshold}
           onStartImport={async () => {
             if (!wantlist) {
               // Load wantlist if not yet loaded
@@ -5920,6 +6596,56 @@ export default function VinylCrate() {
                 {/* ── Collection subtab ── */}
                 {statsSubTab === "collection" && (
                   <>
+                {/* Collection DNA export */}
+                {myRecords.length > 0 && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={async () => {
+                        if (dnaGenerating) return;
+                        setDnaGenerating(true);
+                        try {
+                          const myIds = new Set(myRecords.map(r => r.id));
+                          const spotifyData = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
+                          const topGenresList = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([genre, count]) => ({ genre, count }));
+                          const topDecadesList = Object.entries(decades).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([decade, count]) => ({ decade, count }));
+                          const artistCounts = {};
+                          myRecords.forEach(r => { if (r.artist) artistCounts[r.artist] = (artistCounts[r.artist] || 0) + (playCounts[r.id] || 1); });
+                          const topArtistsList = Object.entries(artistCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([artist, count]) => ({ artist, count }));
+                          const avg = (key) => spotifyData.reduce((s, f) => s + (f[key] || 0), 0) / (spotifyData.length || 1);
+                          const audioProfile = spotifyData.length > 0 ? { energy: avg("energy"), valence: avg("valence"), danceability: avg("danceability") } : null;
+                          const stats = {
+                            topGenres: topGenresList,
+                            topDecades: topDecadesList,
+                            topArtists: topArtistsList,
+                            audioProfile,
+                            totalRecords: myRecords.length,
+                            totalPlays: Object.values(playCounts).reduce((s, v) => s + v, 0),
+                          };
+                          const canvas = await generateCollectionDNA(stats, discogsUsername);
+                          const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+                          const filename = "collection-dna.png";
+                          const file = new File([blob], filename, { type: "image/png" });
+                          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                            await navigator.share({ files: [file] });
+                          } else {
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url; a.download = filename; a.click();
+                            URL.revokeObjectURL(url);
+                          }
+                        } catch (err) {
+                          if (err?.name !== "AbortError") console.error("DNA export failed:", err);
+                        } finally {
+                          setDnaGenerating(false);
+                        }
+                      }}
+                      disabled={dnaGenerating}
+                      className="px-3 py-1.5 rounded-full bg-amber-900/20 border border-amber-800/30 text-amber-400 text-xs hover:bg-amber-900/40 transition-colors disabled:opacity-40"
+                    >
+                      {dnaGenerating ? "Generating…" : "↗ Share collection"}
+                    </button>
+                  </div>
+                )}
                 {/* By Decade */}
                 {sortedDecades.length > 0 && (
                   <div>
@@ -6366,6 +7092,13 @@ export default function VinylCrate() {
           )}
           </div>
         </div>
+      )}
+
+      {showStoryPreview && storyCanvases && (
+        <StoryPreviewModal
+          canvases={storyCanvases}
+          onClose={() => { setShowStoryPreview(false); setStoryCanvases(null); }}
+        />
       )}
 
       {selected && (

@@ -139,6 +139,34 @@ self.addEventListener("sync", (e) => {
   }
 });
 
+// ---------- Push Notifications ----------
+self.addEventListener("push", (e) => {
+  const data = e.data?.json() ?? {};
+  e.waitUntil(
+    self.registration.showNotification(data.title || "CrateMate", {
+      body: data.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      data: { url: data.url || "/app" },
+      tag: data.tag || "price-alert",
+      renotify: true,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || "/app";
+  e.waitUntil(
+    clients.matchAll({ type: "window" }).then((list) => {
+      for (const c of list) {
+        if (c.url === url) return c.focus();
+      }
+      return clients.openWindow(url);
+    })
+  );
+});
+
 async function syncOfflinePlays() {
   const plays = await getAllPlays();
   if (!plays || plays.length === 0) return;
