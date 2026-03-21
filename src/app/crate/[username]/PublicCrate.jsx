@@ -60,7 +60,7 @@ export default function PublicCrate({ records, username }) {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="h-dvh flex flex-col"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
       {/* Header bar */}
