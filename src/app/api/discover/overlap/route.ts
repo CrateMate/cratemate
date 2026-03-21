@@ -78,22 +78,21 @@ export async function GET(request: Request) {
   const username = searchParams.get("username");
   if (!username) return NextResponse.json({ error: "Missing username" }, { status: 400 });
 
-  // Look up their user_id — use limit(1) so duplicate rows (dev vs prod Clerk
-  // instances sharing the same discogs_username) don't cause a 404.
-  const { data: tokenRows } = await supabase
-    .from("discogs_tokens")
+  // Look up their user_id from user_profiles (works for all users, not just Discogs)
+  const { data: profileRows } = await supabase
+    .from("user_profiles")
     .select("user_id")
-    .eq("discogs_username", username)
+    .eq("display_name", username)
     .eq("is_discoverable", true)
     .limit(1);
 
-  const tokenRow = tokenRows?.[0];
-  if (!tokenRow) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  const profileRow = profileRows?.[0];
+  if (!profileRow) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   // Fetch both collections — select("*") to avoid failing if optional columns are missing
   const [{ data: myRaw }, { data: theirRaw }] = await Promise.all([
     supabase.from("records").select("*").eq("user_id", userId).eq("for_sale", false),
-    supabase.from("records").select("*").eq("user_id", tokenRow.user_id).eq("for_sale", false),
+    supabase.from("records").select("*").eq("user_id", profileRow.user_id).eq("for_sale", false),
   ]);
 
   const myRecords: RecordRow[] = myRaw || [];

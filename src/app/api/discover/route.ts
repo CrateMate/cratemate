@@ -17,35 +17,33 @@ export async function GET() {
     (myRecords || []).map((r) => (r.artist || "").toLowerCase().trim()).filter(Boolean)
   );
 
-  // Get current user's own discogs_username(s) so we can exclude all their rows
-  // (a user may have multiple rows from dev + prod Clerk instances)
-  const { data: myTokenRows } = await supabase
-    .from("discogs_tokens")
-    .select("discogs_username")
-    .eq("user_id", userId);
-  const myUsernames = new Set(
-    (myTokenRows || []).map((r) => r.discogs_username).filter(Boolean)
-  );
+  // Get current user's display name to exclude self-matches
+  const { data: myProfile } = await supabase
+    .from("user_profiles")
+    .select("display_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const myDisplayName = myProfile?.display_name;
 
-  // Fetch up to 20 discoverable users (excluding current user by user_id and username)
-  const { data: discoverableTokens } = await supabase
-    .from("discogs_tokens")
-    .select("user_id, discogs_username")
+  // Fetch up to 20 discoverable users (excluding current user)
+  const { data: discoverableProfiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, display_name")
     .eq("is_discoverable", true)
     .neq("user_id", userId)
     .limit(20);
 
-  if (!discoverableTokens || discoverableTokens.length === 0) {
+  if (!discoverableProfiles || discoverableProfiles.length === 0) {
     return NextResponse.json([]);
   }
 
   // For each discoverable user, fetch their records and compute similarity
   const results = await Promise.all(
-    discoverableTokens.map(async (token) => {
+    discoverableProfiles.map(async (profile) => {
       const { data: theirRecords } = await supabase
         .from("records")
         .select("artist")
-        .eq("user_id", token.user_id)
+        .eq("user_id", profile.user_id)
         .eq("for_sale", false);
 
       const theirArtists = (theirRecords || [])
@@ -58,7 +56,7 @@ export async function GET() {
         myArtists.size > 0 ? Math.round((sharedArtists / myArtists.size) * 100) : 0;
 
       return {
-        username: token.discogs_username,
+        username: profile.display_name,
         record_count: recordCount,
         shared_artists: sharedArtists,
         similarity_pct: similarityPct,
@@ -66,9 +64,9 @@ export async function GET() {
     })
   );
 
-  // Return top 10 sorted by shared artists desc — exclude own username duplicates
+  // Return top 10 sorted by shared artists desc — exclude self
   const top10 = results
-    .filter((r) => r.username && !myUsernames.has(r.username))
+    .filter((r) => r.username && r.username !== myDisplayName)
     .sort((a, b) => b.shared_artists - a.shared_artists)
     .slice(0, 10);
 
