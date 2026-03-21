@@ -1950,19 +1950,13 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   const lastTapTime = useRef(0);
   const lastTapRecordId = useRef(null);
   const singleTapTimer = useRef(null);
-
-  // Momentum scrolling
-  const pointerStartY = useRef(0);
-  const pointerLastY = useRef(0);
-  const pointerVelY = useRef(0);
-  const pointerTs = useRef(0);
-  const momentumRaf = useRef(null);
-  const isDragging = useRef(false);
+  const pointerStartY = useRef(0);   // for drag-vs-tap guard
 
   // Idle screensaver auto-pan
   const idleTimer = useRef(null);
   const screensaverRaf = useRef(null);
-  const screensaverDir = useRef(1); // 1 = down, -1 = up
+  const screensaverDir = useRef(1);  // 1 = down, -1 = up
+  const screensaverActive = useRef(false); // prevents scroll events from cancelling screensaver
 
   useEffect(() => {
     const el = containerRef.current;
@@ -1973,26 +1967,27 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
     return () => ro.disconnect();
   }, []);
 
-  function cancelMomentum() {
-    cancelAnimationFrame(momentumRaf.current);
+  function stopScreensaver() {
+    screensaverActive.current = false;
     cancelAnimationFrame(screensaverRaf.current);
     clearTimeout(idleTimer.current);
   }
 
   function startIdleTimer() {
-    clearTimeout(idleTimer.current);
+    stopScreensaver();
     idleTimer.current = setTimeout(startScreensaver, 8000);
   }
 
   function startScreensaver() {
     const el = containerRef.current;
     if (!el) return;
+    screensaverActive.current = true;
     const SPEED = 0.6; // px per frame
     function step() {
-      if (!containerRef.current) return;
+      if (!containerRef.current || !screensaverActive.current) return;
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
       const maxScroll = scrollHeight - clientHeight;
-      if (maxScroll <= 0) return; // not scrollable yet
+      if (maxScroll <= 0) return;
       containerRef.current.scrollTop += SPEED * screensaverDir.current;
       if (containerRef.current.scrollTop >= maxScroll) screensaverDir.current = -1;
       if (containerRef.current.scrollTop <= 0) screensaverDir.current = 1;
@@ -2001,41 +1996,9 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
     screensaverRaf.current = requestAnimationFrame(step);
   }
 
-  function onPointerDown(e) {
-    cancelMomentum();
-    isDragging.current = true;
-    pointerStartY.current = e.clientY;
-    pointerLastY.current = e.clientY;
-    pointerVelY.current = 0;
-    pointerTs.current = Date.now();
-  }
-
-  function onPointerMove(e) {
-    if (!isDragging.current) return;
-    const dy = e.clientY - pointerLastY.current;
-    pointerVelY.current = dy / Math.max(Date.now() - pointerTs.current, 1);
-    pointerLastY.current = e.clientY;
-    pointerTs.current = Date.now();
-  }
-
-  function onPointerUp() {
-    if (!isDragging.current) return;
-    isDragging.current = false;
-    let vel = -pointerVelY.current * 16; // px per frame (16ms)
-    const el = containerRef.current;
-    if (!el || Math.abs(vel) < 0.5) { startIdleTimer(); return; }
-    function momentum() {
-      vel *= 0.94;
-      el.scrollTop += vel;
-      if (Math.abs(vel) > 0.5) momentumRaf.current = requestAnimationFrame(momentum);
-      else startIdleTimer();
-    }
-    momentumRaf.current = requestAnimationFrame(momentum);
-  }
-
   useEffect(() => {
     startIdleTimer();
-    return () => { cancelMomentum(); clearTimeout(idleTimer.current); };
+    return () => stopScreensaver();
   }, [records.length]);
 
   const TOTAL_UNITS = 4;
@@ -2069,18 +2032,22 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   const UNIT = Math.round((containerWidth - GAP * (TOTAL_UNITS - 1)) / TOTAL_UNITS);
 
   return (
-    // Outer: native scroll container — preserves long-screenshot support
+    // Outer: native scroll container — overflow-y:scroll + overscroll-behavior:contain
+    // lets Android recognise it for long/scroll screenshot capture.
+    // Native momentum (iOS -webkit-overflow-scrolling, Android Chrome inertia) handles
+    // the feel; we only add the idle screensaver on top.
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden"
-      style={{ scrollbarWidth: "none" }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onScroll={() => { cancelAnimationFrame(screensaverRaf.current); }}
-      onTouchStart={() => { cancelMomentum(); startIdleTimer(); }}
+      className="flex-1"
+      style={{
+        overflowY: "scroll",
+        overflowX: "hidden",
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch",
+        scrollbarWidth: "none",
+      }}
+      onScroll={() => { if (!screensaverActive.current) startIdleTimer(); }}
+      onPointerDown={(e) => { stopScreensaver(); pointerStartY.current = e.clientY; startIdleTimer(); }}
     >
       {/* Inner: CSS grid — measured for width */}
       <div
@@ -2104,9 +2071,9 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
         return (
           <div
             key={record.id}
-            onClick={() => {
-              // Suppress tap if it was actually a drag
-              if (Math.abs(pointerLastY.current - pointerStartY.current) > 8) return;
+            onClick={(e) => {
+              // Suppress tap if the pointer moved significantly (i.e. a scroll gesture)
+              if (Math.abs(e.clientY - pointerStartY.current) > 10) return;
               const now = Date.now();
               if (now - lastTapTime.current < 300 && lastTapRecordId.current === record.id) {
                 clearTimeout(singleTapTimer.current);
@@ -5828,7 +5795,7 @@ export default function VinylCrate() {
         </div>
       )}
 
-      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${selected || viewMode === "drift" ? "relative z-[60]" : ""}`}>
+      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {[
           ["crate", "⏺ Crate"],
           ["wants", "◇ Wants"],
