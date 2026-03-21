@@ -125,7 +125,7 @@ export default function StoryPreviewModal({ canvases, onClose }) {
           onClick={() => shareOne(index)}
           className="flex-1 py-3 rounded-xl border border-stone-700 text-stone-300 text-sm hover:border-amber-800/50 hover:text-amber-200 transition-colors"
         >
-          Share this one
+          Share
         </button>
         {canvases.length > 1 && (
           <button

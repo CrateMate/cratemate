@@ -3820,33 +3820,30 @@ async function generateStoryCards(session, username) {
 
   function drawBranding(ctx) {
     ctx.save();
-    // Separator
     ctx.strokeStyle = 'rgba(255,255,255,0.07)';
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(80, H - 126); ctx.lineTo(W - 80, H - 126); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(80, H - 136); ctx.lineTo(W - 80, H - 136); ctx.stroke();
 
-    const LOGO = 56;
-    const LX = 80, LY = H - 106;
+    const LOGO = 76;
+    const LX = 80, LY = H - 122;
 
-    // Logo icon
     if (logoImg) {
       ctx.save();
-      canvasRoundRect(ctx, LX, LY, LOGO, LOGO, 13);
+      canvasRoundRect(ctx, LX, LY, LOGO, LOGO, 16);
       ctx.clip();
       ctx.drawImage(logoImg, LX, LY, LOGO, LOGO);
       ctx.restore();
     }
 
-    // CrateMate + @username stacked, aligned to logo
-    const textX = LX + LOGO + 16;
+    const textX = LX + LOGO + 20;
     ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = `italic 600 42px "Cormorant Garamond", Georgia, serif`;
-    ctx.fillText('CrateMate', textX, LY + 32);
+    ctx.fillStyle = 'rgba(255,255,255,0.60)';
+    ctx.font = `italic 600 44px "Cormorant Garamond", Georgia, serif`;
+    ctx.fillText('CrateMate', textX, LY + 40);
     if (username) {
-      ctx.fillStyle = 'rgba(255,255,255,0.30)';
-      ctx.font = `300 26px "DM Sans", sans-serif`;
-      ctx.fillText(`@${username}`, textX, LY + LOGO - 4);
+      ctx.fillStyle = 'rgba(255,255,255,0.32)';
+      ctx.font = `300 28px "DM Sans", sans-serif`;
+      ctx.fillText(`@${username}`, textX, LY + 40 + 36);
     }
     ctx.restore();
   }
@@ -3862,12 +3859,19 @@ async function generateStoryCards(session, username) {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
-  // ── 2. Art wall ──
+  // ── 2. Header zone — clear space above art for title ──
+  const HEADER_H = 230;
   const WALL_H = 1080;
+
+  // Dark overlay on header zone only (gradient BG shows through for color)
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.fillRect(0, 0, W, HEADER_H);
+
+  // ── 3. Art wall — starts below header ──
   const cols = artCount === 1 ? 1 : artCount <= 4 ? 2 : 3;
   const GAP = 3;
   const CELL = Math.floor((W - GAP * (cols - 1)) / cols);
-  let artIdx = 0, wallY = 0;
+  let artIdx = 0, wallY = HEADER_H;
   while (wallY < WALL_H && artIdx < artCount) {
     for (let c = 0; c < cols && artIdx < artCount; c++, artIdx++) {
       const x = c * (CELL + GAP);
@@ -3887,50 +3891,38 @@ async function generateStoryCards(session, username) {
     wallY += CELL + GAP;
   }
 
-  // ── 3. Top strip overlay — title legibility ──
-  const topFade = ctx.createLinearGradient(0, 0, 0, 190);
-  topFade.addColorStop(0, 'rgba(0,0,0,0.78)');
-  topFade.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = topFade;
-  ctx.fillRect(0, 0, W, 190);
-
-  // ── 4. Bottom fade — art into text panel ──
-  const bottomFade = ctx.createLinearGradient(0, WALL_H - 320, 0, WALL_H + 60);
+  // ── 4. Bottom fade + genre-tinted text panel ──
+  // Single gradient from art wall bottom all the way to card bottom
+  const bottomFade = ctx.createLinearGradient(0, WALL_H - 280, 0, H);
   bottomFade.addColorStop(0, 'rgba(0,0,0,0)');
-  bottomFade.addColorStop(1, 'rgba(0,0,0,0.96)');
+  bottomFade.addColorStop(0.18, 'rgba(0,0,0,0.80)');
+  bottomFade.addColorStop(1, 'rgba(0,0,0,0.86)');
   ctx.fillStyle = bottomFade;
-  ctx.fillRect(0, WALL_H - 320, W, 380);
+  ctx.fillRect(0, WALL_H - 280, W, H - (WALL_H - 280));
 
-  // Text panel area — genre color tints through at ~5%
-  ctx.fillStyle = 'rgba(0,0,0,0.92)';
-  ctx.fillRect(0, WALL_H + 55, W, H - WALL_H - 55);
-
-  // ── 5. Session title (over top of art wall) ──
+  // ── 5. Session title in header zone ──
   const TX = 80;
   ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  ctx.font = `300 34px "DM Sans", sans-serif`;
-  ctx.fillText(sessionTitle, TX, 80);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.font = `italic 72px "Cormorant Garamond", Georgia, serif`;
+  ctx.fillText(sessionTitle, TX, 110);
 
-  // Decade badge inline right of title
+  // Decade badge below title
   if (topDecade) {
-    ctx.font = `300 34px "DM Sans", sans-serif`;
-    const titleW = ctx.measureText(sessionTitle).width;
-    const badgeText = `${topDecade}s`;
-    ctx.font = `500 24px "DM Sans", sans-serif`;
-    const bw = ctx.measureText(badgeText).width + 22;
-    const bh = 34;
-    const bx = TX + titleW + 14;
-    const by = 80 - 24;
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    const badgeText = `Mostly ${topDecade}s`;
+    ctx.font = `400 32px "DM Sans", sans-serif`;
+    const bw = ctx.measureText(badgeText).width + 36;
+    const bh = 48;
+    const bx = TX, by = 130;
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
     canvasRoundRect(ctx, bx, by, bw, bh, bh / 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
     ctx.lineWidth = 1;
     canvasRoundRect(ctx, bx, by, bw, bh, bh / 2);
     ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.70)';
-    ctx.fillText(badgeText, bx + 11, 80 - 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.80)';
+    ctx.fillText(badgeText, bx + 18, by + 33);
   }
 
   // ── 6. Text panel ──
@@ -3955,64 +3947,67 @@ async function generateStoryCards(session, username) {
   ctx.textAlign = 'left';
 
   if (mergedHearts.length > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.32)';
-    ctx.font = `400 28px "DM Sans", sans-serif`;
+    // Section label
+    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.font = `300 26px "DM Sans", sans-serif`;
     ctx.fillText('Fave tracks', TX, ty);
-    ty += 50;
+    ty += 48;
 
     for (const group of mergedHearts.slice(0, 3)) {
-      if (ty > H - 280) break;
+      if (ty > H - 300) break;
+      // Artist
       ctx.fillStyle = '#fef3c7';
-      ctx.font = `italic 68px "Cormorant Garamond", Georgia, serif`;
-      ctx.fillText(group.artist.length > 26 ? group.artist.slice(0, 24) + '…' : group.artist, TX, ty);
-      ty += 74;
-      ctx.fillStyle = 'rgba(255,255,255,0.46)';
-      ctx.font = `300 34px "DM Sans", sans-serif`;
+      ctx.font = `italic 62px "Cormorant Garamond", Georgia, serif`;
+      ctx.fillText(group.artist.length > 28 ? group.artist.slice(0, 26) + '…' : group.artist, TX, ty);
+      ty += 68;
+      // Tracks
+      ctx.fillStyle = 'rgba(255,255,255,0.52)';
+      ctx.font = `300 30px "DM Sans", sans-serif`;
       for (const track of group.tracks.slice(0, 3)) {
-        if (ty > H - 280) break;
-        ctx.fillText(track.length > 32 ? track.slice(0, 30) + '…' : track, TX + 18, ty);
-        ty += 44;
+        if (ty > H - 300) break;
+        ctx.fillText(track.length > 34 ? track.slice(0, 32) + '…' : track, TX + 16, ty);
+        ty += 40;
       }
-      ty += 12;
+      ty += 20;
     }
   } else {
-    // Fallback — show artists from the session
-    const uniqueArtists = [...new Set(records.map(r => r.artist).filter(Boolean))].slice(0, 4);
+    // Fallback — artists from the session
+    const uniqueArtists = [...new Set(records.map(r => r.artist).filter(Boolean))].slice(0, 5);
     if (uniqueArtists.length > 0) {
-      ctx.fillStyle = 'rgba(255,255,255,0.32)';
-      ctx.font = `400 28px "DM Sans", sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.38)';
+      ctx.font = `300 26px "DM Sans", sans-serif`;
       ctx.fillText('Artists', TX, ty);
-      ty += 50;
+      ty += 48;
       ctx.fillStyle = '#fef3c7';
-      ctx.font = `italic 68px "Cormorant Garamond", Georgia, serif`;
+      ctx.font = `italic 62px "Cormorant Garamond", Georgia, serif`;
       for (const artist of uniqueArtists) {
-        if (ty > H - 280) break;
-        ctx.fillText(artist.length > 26 ? artist.slice(0, 24) + '…' : artist, TX, ty);
-        ty += 78;
+        if (ty > H - 300) break;
+        ctx.fillText(artist.length > 28 ? artist.slice(0, 26) + '…' : artist, TX, ty);
+        ty += 72;
       }
     }
   }
 
-  ty += 20;
+  ty += 16;
 
   // Duration
   if (session.listeningSecs) {
-    ctx.fillStyle = 'rgba(255,255,255,0.32)';
-    ctx.font = `300 38px "DM Sans", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.36)';
+    ctx.font = `300 34px "DM Sans", sans-serif`;
     ctx.fillText(formatListeningTime(session.listeningSecs), TX, ty);
-    ty += 56;
+    ty += 50;
   }
-  ty += 16;
+  ty += 14;
 
   // Genre pills
   if (sortedGenres.length > 0) {
-    const pillH = 50;
+    const pillH = 48;
     let pillX = TX;
-    ctx.font = `400 28px "DM Sans", sans-serif`;
+    ctx.font = `400 26px "DM Sans", sans-serif`;
     for (const [genre] of sortedGenres.slice(0, 3)) {
       const hex = getGenrePalette(genre).hex;
       const tw = ctx.measureText(cap(genre)).width;
-      const pillW = tw + 36;
+      const pillW = tw + 32;
       ctx.fillStyle = hex + '28';
       canvasRoundRect(ctx, pillX, ty, pillW, pillH, pillH / 2);
       ctx.fill();
@@ -4022,7 +4017,7 @@ async function generateStoryCards(session, username) {
       ctx.stroke();
       ctx.fillStyle = hex;
       ctx.textAlign = 'left';
-      ctx.fillText(cap(genre), pillX + 18, ty + 35);
+      ctx.fillText(cap(genre), pillX + 16, ty + 33);
       pillX += pillW + 10;
     }
   }
@@ -5847,12 +5842,12 @@ export default function VinylCrate() {
     >
       {!selected && viewMode !== "drift" && (
         <div className="px-5 pt-7 pb-2 flex items-start justify-between">
-          <div>
-            {user?.firstName && (
-              <div className="text-xs uppercase tracking-widest text-amber-900 mb-0.5">{user.firstName}&apos;s</div>
-            )}
-            <div className="flex items-center gap-2">
-              <img src="/icon-192.png" alt="CrateMate" width={28} height={28} className="rounded-lg" />
+          <div className="flex items-center gap-3">
+            <img src="/icon-192.png" alt="CrateMate" width={46} height={46} className="rounded-xl shrink-0" />
+            <div>
+              {user?.firstName && (
+                <div className="text-xs uppercase tracking-widest text-amber-900 leading-none mb-1.5">{user.firstName}&apos;s</div>
+              )}
               <h1 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 30, lineHeight: 1 }} className="text-amber-50">
                 CrateMate
               </h1>
