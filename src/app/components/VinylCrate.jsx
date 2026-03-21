@@ -1097,6 +1097,27 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
   );
 }
 
+function MarqueeTitle({ children, style }) {
+  const outerRef = useRef(null);
+  const innerRef = useRef(null);
+  const [scrollAmt, setScrollAmt] = useState(0);
+  useEffect(() => {
+    const outer = outerRef.current;
+    const inner = innerRef.current;
+    if (!outer || !inner) return;
+    const ov = inner.scrollWidth - outer.clientWidth;
+    setScrollAmt(ov > 4 ? ov : 0);
+  }, [children]);
+  return (
+    <div ref={outerRef} style={{ overflow: 'hidden', ...style }}>
+      <span
+        ref={innerRef}
+        style={scrollAmt > 0 ? { '--mo': `-${scrollAmt}px`, animation: 'cm-marquee 5s ease-in-out infinite alternate', display: 'inline-block', whiteSpace: 'nowrap' } : { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+      >{children}</span>
+    </div>
+  );
+}
+
 function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, bpm, onLogPlay, onDoubleTap }) {
   const lastTapTime = useRef(0);
   const singleTapTimer = useRef(null);
@@ -1126,12 +1147,9 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
     >
       <CoverArt record={record} size={52} />
       <div className="flex-1 min-w-0">
-        <div
-          className="truncate text-amber-50 leading-snug"
-          style={{ fontFamily: "'Fraunces',serif", fontSize: 17 }}
-        >
+        <MarqueeTitle style={{ fontFamily: "'Fraunces',serif", fontSize: 15, color: '#fef3c7', lineHeight: 1.3 }}>
           {record.title}
-        </div>
+        </MarqueeTitle>
         <div className="flex items-center gap-1 flex-wrap mt-0.5">
           <ArtistTag artist={record.artist} discogsId={record.discogs_id} />
           {record.for_sale && <span className="text-xs text-rose-400/80">FOR SALE</span>}
