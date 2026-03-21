@@ -3475,9 +3475,13 @@ async function generateTileExport(records, playCounts, mode = "full") {
     }
   }
 
+  // Sort largest tiles first so they fill the top; 1x tiles flow to the bottom,
+  // meaning any incomplete final row only leaves a gap in the bottom-right corner.
+  const sortedTiles = [...tiles].sort((a, b) => b.units - a.units);
+
   const placements = [];
   let cursor = { row: 0, col: 0 };
-  for (const tile of tiles) {
+  for (const tile of sortedTiles) {
     const span = tile.units;
     let placed = false;
     outer: for (let row = 0; row < cursor.row + span + 1; row++) {
@@ -6236,44 +6240,48 @@ export default function VinylCrate() {
                 }}
               />
               )}
-              {/* Top-left: back to list + share */}
+              {/* Top-left: back to list + share (row 1), downloads (row 2, tiles only) */}
               {!controlsHidden && (
-              <div className="absolute top-4 left-4 z-50 flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setViewMode("list");
-                    if (previousTab) { setTab(previousTab); setPreviousTab(null); }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
-                >
-                  {previousTab === "stats" ? "← Stats" : "≡ List"}
-                </button>
-                {discogsConnected && (
+              <div className="absolute top-4 left-4 z-50 flex flex-col items-start gap-2">
+                {/* Row 1 */}
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      if (!discogsUsername) return;
-                      const view = honeycombShape === "grid" ? "grid" : honeycombShape === "tiles" ? "tiles" : "honeycomb";
-                      navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}?view=${view}`);
-                      setShareCopied(true);
-                      setTimeout(() => setShareCopied(false), 2000);
+                      setViewMode("list");
+                      if (previousTab) { setTab(previousTab); setPreviousTab(null); }
                     }}
-                    disabled={!discogsUsername}
-                    className={`px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border text-xs transition-colors ${
-                      discogsUsername
-                        ? "border-white/10 text-stone-400 hover:text-amber-300"
-                        : "border-white/5 text-stone-700 cursor-not-allowed"
-                    }`}
-                    title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
                   >
-                    {shareCopied ? "Copied!" : "↗ Share"}
+                    {previousTab === "stats" ? "← Stats" : "≡ List"}
                   </button>
-                )}
+                  {discogsConnected && (
+                    <button
+                      onClick={() => {
+                        if (!discogsUsername) return;
+                        const view = honeycombShape === "grid" ? "grid" : honeycombShape === "tiles" ? "tiles" : "honeycomb";
+                        navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}?view=${view}`);
+                        setShareCopied(true);
+                        setTimeout(() => setShareCopied(false), 2000);
+                      }}
+                      disabled={!discogsUsername}
+                      className={`px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border text-xs transition-colors ${
+                        discogsUsername
+                          ? "border-white/10 text-stone-400 hover:text-amber-300"
+                          : "border-white/5 text-stone-700 cursor-not-allowed"
+                      }`}
+                      title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
+                    >
+                      {shareCopied ? "Copied!" : "↗ Share"}
+                    </button>
+                  )}
+                </div>
+                {/* Row 2 — download options, tiles only */}
                 {honeycombShape === "tiles" && (
                   <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                     {[["square", "⬇ 1:1"], ["full", "⬇ Full"]].map(([mode, label]) => (
                       <button
                         key={mode}
-                        disabled={tileExporting}
+                        disabled={!!tileExporting}
                         onClick={async () => {
                           if (tileExporting) return;
                           setTileExporting(mode);
@@ -6302,20 +6310,18 @@ export default function VinylCrate() {
                 )}
               </div>
               )}
-              {/* Top-right: sort + shape toggles + hide button */}
+              {/* Top-right: sort cycle + shape toggles + hide button */}
               {!controlsHidden && (
               <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2">
-                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
-                  {[["year", "Year"], ["genre", "Genre"], ["az", "A–Z"]].map(([val, label], i) => (
-                    <button
-                      key={val}
-                      onClick={() => setHoneycombSort(val)}
-                      className={`px-3 py-1.5 text-xs transition-colors ${honeycombSort === val ? "text-amber-300" : "text-stone-400 hover:text-stone-200"} ${i > 0 ? "border-l border-white/10" : ""}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <button
+                  onClick={() => {
+                    const order = ["year", "genre", "az"];
+                    setHoneycombSort(order[(order.indexOf(honeycombSort) + 1) % order.length]);
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-xs text-stone-400 hover:text-amber-300 transition-colors"
+                >
+                  ⇅ {honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : "A–Z"}
+                </button>
                 <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                   <button onClick={() => setHoneycombShape("honeycomb")}
                     className={`px-3 py-1.5 text-xs transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⬡</button>
