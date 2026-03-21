@@ -1169,7 +1169,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures, contentTop }) {
+function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1306,7 +1306,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   const heroIsUpgraded = heroBase && heroHi && heroHi !== heroBase;
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
-    <div className="fixed inset-x-0 bottom-0 bg-black/80 backdrop-blur-sm z-50" style={{ top: contentTop != null ? `${contentTop}px` : "9rem" }}>
+    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50">
       <button className="absolute inset-0" onClick={onClose} aria-label="Close" />
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col">
         <div
@@ -1924,9 +1924,11 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   );
 }
 
-export function TileView({ records, playCounts, onSelect }) {
+export function TileView({ records, playCounts, onSelect, onShowToast }) {
   const containerRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const longPressTimer = useRef(null);
+  const didLongPress = useRef(false);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -1951,7 +1953,7 @@ export function TileView({ records, playCounts, onSelect }) {
       units = 1;
     } else {
       const ratio = plays / maxPlays;
-      if (ratio > 0.5) units = 4;
+      if (ratio > 0.5) units = 3;
       else if (ratio > 0.15) units = 2;
       else units = 1;
     }
@@ -2001,7 +2003,20 @@ export function TileView({ records, playCounts, onSelect }) {
               return (
                 <div
                   key={record.id}
-                  onClick={() => onSelect(record)}
+                  onPointerDown={() => {
+                    didLongPress.current = false;
+                    if (!onShowToast) return;
+                    longPressTimer.current = setTimeout(() => {
+                      didLongPress.current = true;
+                      onShowToast(record);
+                    }, 500);
+                  }}
+                  onPointerUp={() => {
+                    clearTimeout(longPressTimer.current);
+                    if (didLongPress.current) return;
+                    onSelect(record);
+                  }}
+                  onPointerLeave={() => clearTimeout(longPressTimer.current)}
                   style={{
                     width: tileSize,
                     height: tileSize,
@@ -2011,6 +2026,7 @@ export function TileView({ records, playCounts, onSelect }) {
                     cursor: "pointer",
                     background: "#0c0b09",
                     alignSelf: "flex-end",
+                    touchAction: "manipulation",
                   }}
                 >
                   {/* Art */}
@@ -3899,7 +3915,7 @@ async function generateCrateSnapshot(shape, records, username, playCounts) {
       if (!hasAnyPlays) units = 1;
       else {
         const ratio = plays / maxPlays;
-        if (ratio > 0.5) units = 4;
+        if (ratio > 0.5) units = 3;
         else if (ratio > 0.15) units = 2;
         else units = 1;
       }
@@ -5690,7 +5706,7 @@ export default function VinylCrate() {
       </div>
 
       {tab === "crate" && (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
           {!seenHints["crate_play"] && collection.length > 0 && collection.length <= 10 && (
             <HintBanner onDismiss={() => dismissHint("crate_play")}>
               Long-press any record to log a play and start your streak.
@@ -5912,6 +5928,7 @@ export default function VinylCrate() {
                   records={honeycombRecords}
                   playCounts={playCounts}
                   onSelect={(rec) => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
+                  onShowToast={showPlayToast}
                 />
               ) : (
               <HoneycombView
@@ -6138,6 +6155,31 @@ export default function VinylCrate() {
                 )
               )}
             </div>
+          )}
+          {selected && (
+            <DetailSheet
+              record={selected}
+              onClose={() => setSelected(null)}
+              onGenreClick={toggleGenre}
+              activeGenres={activeGenres}
+              onToggleForSale={toggleForSale}
+              onDelete={handleDelete}
+              onLogPlay={logPlay}
+              onUndoLogPlay={undoLogPlay}
+              onRecordUpdate={(patch) => {
+                const updated = { ...selected, ...patch };
+                setSelected(updated);
+                setCollection((prev) => Array.isArray(prev) ? prev.map((r) => r.id === updated.id ? updated : r) : prev);
+              }}
+              playCount={playCounts[selected.id] || 0}
+              lastPlayedDate={lastPlayedDates[selected.id] || null}
+              onSeedNext={(rec) => {
+                setLastPlayed(rec);
+                setTab("reco");
+                setSelected(null);
+              }}
+              spotifyFeatures={spotifyFeatures}
+            />
           )}
         </div>
       )}
@@ -7495,32 +7537,6 @@ export default function VinylCrate() {
         />
       )}
 
-      {selected && (
-        <DetailSheet
-          record={selected}
-          onClose={() => setSelected(null)}
-          onGenreClick={toggleGenre}
-          activeGenres={activeGenres}
-          onToggleForSale={toggleForSale}
-          onDelete={handleDelete}
-          onLogPlay={logPlay}
-          onUndoLogPlay={undoLogPlay}
-          onRecordUpdate={(patch) => {
-            const updated = { ...selected, ...patch };
-            setSelected(updated);
-            setCollection((prev) => Array.isArray(prev) ? prev.map((r) => r.id === updated.id ? updated : r) : prev);
-          }}
-          playCount={playCounts[selected.id] || 0}
-          lastPlayedDate={lastPlayedDates[selected.id] || null}
-          onSeedNext={(rec) => {
-            setLastPlayed(rec);
-            setTab("reco");
-            setSelected(null);
-          }}
-          spotifyFeatures={spotifyFeatures}
-          contentTop={contentTop}
-        />
-      )}
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
 
       {/* Long-press action pill */}
