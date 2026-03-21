@@ -3930,6 +3930,12 @@ async function generateStoryCards(session, username) {
   ctx.fillStyle = panelGrad;
   ctx.fillRect(0, fadeStart, W, 180);
 
+  // Enable text shadow for all remaining draws — protects against bright genre gradients
+  ctx.shadowColor = 'rgba(0,0,0,0.65)';
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 2;
+
   // ── 5. Session title + decade badge + genre pills in header zone ──
   const TX = 80;
   ctx.textAlign = 'left';
