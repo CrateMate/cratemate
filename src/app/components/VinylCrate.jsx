@@ -1197,7 +1197,8 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const [tracklistOpen, setTracklistOpen] = useState(false);
   const [soundProfileOpen, setSoundProfileOpen] = useState(false);
   const artTapRef = useRef(0);
-  const [heroFailed, setHeroFailed] = useState(false);
+  // Hero image fallback chain: null = use heroHi, string = override src, false = all failed
+  const [heroSrcOverride, setHeroSrcOverride] = useState(null);
   const [entered, setEntered] = useState(false);
   const [closing, setClosing] = useState(false);
   useEffect(() => { requestAnimationFrame(() => setEntered(true)); }, []);
@@ -1372,9 +1373,22 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               }}
               title="Double-tap to log a play"
             >
-              {(heroHi || record.thumb) && !heroFailed ? (
-                <img src={heroHi || record.thumb} alt="" className="w-full h-full object-cover pointer-events-none"
-                  onError={() => setHeroFailed(true)} />
+              {heroSrcOverride !== false && (heroHi || record.thumb) ? (
+                <img
+                  src={heroSrcOverride || heroHi || record.thumb}
+                  alt=""
+                  className="w-full h-full object-cover pointer-events-none"
+                  onError={() => {
+                    const current = heroSrcOverride || heroHi || record.thumb;
+                    const thumb = record.thumb;
+                    // If we failed on the high-res URL and thumb is different, try thumb next
+                    if (current !== thumb && thumb) {
+                      setHeroSrcOverride(thumb);
+                    } else {
+                      setHeroSrcOverride(false); // all options exhausted → VinylDisc
+                    }
+                  }}
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center pointer-events-none">
                   <VinylDisc record={record} size={206} />
