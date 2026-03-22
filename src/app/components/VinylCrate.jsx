@@ -6644,7 +6644,7 @@ export default function VinylCrate() {
                     onClick={() => { setHeartsInfiniteScroll(s => !s); setHeartsPage(1); setHeartsVisible(HEARTS_PAGE_SIZE); }}
                     className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${heartsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
                   >
-                    {heartsInfiniteScroll ? "∞ scroll" : "pages"}
+                    {heartsInfiniteScroll ? "∞" : "p."}
                   </button>
                 </div>
                 <div className="space-y-0.5">
@@ -7028,7 +7028,7 @@ export default function VinylCrate() {
                         onClick={() => { setHistoryInfiniteScroll(s => !s); setHistoryPage(1); setHistoryVisible(HISTORY_PAGE_SIZE); }}
                         className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${historyInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
                       >
-                        {historyInfiniteScroll ? "∞ scroll" : "pages"}
+                        {historyInfiniteScroll ? "∞" : "p."}
                       </button>
                     </div>
                   <div className="space-y-1">
@@ -7038,8 +7038,32 @@ export default function VinylCrate() {
                         ? allSessions.slice(0, historyVisible)
                         : allSessions.slice((historyPage - 1) * HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE);
                       const historyHasMore = historyInfiniteScroll && historyVisible < allSessions.length;
+                      // Group visible sessions by calendar day
+                      const sessionsByDay = [];
+                      visibleSessions.forEach(session => {
+                        const dayKey = new Date(session.startTime).toDateString();
+                        if (!sessionsByDay.length || sessionsByDay[sessionsByDay.length - 1].dayKey !== dayKey) {
+                          sessionsByDay.push({ dayKey, label: sessionDateLabel(session.startTime), sessions: [] });
+                        }
+                        sessionsByDay[sessionsByDay.length - 1].sessions.push(session);
+                      });
+                      const sessionTimeOfDay = (t) => {
+                        const h = new Date(t).getHours();
+                        if (h >= 5 && h < 12) return "Morning";
+                        if (h >= 12 && h < 17) return "Afternoon";
+                        if (h >= 17 && h < 21) return "Evening";
+                        return "Night";
+                      };
                       return (<>
-                        {visibleSessions.map((session) => {
+                        {sessionsByDay.map(({ dayKey, label, sessions: daySessions }) => (
+                          <div key={dayKey}>
+                            {/* Day header */}
+                            <div className="flex items-center gap-3 px-2 pt-4 pb-1 first:pt-1">
+                              <div className="flex-1 h-px bg-stone-800/50" />
+                              <span className="text-stone-600 text-xs shrink-0">{label}</span>
+                              <div className="flex-1 h-px bg-stone-800/50" />
+                            </div>
+                            {daySessions.map((session) => {
                       const isExpanded = expandedSessions.has(session.id);
                       const thumbs = session.records.slice(0, 3);
                       const playCounts2 = {};
@@ -7071,7 +7095,7 @@ export default function VinylCrate() {
                             {/* Labels */}
                             <div className="flex-1 min-w-0">
                               <div className="text-amber-50 text-sm truncate" style={{ fontFamily: "'Fraunces',serif" }}>
-                                {sessionDateLabel(session.startTime)}
+                                {sessionTimeOfDay(session.startTime)}
                               </div>
                               <div className="text-stone-500 text-xs">{sessionDurationLabel(session.playCount, session.listeningSecs)}</div>
                             </div>
@@ -7135,7 +7159,9 @@ export default function VinylCrate() {
                           )}
                         </div>
                       );
-                        })}
+                            })}
+                          </div>
+                        ))}
                         {historyInfiniteScroll
                           ? (historyHasMore && <div ref={historySentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>)
                           : allSessions.length > HISTORY_PAGE_SIZE && (
