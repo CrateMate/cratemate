@@ -965,9 +965,9 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
     : allGroups;
   const wantsTotalPages = Math.ceil(filteredGroups.length / WANTS_PAGE_SIZE);
   const visibleGroups = wantsInfiniteScroll
-    ? filteredGroups
+    ? filteredGroups.slice(0, wantsVisible)
     : filteredGroups.slice((wantsPage - 1) * WANTS_PAGE_SIZE, wantsPage * WANTS_PAGE_SIZE);
-  const wantsHasMore = false;
+  const wantsHasMore = wantsInfiniteScroll && wantsVisible < filteredGroups.length;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -1009,7 +1009,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
             onClick={() => { setWantsInfiniteScroll(s => !s); setWantsPage(1); setWantsVisible(WANTS_PAGE_SIZE); }}
             className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${wantsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
           >
-            {wantsInfiniteScroll ? "∞ scroll" : "pages"}
+            {wantsInfiniteScroll ? "∞" : "p."}
           </button>
         )}
         {isImporting && progress !== null && (
@@ -6508,7 +6508,7 @@ export default function VinylCrate() {
               )}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto px-3 pb-8 space-y-0.5">
+            <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
               {pagedRecords.map((r) => (
                 <RecordRow
                   key={r.id}
@@ -6599,7 +6599,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "hearts" && (
-        <div className="flex-1 overflow-y-auto pb-8">
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
           {!seenHints["hearts"] && (
             <HintBanner onDismiss={() => dismissHint("hearts")}>
               Open a record, expand its tracklist, and tap ♥ next to any track to save it here.
@@ -6723,7 +6723,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "reco" && (
-        <div className="flex-1 overflow-y-auto pb-8">
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
           {!seenHints["reco_spotify"] && spotifyLinked === false && (
             <HintBanner onDismiss={() => dismissHint("reco_spotify")}>
               Connect Spotify to get recommendations based on what you&apos;ve actually been listening to.
@@ -6993,7 +6993,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "history" && (
-        <div className="flex-1 overflow-y-auto pb-8">
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
               Double-tap a record in your crate to log a play — your sessions and streak live here.
@@ -7052,10 +7052,10 @@ export default function VinylCrate() {
                         return "Night";
                       };
                       return (<>
-                        {sessionsByDay.map(({ dayKey, label, sessions: daySessions }) => (
+                        {sessionsByDay.map(({ dayKey, label, sessions: daySessions }, dayIdx) => (
                           <div key={dayKey}>
                             {/* Day header */}
-                            <div className="flex items-center gap-3 px-2 pt-4 pb-1 first:pt-1">
+                            <div className={`flex items-center gap-3 px-2 pb-1 ${dayIdx === 0 ? "pt-1" : "pt-4"}`}>
                               <div className="flex-1 h-px bg-stone-800/50" />
                               <span className="text-stone-600 text-xs shrink-0">{label}</span>
                               <div className="flex-1 h-px bg-stone-800/50" />
@@ -7222,7 +7222,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "stats" && (
-        <div className="flex-1 px-4 overflow-y-auto pb-8">
+        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
           {(() => {
             const { decades, genres, formats, styles } = buildCollectionStats(myRecords);
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
@@ -7756,7 +7756,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "discover" && (
-        <div className="flex-1 overflow-y-auto pb-8">
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
           {!seenHints["discover"] && (
             <HintBanner onDismiss={() => dismissHint("discover")}>
               Toggle discoverability above to find other collectors who share your taste.
@@ -7986,8 +7986,8 @@ export default function VinylCrate() {
       {showSettings && (
         <div className="fixed inset-0 z-[70] flex flex-col justify-end" onClick={() => setShowSettings(false)}>
           <div
-            className="w-full max-w-md mx-auto rounded-t-3xl border border-stone-800/60 pb-10 pt-5 px-5"
-            style={{ background: "var(--bg-surface, #0c0b09)" }}
+            className="w-full max-w-md mx-auto rounded-t-3xl border border-stone-800/60 pb-10 pt-5 px-5 overflow-y-auto"
+            style={{ background: "var(--bg-surface, #0c0b09)", maxHeight: "80vh" }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
@@ -8014,7 +8014,7 @@ export default function VinylCrate() {
 
       {/* Undo toast — appears for 4s after a double-tap log */}
       {undoPending && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] shadow-2xl" style={{ minWidth: 260 }}>
+        <div className="fixed left-1/2 -translate-x-1/2 z-[200] shadow-2xl" style={{ minWidth: 260, bottom: nowPlaying ? 92 : 80 }}>
           <div className="bg-stone-950 border border-stone-700/60 rounded-2xl px-4 py-3 backdrop-blur-sm flex items-center gap-3">
             <span className="text-emerald-400 text-sm">✓</span>
             <span className="text-stone-300 text-sm truncate flex-1">Logged — {undoPending.record.title}</span>
