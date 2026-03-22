@@ -6459,6 +6459,11 @@ export default function VinylCrate() {
                     className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "grid" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⊞</button>
                   <button onClick={() => setHoneycombShape("tiles")}
                     className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "tiles" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>▦</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleScreensaver(); }}
+                    title={screensaverEnabled ? "Disable auto-pan" : "Enable auto-pan"}
+                    className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${screensaverEnabled ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}
+                  >⟳</button>
                 </div>
                 <button
                   onClick={() => setControlsHidden(true)}
@@ -6559,14 +6564,6 @@ export default function VinylCrate() {
                   className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
                 >
                   +
-                </button>
-                <div className="w-px h-3 bg-white/10" />
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggleScreensaver(); }}
-                  title={screensaverEnabled ? "Disable auto-pan" : "Enable auto-pan"}
-                  className={`px-3 py-1.5 text-xs transition-colors ${screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-300"}`}
-                >
-                  ⟳
                 </button>
               </div>
               )}
