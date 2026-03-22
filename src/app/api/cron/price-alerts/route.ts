@@ -90,9 +90,11 @@ export async function GET(request: Request) {
   let checked = 0;
   let notified = 0;
   const COOLDOWN_HOURS = 24;
+  const details: Record<string, unknown>[] = [];
 
   for (const threshold of thresholds) {
     checked++;
+    const entry: Record<string, unknown> = { release_id: threshold.release_id, threshold_deal_pct: threshold.threshold_deal_pct };
     try {
       // Get user's Discogs tokens
       const { data: tokenData } = await supabase
@@ -101,34 +103,46 @@ export async function GET(request: Request) {
         .eq("user_id", threshold.user_id)
         .single();
 
-      if (!tokenData) continue;
+      if (!tokenData) { entry.skip = "no Discogs token"; details.push(entry); continue; }
 
       // Get or refresh price
       let priceData: { lowest_listing: number | null; min_price: number | null; currency: string | null };
       const cached = await getPriceCache(threshold.release_id);
       if (cached && isPriceCacheFresh(cached) && cached.lowest_listing !== undefined) {
-        priceData = {
-          lowest_listing: cached.lowest_listing ?? null,
-          min_price: cached.min_price ?? null,
-          currency: cached.currency ?? null,
-        };
+        priceData = { lowest_listing: cached.lowest_listing ?? null, min_price: cached.min_price ?? null, currency: cached.currency ?? null };
+        entry.price_source = "cache";
       } else {
-        priceData = await fetchLivePrice(
-          threshold.release_id,
-          tokenData.access_token,
-          tokenData.access_token_secret
-        );
+        priceData = await fetchLivePrice(threshold.release_id, tokenData.access_token, tokenData.access_token_secret);
+        entry.price_source = "live";
       }
 
       const { lowest_listing, min_price, currency } = priceData;
-      if (lowest_listing == null || min_price == null || min_price === 0) continue;
+      entry.min_price = min_price;
+      entry.lowest_listing = lowest_listing;
+
+      if (lowest_listing == null || min_price == null || min_price === 0) {
+        entry.skip = "no price data";
+        details.push(entry);
+        continue;
+      }
+
       const dealPct = Math.round((min_price - lowest_listing) / min_price * 100);
-      if (dealPct < threshold.threshold_deal_pct) continue;
+      entry.deal_pct = dealPct;
+
+      if (dealPct < threshold.threshold_deal_pct) {
+        entry.skip = `deal ${dealPct}% < threshold ${threshold.threshold_deal_pct}%`;
+        details.push(entry);
+        continue;
+      }
 
       // Check cooldown
       if (threshold.last_notified_at) {
         const hoursSince = (Date.now() - new Date(threshold.last_notified_at).getTime()) / 3_600_000;
-        if (hoursSince < COOLDOWN_HOURS) continue;
+        if (hoursSince < COOLDOWN_HOURS) {
+          entry.skip = `cooldown (notified ${Math.round(hoursSince)}h ago)`;
+          details.push(entry);
+          continue;
+        }
       }
 
       // Get user's push subscriptions
@@ -137,8 +151,13 @@ export async function GET(request: Request) {
         .select("*")
         .eq("user_id", threshold.user_id);
 
-      if (!subs || subs.length === 0) continue;
+      if (!subs || subs.length === 0) {
+        entry.skip = "no push subscriptions";
+        details.push(entry);
+        continue;
+      }
 
+      entry.subscriptions = subs.length;
       const currencySymbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : `${currency} `;
       const payload = JSON.stringify({
         title: "CrateMate Price Alert",
@@ -150,34 +169,28 @@ export async function GET(request: Request) {
       let sentOne = false;
       for (const sub of subs) {
         try {
-          await webpush.sendNotification(
-            {
-              endpoint: sub.endpoint,
-              keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
-            },
-            payload
-          );
+          await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth } }, payload);
           sentOne = true;
         } catch (err: unknown) {
           const statusCode = (err as { statusCode?: number })?.statusCode;
           if (statusCode === 410) {
-            // Subscription expired — clean up
             await supabase.from("push_subscriptions").delete().eq("id", sub.id);
           }
+          entry.send_error = String(err);
         }
       }
 
       if (sentOne) {
         notified++;
-        await supabase
-          .from("wantlist_price_thresholds")
-          .update({ last_notified_at: new Date().toISOString() })
-          .eq("id", threshold.id);
+        entry.result = "notified";
+        await supabase.from("wantlist_price_thresholds").update({ last_notified_at: new Date().toISOString() }).eq("id", threshold.id);
       }
     } catch (err) {
+      entry.error = String(err);
       console.error(`Price alert failed for threshold ${threshold.id}:`, err);
     }
+    details.push(entry);
   }
 
-  return NextResponse.json({ checked, notified });
+  return NextResponse.json({ checked, notified, details });
 }
