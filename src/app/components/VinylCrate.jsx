@@ -6892,16 +6892,18 @@ export default function VinylCrate() {
                     const heartCount = (r.favorite_tracks || []).length;
                     return (
                       <div key={r.id} className="rounded-xl overflow-hidden">
-                        <button
+                        <div
                           onClick={() => setExpandedHearts(prev => {
                             const next = new Set(prev);
                             next.has(r.id) ? next.delete(r.id) : next.add(r.id);
                             return next;
                           })}
-                          className="flex items-center gap-3 w-full px-2.5 py-2 text-left hover:bg-white/[0.04] transition-colors rounded-xl"
+                          className="flex items-center gap-3 w-full px-2.5 py-2 text-left hover:bg-white/[0.04] transition-colors rounded-xl cursor-pointer"
                           style={{ minHeight: 44 }}
                         >
-                          <CoverArt record={r} size={36} />
+                          <div onClick={(e) => { e.stopPropagation(); setSelected(r); }} className="shrink-0">
+                            <CoverArt record={r} size={36} />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <span className="text-amber-50 text-sm truncate block" style={{ fontFamily: "'Fraunces',serif" }}>
                               {r.artist} — {r.title}
@@ -6909,7 +6911,7 @@ export default function VinylCrate() {
                           </div>
                           <span className="text-rose-400 text-xs shrink-0 mr-1">♥ {heartCount}</span>
                           <span className={`text-stone-600 text-xs transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>›</span>
-                        </button>
+                        </div>
                         {isExpanded && (
                           <div className="space-y-0.5 pl-[52px] pr-2 pb-2">
                             {[...(r.favorite_tracks || [])].sort((a, b) => {
