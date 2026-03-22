@@ -1178,11 +1178,12 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onEnterTrail, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
+function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onEnterTrail, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
   const [favTracks, setFavTracks] = useState(record.favorite_tracks || []);
+  const [tracklistOpen, setTracklistOpen] = useState(true);
 
   function toggleFav(key, title) {
     const getFavKey = (f) => (typeof f === "object" ? f.key : f);
@@ -1315,153 +1316,135 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
   const heroIsUpgraded = heroBase && heroHi && heroHi !== heroBase;
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
-    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50">
+    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50">
       <button className="absolute inset-0" onClick={onClose} aria-label="Close" />
-      <div className="relative w-full max-w-md mx-auto h-full flex flex-col">
+      <div className="relative w-full max-w-md mx-auto h-full flex flex-col justify-end">
         <div
-          className="relative h-[42vh] min-h-[280px] w-full overflow-hidden"
-          style={{
-            backgroundImage: heroImage || "linear-gradient(160deg,#1c1610 0%,#0c0b09 100%)",
-            backgroundPosition: heroIsUpgraded ? "center, center" : "center",
-            backgroundSize: heroIsUpgraded ? "cover, cover" : "cover",
-            backgroundRepeat: "no-repeat",
-          }}
-        >
-          {!heroUrl && !record.thumb && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <VinylDisc record={record} size={140} />
-            </div>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/30 to-black/70" />
-          <button
-            onClick={onClose}
-            className="absolute top-5 right-5 bg-black/40 text-stone-200 w-9 h-9 rounded-full flex items-center justify-center hover:bg-black/60"
-            aria-label="Close"
-          >
-            ×
-          </button>
-          <div className="absolute bottom-4 left-5 right-5">
-            <div
-              style={{ fontFamily: "'Fraunces',serif", fontSize: 26 }}
-              className="text-amber-50 font-semibold leading-tight"
-            >
-              {record.title}
-            </div>
-            <div className="text-stone-200 text-sm mt-1">
-              {record.discogs_id ? (
-                <a
-                  href={`/artist/${record.discogs_id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="hover:text-amber-300 transition-colors underline-offset-2 hover:underline cursor-pointer"
-                >
-                  {record.artist}
-                </a>
-              ) : record.artist}
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="flex-1 bg-stone-950 border border-stone-800/80 rounded-t-3xl -mt-6 px-5 pt-5 pb-6 overflow-y-auto"
+          className="bg-stone-950 border border-stone-800/80 border-b-0 rounded-t-3xl px-5 pt-5 overflow-y-auto"
+          style={{ maxHeight: "92vh", paddingBottom: hasNowPlaying ? 84 : 28 }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Drag handle + close */}
           <div className="w-8 h-1 bg-white/15 rounded-full mx-auto mb-4" />
+          <button
+            onClick={onClose}
+            className="absolute top-5 right-5 bg-stone-900/80 text-stone-400 w-8 h-8 rounded-full flex items-center justify-center hover:text-stone-200 transition-colors text-lg leading-none"
+            aria-label="Close"
+          >×</button>
+
+          {/* Compact header: album thumbnail + metadata column */}
+          <div className="flex gap-4 mb-4">
+            <div className="w-[88px] h-[88px] rounded-xl overflow-hidden shrink-0 bg-stone-800">
+              {(heroHi || record.thumb) ? (
+                <img
+                  src={heroHi || record.thumb}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <VinylDisc record={record} size={72} />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col justify-center gap-1.5 flex-1 min-w-0">
+              <div className="flex items-baseline gap-2">
+                <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Year</span>
+                <span className="text-stone-200 text-sm truncate">
+                  {originalYear || "—"}
+                  {isRepress && <span className="text-stone-600 text-[10px] ml-1.5">· {pressedYear} press</span>}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Cond</span>
+                <span className="text-stone-200 text-sm truncate">{condenseCondition(record.condition) || "—"}</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Label</span>
+                <span className="text-stone-200 text-sm truncate">{(record.label || "—").split(",")[0].trim()}</span>
+              </div>
+              {record.format && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Fmt</span>
+                  <span className="text-stone-500 text-xs truncate">{record.format}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Title + Artist */}
+          <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }} className="text-amber-50 font-semibold leading-tight mb-1">
+            {record.title}
+          </div>
+          <div className="text-stone-400 text-sm mb-3">
+            {record.discogs_id ? (
+              <a
+                href={`/artist/${record.discogs_id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="hover:text-amber-300 transition-colors underline-offset-2 hover:underline cursor-pointer"
+              >{record.artist}</a>
+            ) : record.artist}
+          </div>
+
+          {/* Genre pills */}
           <div className="flex flex-wrap gap-1.5 mb-4">
             {getGenres(record).map((g) => (
               <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
             ))}
             {record.is_compilation && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">
-                Compilation
-              </span>
+              <span className="text-xs px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">Compilation</span>
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-            <div className="bg-white/[0.04] rounded-xl p-2.5">
-              <div className="text-stone-600 text-xs mb-0.5">Year</div>
-              <div className="text-stone-200 text-sm font-medium truncate">{originalYear || "—"}</div>
-              {pressedYear && originalYear && pressedYear !== originalYear && (
-                <div className="text-stone-600 text-[11px] truncate mt-0.5">Press {pressedYear}</div>
-              )}
-            </div>
-            <div className="bg-white/[0.04] rounded-xl p-2.5">
-              <div className="text-stone-600 text-xs mb-0.5">Condition</div>
-              <div className="text-stone-200 text-sm font-medium truncate">{condenseCondition(record.condition) || "—"}</div>
-            </div>
-            <div className="bg-white/[0.04] rounded-xl p-2.5">
-              <div className="text-stone-600 text-xs mb-0.5">Label</div>
-              <div className="text-stone-200 text-sm font-medium truncate">
-                {(record.label || "—").split(",")[0].trim().slice(0, 16)}
-              </div>
-            </div>
-          </div>
-
-          {isRepress && (
-            <div className="text-stone-600 text-xs text-center mb-3">
-              Originally {record.year_original} · This press {record.year_pressed}
-            </div>
-          )}
-          <div className="text-stone-600 text-xs text-center mb-4">{record.format}</div>
-
-          <div className="grid grid-cols-2 gap-2 mb-5">
+          {/* 3 action buttons */}
+          <div className={`grid ${record.for_sale ? "grid-cols-2" : "grid-cols-3"} gap-2 mb-4`}>
             <button
               onClick={() => onToggleForSale?.(record)}
-              className={`py-3 rounded-xl border text-sm font-medium transition-colors ${
+              className={`py-2.5 rounded-xl border text-xs font-medium transition-colors ${
                 record.for_sale
-                  ? "bg-rose-900/25 border-rose-800/40 text-rose-200 hover:bg-rose-900/35"
-                  : "bg-stone-900/40 border-stone-800/60 text-stone-300 hover:border-amber-900/50 hover:text-amber-200"
+                  ? "bg-rose-900/25 border-rose-800/40 text-rose-300 hover:bg-rose-900/35"
+                  : "bg-stone-900/40 border-stone-800/60 text-stone-400 hover:border-amber-900/50 hover:text-amber-200"
               }`}
-            >
-              {record.for_sale ? "Remove from For Sale" : "Mark For Sale"}
-            </button>
+            >{record.for_sale ? "✓ For Sale" : "Mark Sale"}</button>
             <button
-              onClick={() => {
-                onSeedNext(record);
-                onClose();
-              }}
-              className="py-3 rounded-xl bg-amber-900/30 border border-amber-800/40 text-amber-300 text-sm font-medium hover:bg-amber-900/50 transition-colors"
-            >
-              ▶︎ Seed &quot;Play Next&quot;
-            </button>
+              onClick={() => { onSeedNext(record); onClose(); }}
+              className="py-2.5 rounded-xl bg-amber-900/25 border border-amber-800/35 text-amber-400 text-xs font-medium hover:bg-amber-900/40 transition-colors"
+            >▶︎ Picks</button>
+            {!record.for_sale && (
+              <button
+                onClick={() => onEnterTrail?.(record)}
+                className="py-2.5 rounded-xl bg-stone-900/40 border border-stone-800/60 text-stone-400 text-xs font-medium hover:border-amber-900/50 hover:text-amber-200 transition-colors"
+              >⬡ Session</button>
+            )}
           </div>
 
-          <div className="mb-2">
-            <StreamingButtons artist={record.artist} title={record.title} />
-          </div>
-
-          <div className="flex gap-2 mb-5">
+          {/* Log Play */}
+          <div className="flex gap-2 mb-4">
             <button
               onClick={() => onLogPlay?.(record.id)}
-              className="flex-1 py-3 rounded-xl bg-stone-900/40 border border-stone-800/60 text-stone-300 text-sm font-medium hover:border-amber-900/50 hover:text-amber-200 transition-colors flex items-center justify-between px-4"
+              className="flex-1 py-2.5 rounded-xl bg-stone-900/40 border border-stone-800/60 text-stone-300 text-sm font-medium hover:border-amber-900/50 hover:text-amber-200 transition-colors flex items-center justify-between px-4"
             >
               <span>Log Play</span>
-              {playCount > 0 && (
-                <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
-              )}
+              {playCount > 0 && <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>}
             </button>
             {playCount > 0 && (
               <button
                 onClick={() => onUndoLogPlay?.(record.id)}
-                className="px-3 py-3 rounded-xl border border-stone-800/60 text-stone-600 text-sm hover:border-stone-700 hover:text-stone-400 transition-colors"
+                className="px-3 py-2.5 rounded-xl border border-stone-800/60 text-stone-600 text-sm hover:border-stone-700 hover:text-stone-400 transition-colors"
                 title="Undo last play"
-              >
-                ↩
-              </button>
+              >↩</button>
             )}
           </div>
 
-          {!record.for_sale && (
-            <button
-              onClick={() => onEnterTrail?.(record)}
-              className="w-full py-3 rounded-xl border border-amber-800/40 bg-amber-900/20 text-amber-300 text-sm font-medium hover:bg-amber-900/35 transition-colors mt-2 mb-1"
-            >
-              ⬡ Start Listening Session →
-            </button>
-          )}
+          {/* Streaming */}
+          <div className="mb-3">
+            <StreamingButtons artist={record.artist} title={record.title} />
+          </div>
 
+          {/* Last played */}
           {lastPlayedDate && (
-            <div className="text-stone-600 text-xs text-center mb-4">
+            <div className="text-stone-600 text-xs text-center mb-3">
               Last played: {(() => {
                 const diff = Date.now() - new Date(lastPlayedDate).getTime();
                 const mins = Math.floor(diff / 60000);
@@ -1476,40 +1459,47 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
             </div>
           )}
 
-          <div className="mb-2 text-stone-400 text-xs uppercase tracking-widest">Tracklist</div>
-          {trackLoading && <div className="text-stone-600 text-sm py-2">Loading tracklist...</div>}
-          {trackError && <div className="text-red-400/70 text-sm py-2">{trackError}</div>}
-          {!trackLoading && !trackError && tracks.length === 0 && (
-            <div className="text-stone-600 text-sm py-2">No tracklist found.</div>
-          )}
-          <div className="space-y-2">
-            {tracks.map((t, i) => {
-              const key = t.position || String(i);
-              const faved = favTracks.some((f) => (typeof f === "object" ? f.key : f) === key);
-              const isHeading = t.type === "heading";
-              return (
-                <div key={`${t.position || "h"}-${i}`} className="flex items-start gap-3">
-                  <div className="text-stone-600 text-xs w-10 shrink-0 pt-0.5">{t.position || "—"}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm ${isHeading ? "text-stone-300 uppercase tracking-widest text-xs" : "text-amber-50"}`}>
-                      {t.title}
+          {/* Collapsible tracklist */}
+          <button
+            onClick={() => setTracklistOpen(o => !o)}
+            className="flex items-center justify-between w-full py-1 mb-2"
+          >
+            <span className="text-stone-400 text-xs uppercase tracking-widest">Tracklist</span>
+            <span className="text-stone-600 text-xs">{tracklistOpen ? "▲" : "▼"}</span>
+          </button>
+          {tracklistOpen && (
+            <>
+              {trackLoading && <div className="text-stone-600 text-sm py-2">Loading tracklist...</div>}
+              {trackError && <div className="text-red-400/70 text-sm py-2">{trackError}</div>}
+              {!trackLoading && !trackError && tracks.length === 0 && (
+                <div className="text-stone-600 text-sm py-2">No tracklist found.</div>
+              )}
+              <div className="space-y-2 mb-2">
+                {tracks.map((t, i) => {
+                  const key = t.position || String(i);
+                  const faved = favTracks.some((f) => (typeof f === "object" ? f.key : f) === key);
+                  const isHeading = t.type === "heading";
+                  return (
+                    <div key={`${t.position || "h"}-${i}`} className="flex items-start gap-3">
+                      <div className="text-stone-600 text-xs w-10 shrink-0 pt-0.5">{t.position || "—"}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm ${isHeading ? "text-stone-300 uppercase tracking-widest text-xs" : "text-amber-50"}`}>{t.title}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                        <span className="text-stone-600 text-xs">{t.duration || ""}</span>
+                        {!isHeading && (
+                          <button
+                            onClick={() => toggleFav(key, t.title)}
+                            className={`text-sm transition-colors ${faved ? "text-rose-400" : "text-stone-700 hover:text-stone-400"}`}
+                          >♥</button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                    <span className="text-stone-600 text-xs">{t.duration || ""}</span>
-                    {!isHeading && (
-                      <button
-                        onClick={() => toggleFav(key, t.title)}
-                        className={`text-sm transition-colors ${faved ? "text-rose-400" : "text-stone-700 hover:text-stone-400"}`}
-                      >
-                        ♥
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           {/* Sound Profile */}
           {(() => {
@@ -1524,7 +1514,7 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
               { label: "Loudness",     value: f.loudness ?? 0.70, color: "bg-orange-900/70", hint: (f.loudness ?? 0.70) > 0.80 ? "loud" : (f.loudness ?? 0.70) < 0.45 ? "dynamic" : "balanced" },
             ];
             return (
-              <div className="mt-6 mb-2">
+              <div className="mt-4 mb-2">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
                   <div className="flex items-center gap-1.5">
@@ -1552,13 +1542,9 @@ function DetailSheet({ record, onClose, onSeedNext, onGenreClick, activeGenres =
 
           {!record.discogs_instance_id && (
             <button
-              onClick={() => {
-                if (window.confirm(`Remove "${record.title}" from your crate?`)) onDelete?.(record);
-              }}
-              className="mt-6 w-full py-2.5 rounded-xl border border-red-900/40 text-red-400/70 text-sm hover:bg-red-900/20 hover:text-red-300 transition-colors"
-            >
-              Remove from crate
-            </button>
+              onClick={() => { if (window.confirm(`Remove "${record.title}" from your crate?`)) onDelete?.(record); }}
+              className="mt-5 w-full py-2.5 rounded-xl border border-red-900/40 text-red-400/70 text-sm hover:bg-red-900/20 hover:text-red-300 transition-colors"
+            >Remove from crate</button>
           )}
         </div>
       </div>
@@ -4559,6 +4545,7 @@ export default function VinylCrate() {
   const [lastPlayed, setLastPlayed] = useState(null);
   const [reco, setReco] = useState(null);
   const [recoLoading, setRecoLoading] = useState(false);
+  const [autoTriggerReco, setAutoTriggerReco] = useState(false);
   const [recoError, setRecoError] = useState("");
   const [mood, setMood] = useState("");
   const [activeGenres, setActiveGenres] = useState(new Set());
@@ -5487,6 +5474,14 @@ export default function VinylCrate() {
     },
     [myRecords, mood, lastPlayed, lastPlayedDates, playCounts, spotifyFeatures, recoFilterGenres, recoFilterDecades]
   );
+
+  // Auto-run "Play Next" when navigating to Picks tab via "▶︎ Picks" from a record detail
+  useEffect(() => {
+    if (autoTriggerReco && tab === "reco" && lastPlayed && !recoLoading) {
+      setAutoTriggerReco(false);
+      getReco("next");
+    }
+  }, [autoTriggerReco, tab, lastPlayed, recoLoading]);
 
   async function handleDiscogsImport() {
     setImportLoading(true);
@@ -6575,6 +6570,7 @@ export default function VinylCrate() {
           {selected && (
             <DetailSheet
               record={selected}
+              hasNowPlaying={!!nowPlaying}
               onClose={() => setSelected(null)}
               onGenreClick={toggleGenre}
               activeGenres={activeGenres}
@@ -6594,6 +6590,7 @@ export default function VinylCrate() {
                 setLastPlayed(rec);
                 setTab("reco");
                 setSelected(null);
+                setAutoTriggerReco(true);
               }}
               spotifyFeatures={spotifyFeatures}
             />
