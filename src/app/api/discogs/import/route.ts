@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
   const { data: existing, error: existingError } = await supabase
     .from("records")
-    .select("id, discogs_id, discogs_instance_id, artist, title, thumb, condition, genres, styles")
+    .select("id, discogs_id, discogs_instance_id, artist, title, thumb, condition, genres, styles, year_pressed, year_original")
     .eq("user_id", userId);
   if (existingError) {
     console.error("Supabase select records error:", JSON.stringify(existingError));
@@ -90,23 +90,30 @@ export async function POST(request: Request) {
 
   // instance_ids already in DB — the source of truth for "already imported this copy"
   // Also track id + condition + genres/styles so we can backfill missing fields on existing records
-  const existingInstanceMap = new Map<number, { id: number; condition?: string | null; genres?: string | null; styles?: string | null }>();
+  type ExistingRow = { id: number; condition?: string | null; genres?: string | null; styles?: string | null; year_pressed?: number | null; year_original?: number | null };
+  type UnlinkedRow = { id: number; thumb?: string | null; condition?: string | null; year_pressed?: number | null; year_original?: number | null };
+  const existingInstanceMap = new Map<number, ExistingRow>();
   // discogs_id → list of DB rows without an instance_id yet (migration: link them on next import)
-  const unlinkedByDiscogsId = new Map<number, Array<{ id: number; thumb?: string | null; condition?: string | null }>>();
+  const unlinkedByDiscogsId = new Map<number, Array<UnlinkedRow>>();
   // manually added records (no discogs_id) — match by artist+title
-  const manualByKey = new Map<string, { id: number; thumb?: string | null; condition?: string | null }>();
+  const manualByKey = new Map<string, UnlinkedRow>();
 
   for (const row of existing || []) {
     if (row.discogs_instance_id) {
-      existingInstanceMap.set(row.discogs_instance_id, { id: row.id, condition: row.condition as string | null, genres: row.genres as string | null, styles: row.styles as string | null });
+      existingInstanceMap.set(row.discogs_instance_id, { id: row.id, condition: row.condition as string | null, genres: row.genres as string | null, styles: row.styles as string | null, year_pressed: row.year_pressed as number | null, year_original: row.year_original as number | null });
     } else if (row.discogs_id) {
       const arr = unlinkedByDiscogsId.get(row.discogs_id) || [];
-      arr.push({ id: row.id, thumb: row.thumb as string | null, condition: row.condition as string | null });
+      arr.push({ id: row.id, thumb: row.thumb as string | null, condition: row.condition as string | null, year_pressed: row.year_pressed as number | null, year_original: row.year_original as number | null });
       unlinkedByDiscogsId.set(row.discogs_id, arr);
     } else {
       const key = normalizeKey(row.artist, row.title);
-      if (key) manualByKey.set(key, { id: row.id, thumb: row.thumb as string | null, condition: row.condition as string | null });
+      if (key) manualByKey.set(key, { id: row.id, thumb: row.thumb as string | null, condition: row.condition as string | null, year_pressed: row.year_pressed as number | null, year_original: row.year_original as number | null });
     }
+  }
+
+  // Returns true if the stored year is a "bad fallback" (original = pressed, set by old code).
+  function isBadYearFallback(row: ExistingRow | UnlinkedRow) {
+    return row.year_original != null && row.year_pressed != null && row.year_original === row.year_pressed;
   }
 
   async function fetchCollectionPage(url: string) {
@@ -208,6 +215,10 @@ export async function POST(request: Request) {
       if ((!existingRow.genres || !existingRow.styles) && (record.genres || record.styles)) {
         genresStylesBackfill.push({ id: existingRow.id, genres: record.genres || "", styles: record.styles || "" });
       }
+      // Backfill year_pressed if missing or clearly wrong (bad fallback stored by old code).
+      if (record.year_pressed && (!existingRow.year_pressed || isBadYearFallback(existingRow))) {
+        await supabase.from("records").update({ year_pressed: record.year_pressed }).eq("id", existingRow.id).eq("user_id", userId);
+      }
       continue;
     }
 
@@ -219,6 +230,7 @@ export async function POST(request: Request) {
         const patch: Record<string, unknown> = { discogs_instance_id: record.discogs_instance_id };
         if (!match.thumb && record.thumb) patch.thumb = record.thumb;
         if (!match.condition && record.condition) patch.condition = record.condition;
+        if (record.year_pressed && (!match.year_pressed || isBadYearFallback(match))) patch.year_pressed = record.year_pressed;
         const { error: updateError } = await supabase
           .from("records")
           .update(patch)
@@ -238,6 +250,7 @@ export async function POST(request: Request) {
       };
       if (!manual.thumb && record.thumb) patch.thumb = record.thumb;
       if (!manual.condition && record.condition) patch.condition = record.condition;
+      if (record.year_pressed && (!manual.year_pressed || isBadYearFallback(manual))) patch.year_pressed = record.year_pressed;
       const { error: updateError } = await supabase
         .from("records")
         .update(patch)

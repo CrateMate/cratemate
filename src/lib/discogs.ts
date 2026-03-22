@@ -159,7 +159,10 @@ export function mapSearchResult(result: Record<string, unknown>) {
     title,
     label: labels[0] || "",
     year_pressed: year,
-    year_original: year,
+    // Don't set year_original from search results — the search API returns only one year
+    // (the pressing year for that specific listing) and it is not the master/original release year.
+    // Enrichment will resolve year_original via the Discogs master endpoint.
+    year_original: null,
     genre: (styles.length > 0 ? styles.slice(0, 3) : genres.slice(0, 2)).join(", "),
     genres: genres.slice(0, 3).join(", "),
     styles: styles.slice(0, 5).join(", "),

@@ -107,6 +107,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     tracklist: JSON.stringify(flat),
     year_cached_at: new Date().toISOString(),
     year_pressed: typeof data.year === "number" ? data.year : null,
+    master_id: typeof data.master_id === "number" ? data.master_id : null,
   });
 
   return NextResponse.json({ tracklist: flat, cover_image, artists });

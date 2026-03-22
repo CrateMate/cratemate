@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const SCREENSHOTS = [
   { name: "crate", label: "Crate" },
@@ -96,7 +97,7 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-wrap gap-3 pt-2">
-            <a
+            <Link
               href="/sign-up"
               className="px-6 py-3 rounded-xl font-medium transition-all"
               style={{
@@ -108,14 +109,14 @@ export default function LandingPage() {
               onMouseOut={(e) => (e.currentTarget.style.background = "#fbbf24")}
             >
               Get started free →
-            </a>
-            <a
+            </Link>
+            <Link
               href="/sign-in"
               className="px-6 py-3 rounded-xl font-medium border border-white/[0.12] transition-all hover:bg-white/[0.05]"
               style={{ fontFamily: "'DM Sans', sans-serif", color: "#e8ddd0" }}
             >
               Sign in
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -224,7 +225,7 @@ export default function LandingPage() {
             CrateMate &middot; Made for vinyl heads
           </p>
           <div className="flex gap-3">
-            <a
+            <Link
               href="/sign-up"
               className="px-5 py-2 rounded-lg text-sm font-medium transition-all"
               style={{
@@ -236,14 +237,14 @@ export default function LandingPage() {
               onMouseOut={(e) => (e.currentTarget.style.background = "#fbbf24")}
             >
               Get started free
-            </a>
-            <a
+            </Link>
+            <Link
               href="/sign-in"
               className="px-5 py-2 rounded-lg text-sm font-medium border border-white/[0.12] transition-all hover:bg-white/[0.05]"
               style={{ fontFamily: "'DM Sans', sans-serif", color: "#e8ddd0" }}
             >
               Sign in
-            </a>
+            </Link>
           </div>
         </div>
       </footer>

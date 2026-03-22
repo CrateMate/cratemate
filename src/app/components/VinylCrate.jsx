@@ -2191,59 +2191,86 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
   );
 }
 
-// Feature 2: Import progress bar showing 3 stages
+// Feature 2: Import progress bar showing stages: importing → enriching → done
 function ImportProgressBar({ importResult, enrichLoading }) {
   const stage = importResult?.stage;
-  const recordCount = (importResult?.imported || 0) + (importResult?.updated || 0);
   const progress = importResult?.enrichProgress;
   const meta = importResult?.meta;
 
-  let enrichLine = null;
-  if (stage === "enriching" || enrichLoading) {
-    const hasProgress = progress?.considered > 0;
-    enrichLine = (
-      <>
+  // Total records in DB (cumulative processed count from import job)
+  const recordCount = importResult?.processed || (importResult?.imported || 0) + (importResult?.updated || 0);
+
+  // Import progress line
+  const currentPage = importResult?.current_page || importResult?.batch_offset || 0;
+  const totalPages = importResult?.total_pages;
+  const isImporting = stage === "importing" && importResult?.status !== "completed";
+
+  let importLine = null;
+  if (isImporting) {
+    importLine = (
+      <div className="flex items-center gap-1.5">
         <span className="text-amber-500 animate-spin inline-block">⟳</span>
         <span className="text-amber-500/70">
-          {hasProgress
-            ? `Fetching metadata… ${progress.processed} of ${progress.considered}`
-            : "Fetching metadata…"}
+          {totalPages
+            ? `Importing… page ${currentPage} of ${totalPages}`
+            : `Importing… ${recordCount} records`}
         </span>
-      </>
-    );
-  } else if (meta?.timedOut) {
-    enrichLine = (
-      <>
-        <span className="text-stone-500">·</span>
-        <span className="text-stone-500">Metadata still syncing — check back in a minute</span>
-      </>
-    );
-  } else if (stage === "done" && meta) {
-    const nothingToDo = meta.considered === 0;
-    enrichLine = (
-      <>
-        <span className="text-emerald-400">✓</span>
-        <span className="text-emerald-400/70">
-          {nothingToDo ? "Everything up to date" : `${meta.updated || 0} records updated`}
-        </span>
-      </>
+      </div>
     );
   } else {
-    enrichLine = <span className="text-stone-600">· Metadata pending</span>;
-  }
-
-  return (
-    <div className="space-y-1">
+    importLine = (
       <div className="flex items-center gap-1.5">
         <span className="text-emerald-400">✓</span>
         <span className="text-emerald-400/80">
           Collection loaded{recordCount > 0 ? ` (${recordCount} records)` : ""}
         </span>
       </div>
-      <div className="flex items-center gap-1.5">{enrichLine}</div>
-      {importResult?.has_more && (
-        <div className="text-stone-500 text-[10px]">Large collection — remaining records importing in background.</div>
-      )}
+    );
+  }
+
+  // Enrichment / metadata line
+  let enrichLine = null;
+  if (stage === "enriching" || enrichLoading) {
+    const hasProgress = progress?.considered > 0;
+    enrichLine = (
+      <div className="flex items-center gap-1.5">
+        <span className="text-amber-500 animate-spin inline-block">⟳</span>
+        <span className="text-amber-500/70">
+          {hasProgress
+            ? `Fetching metadata… ${progress.processed} of ${progress.considered}`
+            : "Fetching metadata…"}
+        </span>
+      </div>
+    );
+  } else if (meta?.timedOut) {
+    enrichLine = (
+      <div className="flex items-center gap-1.5">
+        <span className="text-stone-500">·</span>
+        <span className="text-stone-500">Metadata still syncing — check back in a minute</span>
+      </div>
+    );
+  } else if (stage === "done" && meta) {
+    const nothingToDo = meta.considered === 0;
+    enrichLine = (
+      <div className="flex items-center gap-1.5">
+        <span className="text-emerald-400">✓</span>
+        <span className="text-emerald-400/70">
+          {nothingToDo ? "Everything up to date" : `${meta.updated || 0} records enriched`}
+        </span>
+      </div>
+    );
+  } else if (!isImporting) {
+    enrichLine = (
+      <div className="flex items-center gap-1.5">
+        <span className="text-stone-600">· Metadata pending</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {importLine}
+      {enrichLine}
     </div>
   );
 }
@@ -5189,7 +5216,7 @@ export default function VinylCrate() {
             fetch("/api/plays", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ record_id: p.record_id }),
+              body: JSON.stringify({ record_id: p.record_id, played_at: p.played_at }),
             })
           )
         );
@@ -5564,44 +5591,61 @@ export default function VinylCrate() {
     setImportLoading(true);
     setImportResult(null);
     try {
-      // Step 1 — Bare import: fetch up to 5 pages, return immediately
-      const res = await fetch("/api/discogs/import?mode=bare", { method: "POST" });
-      const bareData = await readJsonOrText(res);
-      if (!res.ok) throw new Error(bareData?.error || `Import failed (${res.status})`);
+      // Step 1 — Start the import job (fetches page 1 synchronously, returns job state)
+      const startRes = await fetch("/api/discogs/import/job", { method: "POST" });
+      const startData = await readJsonOrText(startRes);
+      if (!startRes.ok) throw new Error(startData?.error || `Import failed (${startRes.status})`);
 
-      // Show collection immediately
+      const jobId = startData.id;
+      if (!jobId) throw new Error("No import job ID returned");
+
+      // Show first page of records immediately
       await refreshRecords();
       setImportLoading(false);
-      setImportResult({ ...bareData, stage: "bare" });
+      setImportResult({ stage: "importing", importJobId: jobId, ...startData });
 
-      // Step 2 — Background enrichment (non-blocking)
-      try {
-        const enrichRes = await fetch("/api/discogs/enrich/job?mode=full", { method: "POST" });
-        const enrichData = await readJsonOrText(enrichRes);
-        if (enrichRes.ok && enrichData?.job_id) {
-          setImportResult((prev) => ({ ...prev, enrichJobId: enrichData.job_id, stage: "enriching" }));
-          setEnrichLoading(true);
-          // Poll enrichment in background
-          runEnrichAll("full", (progress) => {
-            setImportResult((prev) => ({ ...prev, enrichProgress: progress }));
-          })
-            .then((meta) => {
-              setImportResult((prev) => ({ ...prev, meta, stage: "done" }));
-              const syncedAt = new Date().toISOString();
-              try { localStorage.setItem("cratemate_last_synced", syncedAt); } catch {}
-              setLastSyncedAt(syncedAt);
-              refreshRecords();
-            })
-            .catch((enrichErr) => {
-              console.error("Post-import enrich failed:", enrichErr);
-              setImportResult((prev) => ({ ...prev, stage: "done" }));
-            })
-            .finally(() => setEnrichLoading(false));
+      // If the first page already completed the import (single-page collections), skip polling.
+      if (startData.status !== "completed") {
+        // Poll: each GET fetches the next Discogs collection page (100 records at a time)
+        const MAX_POLLS = 600; // 10 minutes max (600 × 1s)
+        let polls = 0;
+        while (polls < MAX_POLLS) {
+          await new Promise((r) => setTimeout(r, 1000));
+          polls++;
+          const pollRes = await fetch(`/api/discogs/import/job/${jobId}`);
+          const pollData = await readJsonOrText(pollRes);
+          if (!pollRes.ok) break;
+
+          setImportResult((prev) => ({ ...prev, ...pollData }));
+
+          // Refresh records every 3 pages so user sees them appearing
+          if (polls % 3 === 0) refreshRecords();
+
+          if (pollData.status === "completed" || pollData.status === "failed") break;
         }
-      } catch (enrichErr) {
-        console.error("Post-import enrich failed:", enrichErr);
-        setEnrichLoading(false);
       }
+
+      // Show final count
+      await refreshRecords();
+      setImportResult((prev) => ({ ...prev, stage: "enriching" }));
+
+      // Step 2 — Enrichment (metadata + artist dates)
+      setEnrichLoading(true);
+      runEnrichAll("full", (progress) => {
+        setImportResult((prev) => ({ ...prev, enrichProgress: progress }));
+      })
+        .then((meta) => {
+          setImportResult((prev) => ({ ...prev, meta, stage: "done" }));
+          const syncedAt = new Date().toISOString();
+          try { localStorage.setItem("cratemate_last_synced", syncedAt); } catch {}
+          setLastSyncedAt(syncedAt);
+          refreshRecords();
+        })
+        .catch((enrichErr) => {
+          console.error("Post-import enrich failed:", enrichErr);
+          setImportResult((prev) => ({ ...prev, stage: "done" }));
+        })
+        .finally(() => setEnrichLoading(false));
     } catch (e) {
       setImportResult({ error: e instanceof Error ? e.message : "Discogs import failed." });
       setImportLoading(false);

@@ -29,16 +29,16 @@ function captureCurrentBg() {
 }
 
 export default function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState("dark");
+  const [theme, setThemeState] = useState(() => {
+    if (typeof window === "undefined") return "dark";
+    return localStorage.getItem("cratemate_theme") || "dark";
+  });
   // overlay: null | { bg: string, collapsed: boolean }
   const [overlay, setOverlay] = useState(null);
   const cleanupRef = useRef(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("cratemate_theme") || "dark";
-    setThemeState(stored);
-    applyTheme(stored);
-  }, []);
+  // Apply theme on mount (lazy init already set the state value)
+  useEffect(() => { applyTheme(theme); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (theme !== "system") return;

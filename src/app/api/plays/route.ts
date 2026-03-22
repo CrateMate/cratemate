@@ -40,10 +40,17 @@ export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { record_id } = await request.json();
+  const { record_id, played_at: rawPlayedAt } = await request.json();
   if (!record_id) return NextResponse.json({ error: "record_id required" }, { status: 400 });
 
-  const played_at = new Date().toISOString();
+  // Accept a client-supplied timestamp (for offline queue replay) but reject future times
+  let played_at = new Date().toISOString();
+  if (rawPlayedAt) {
+    const candidate = new Date(rawPlayedAt);
+    if (!isNaN(candidate.getTime()) && candidate <= new Date()) {
+      played_at = candidate.toISOString();
+    }
+  }
   const { data: inserted, error } = await supabase
     .from("play_sessions")
     .insert({ user_id: userId, record_id, played_at })

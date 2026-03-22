@@ -180,6 +180,7 @@ export async function GET(request: Request) {
     tracklist: JSON.stringify(flat),
     year_cached_at: new Date().toISOString(),
     year_pressed: typeof data.year === "number" ? data.year : null,
+    master_id: typeof data.master_id === "number" ? data.master_id : null,
   });
 
   return NextResponse.json({ release_id: releaseId, tracklist: flat, cover_image, artists });

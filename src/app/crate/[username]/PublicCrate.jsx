@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { HoneycombView, TileView, CoverArt } from "@/app/components/VinylCrate";
 
@@ -51,12 +51,10 @@ export default function PublicCrate({ records, username }) {
   const searchParams = useSearchParams();
   const [zoom, setZoom] = useState(1.0);
   const [selected, setSelected] = useState(null);
-  const [shape, setShape] = useState("honeycomb");
-
-  useEffect(() => {
-    const v = searchParams.get("view");
-    if (v === "grid" || v === "tiles" || v === "honeycomb") setShape(v);
-  }, [searchParams]);
+  const [shape, setShape] = useState(() => {
+    const v = searchParams?.get("view");
+    return (v === "grid" || v === "tiles" || v === "honeycomb") ? v : "honeycomb";
+  });
 
   return (
     <div
