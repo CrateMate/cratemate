@@ -934,7 +934,7 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
 
 const WANTS_PAGE_SIZE = 25;
 
-function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold, nowPlaying }) {
+function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold, nowPlaying, onScroll }) {
   const [wantsPage, setWantsPage] = useState(1);
   const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(true);
   const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
@@ -1055,7 +1055,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
+        <div className="flex-1 overflow-y-auto px-4" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={onScroll}>
           {visibleGroups.map((group) => {
             const key = group.master_id ? `master_${group.master_id}` : `release_${group.representative?.release_id}`;
             const repId = group.representative?.release_id;
@@ -4714,6 +4714,22 @@ export default function VinylCrate() {
   const HISTORY_PAGE_SIZE = 20;
   const historySentinelRef = useRef(null);
 
+  // Auto-hide header on scroll down, reveal on scroll up
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
+  function handleTabScroll(e) {
+    const y = e.currentTarget.scrollTop;
+    const delta = y - lastScrollY.current;
+    if (Math.abs(delta) < 8) return;
+    if (delta > 0 && y > 40) setHeaderVisible(false);
+    else if (delta < 0) setHeaderVisible(true);
+    lastScrollY.current = y;
+  }
+  useEffect(() => {
+    setHeaderVisible(true);
+    lastScrollY.current = 0;
+  }, [tab]);
+
   const [isDiscoverable, setIsDiscoverable] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null);
   const [discoverLoading, setDiscoverLoading] = useState(false);
@@ -5991,6 +6007,13 @@ export default function VinylCrate() {
       className="h-dvh flex flex-col max-w-md mx-auto"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
+      <div style={{
+        overflow: "hidden",
+        maxHeight: headerVisible ? "100px" : "0px",
+        opacity: headerVisible ? 1 : 0,
+        transition: "max-height 0.28s ease, opacity 0.22s ease",
+        pointerEvents: headerVisible ? "auto" : "none",
+      }}>
       {(!selected || tab !== "crate") && viewMode !== "drift" && (
         <div className="px-5 pt-7 pb-2 flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -6048,6 +6071,7 @@ export default function VinylCrate() {
           </div>
         </div>
       )}
+      </div>
 
       <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {[
@@ -6534,7 +6558,7 @@ export default function VinylCrate() {
               )}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
+            <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
               {pagedRecords.map((r) => (
                 <RecordRow
                   key={r.id}
@@ -6597,7 +6621,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "hearts" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
           {!seenHints["hearts"] && (
             <HintBanner onDismiss={() => dismissHint("hearts")}>
               Open a record, expand its tracklist, and tap ♥ next to any track to save it here.
@@ -6725,7 +6749,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "reco" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
           {!seenHints["reco_spotify"] && spotifyLinked === false && (
             <HintBanner onDismiss={() => dismissHint("reco_spotify")}>
               Connect Spotify to get recommendations based on what you&apos;ve actually been listening to.
@@ -6995,7 +7019,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "history" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
               Double-tap a record in your crate to log a play — your sessions and streak live here.
@@ -7202,6 +7226,7 @@ export default function VinylCrate() {
           onSaveThreshold={savePriceThreshold}
           onRemoveThreshold={removePriceThreshold}
           nowPlaying={!!nowPlaying}
+          onScroll={handleTabScroll}
           onStartImport={async () => {
             if (!wantlist) {
               // Load wantlist if not yet loaded
@@ -7225,7 +7250,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "stats" && (
-        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
+        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
           {(() => {
             const { decades, genres, formats, styles } = buildCollectionStats(myRecords);
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
@@ -7759,7 +7784,7 @@ export default function VinylCrate() {
       )}
 
       {tab === "discover" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
           {!seenHints["discover"] && (
             <HintBanner onDismiss={() => dismissHint("discover")}>
               Toggle discoverability above to find other collectors who share your taste.
