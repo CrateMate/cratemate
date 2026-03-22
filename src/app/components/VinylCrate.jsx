@@ -1188,9 +1188,11 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
   const [favTracks, setFavTracks] = useState(record.favorite_tracks || []);
-  const [tracklistOpen, setTracklistOpen] = useState(true);
+  const [tracklistOpen, setTracklistOpen] = useState(false);
   const [soundProfileOpen, setSoundProfileOpen] = useState(false);
   const artTapRef = useRef(0);
+  const [pullY, setPullY] = useState(0);
+  const pullStartY = useRef(null);
 
   function toggleFav(key, title) {
     const getFavKey = (f) => (typeof f === "object" ? f.key : f);
@@ -1328,21 +1330,39 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col justify-end">
         <div
           className="bg-stone-950 border border-stone-800/80 border-b-0 rounded-t-3xl px-5 pt-5 overflow-y-auto"
-          style={{ maxHeight: "92vh", paddingBottom: hasNowPlaying ? 84 : 28 }}
+          style={{
+            maxHeight: "92vh",
+            paddingBottom: hasNowPlaying ? 84 : 28,
+            transform: pullY > 0 ? `translateY(${pullY}px)` : undefined,
+            transition: pullY === 0 ? "transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)" : "none",
+          }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Drag handle + close */}
-          <div className="w-8 h-1 bg-white/15 rounded-full mx-auto mb-4" />
-          <button
-            onClick={onClose}
-            className="absolute top-5 right-5 bg-stone-900/80 text-stone-400 w-8 h-8 rounded-full flex items-center justify-center hover:text-stone-200 transition-colors text-lg leading-none"
-            aria-label="Close"
-          >×</button>
+          {/* Pull-down handle to dismiss */}
+          <div
+            className="w-10 h-1.5 bg-white/20 rounded-full mx-auto mb-4 cursor-grab active:cursor-grabbing"
+            style={{ touchAction: "none" }}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              pullStartY.current = e.clientY;
+            }}
+            onPointerMove={(e) => {
+              if (pullStartY.current === null) return;
+              const delta = Math.max(0, e.clientY - pullStartY.current);
+              setPullY(delta);
+            }}
+            onPointerUp={(e) => {
+              if (pullStartY.current === null) return;
+              const delta = Math.max(0, e.clientY - pullStartY.current);
+              pullStartY.current = null;
+              if (delta > 80) { onClose(); } else { setPullY(0); }
+            }}
+          />
 
           {/* Header: album art (double-tap to log) + metadata to the right */}
           <div className="flex gap-3 mb-4 items-start">
             <div
-              className="w-[220px] h-[220px] rounded-2xl overflow-hidden shrink-0 bg-stone-800 cursor-pointer select-none"
+              className="w-[252px] h-[252px] rounded-2xl overflow-hidden shrink-0 bg-stone-800 cursor-pointer select-none"
               onClick={() => {
                 const now = Date.now();
                 if (now - artTapRef.current < 300) { onLogPlay?.(record.id); artTapRef.current = 0; }
@@ -1355,38 +1375,42 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   onError={(e) => { e.currentTarget.style.display = "none"; }} />
               ) : (
                 <div className="w-full h-full flex items-center justify-center pointer-events-none">
-                  <VinylDisc record={record} size={180} />
+                  <VinylDisc record={record} size={206} />
                 </div>
               )}
             </div>
             <div className="flex flex-col gap-2.5 min-w-0 pt-1 flex-1">
               <div>
-                <div className="text-stone-600 text-[10px] uppercase tracking-wider mb-0.5">Year</div>
-                <div className="text-stone-200 text-sm truncate">{originalYear || "—"}</div>
-                {isRepress && <div className="text-stone-600 text-[10px] truncate mt-0.5">{pressedYear} press</div>}
+                <div className="text-stone-200 text-sm truncate">{pressedYear || originalYear || "—"}</div>
+                {isRepress && (
+                  <div className="text-stone-500 text-[11px] truncate mt-0.5">Orig. {record.year_original}</div>
+                )}
               </div>
               {condenseCondition(record.condition) && (
-                <div>
-                  <div className="text-stone-600 text-[10px] uppercase tracking-wider mb-0.5">Condition</div>
-                  <div className="text-stone-200 text-sm truncate">{condenseCondition(record.condition)}</div>
-                </div>
+                <div className="text-stone-200 text-sm truncate">{condenseCondition(record.condition)}</div>
               )}
               {record.label && (
-                <div>
-                  <div className="text-stone-600 text-[10px] uppercase tracking-wider mb-0.5">Label</div>
-                  <div className="text-stone-200 text-sm truncate">{record.label.split(",")[0].trim()}</div>
-                </div>
+                <div className="text-stone-400 text-xs truncate">{record.label.split(",")[0].trim()}</div>
               )}
               {playCount > 0 && (
-                <div className="flex items-center gap-2 mt-auto">
+                <div className="flex items-center gap-2">
                   <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); onUndoLogPlay?.(record.id); }}
                     className="text-stone-700 hover:text-stone-400 text-xs transition-colors"
                     title="Undo last play"
-                  >↩ undo</button>
+                  >↩</button>
                 </div>
               )}
+              {/* Genre pills — to the right of art */}
+              <div className="flex flex-wrap gap-1 mt-auto">
+                {getGenres(record).map((g) => (
+                  <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+                ))}
+                {record.is_compilation && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">Comp.</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1394,7 +1418,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
           <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }} className="text-amber-50 font-semibold leading-tight mb-1">
             {record.title}
           </div>
-          <div className="text-sm mb-3">
+          <div className="text-sm mb-4">
             {record.discogs_id ? (
               <a
                 href={`/artist/${record.discogs_id}`}
@@ -1403,16 +1427,6 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               >{stripArtistNum(record.artist)}</a>
             ) : (
               <span className="text-stone-400">{stripArtistNum(record.artist)}</span>
-            )}
-          </div>
-
-          {/* Genre pills */}
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {getGenres(record).map((g) => (
-              <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
-            ))}
-            {record.is_compilation && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">Compilation</span>
             )}
           </div>
 
@@ -1436,11 +1450,6 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                 className="py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-xs font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
               >⬡ Session</button>
             )}
-          </div>
-
-          {/* Streaming */}
-          <div className="mb-3">
-            <StreamingButtons artist={record.artist} title={record.title} />
           </div>
 
           {/* Last played */}
@@ -1555,10 +1564,15 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             );
           })()}
 
+          {/* Streaming — at the bottom since this is a vinyl app */}
+          <div className="mt-4 mb-2 border-t border-stone-800/40 pt-4">
+            <StreamingButtons artist={record.artist} title={record.title} />
+          </div>
+
           {!record.discogs_instance_id && (
             <button
               onClick={() => { if (window.confirm(`Remove "${record.title}" from your crate?`)) onDelete?.(record); }}
-              className="mt-5 w-full py-2.5 rounded-xl border border-red-900/40 text-red-400/70 text-sm hover:bg-red-900/20 hover:text-red-300 transition-colors"
+              className="mt-3 w-full py-2.5 rounded-xl border border-red-900/40 text-red-400/70 text-sm hover:bg-red-900/20 hover:text-red-300 transition-colors"
             >Remove from crate</button>
           )}
         </div>
