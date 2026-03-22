@@ -1184,6 +1184,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const [trackError, setTrackError] = useState("");
   const [favTracks, setFavTracks] = useState(record.favorite_tracks || []);
   const [tracklistOpen, setTracklistOpen] = useState(true);
+  const [soundProfileOpen, setSoundProfileOpen] = useState(false);
 
   function toggleFav(key, title) {
     const getFavKey = (f) => (typeof f === "object" ? f.key : f);
@@ -1332,9 +1333,9 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             aria-label="Close"
           >×</button>
 
-          {/* Compact header: album thumbnail + metadata column */}
-          <div className="flex gap-4 mb-4">
-            <div className="w-[88px] h-[88px] rounded-xl overflow-hidden shrink-0 bg-stone-800">
+          {/* Header: album art + metadata to the right */}
+          <div className="flex gap-3 mb-4 items-start">
+            <div className="w-[200px] h-[200px] rounded-2xl overflow-hidden shrink-0 bg-stone-800">
               {(heroHi || record.thumb) ? (
                 <img
                   src={heroHi || record.thumb}
@@ -1344,36 +1345,39 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <VinylDisc record={record} size={72} />
+                  <VinylDisc record={record} size={160} />
                 </div>
               )}
             </div>
-            <div className="flex flex-col justify-center gap-1.5 flex-1 min-w-0">
-              <div className="flex items-baseline gap-2">
+            <div className="flex flex-col gap-1.5 min-w-0 pt-1 flex-1">
+              <div className="flex items-baseline gap-1.5">
                 <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Year</span>
-                <span className="text-stone-200 text-sm truncate">
-                  {originalYear || "—"}
-                  {isRepress && <span className="text-stone-600 text-[10px] ml-1.5">· {pressedYear} press</span>}
-                </span>
+                <span className="text-stone-200 text-xs truncate">{originalYear || "—"}</span>
               </div>
-              <div className="flex items-baseline gap-2">
+              {isRepress && (
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0"></span>
+                  <span className="text-stone-600 text-[10px] truncate">{pressedYear} press</span>
+                </div>
+              )}
+              <div className="flex items-baseline gap-1.5">
                 <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Cond</span>
-                <span className="text-stone-200 text-sm truncate">{condenseCondition(record.condition) || "—"}</span>
+                <span className="text-stone-200 text-xs truncate">{condenseCondition(record.condition) || "—"}</span>
               </div>
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-1.5">
                 <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Label</span>
-                <span className="text-stone-200 text-sm truncate">{(record.label || "—").split(",")[0].trim()}</span>
+                <span className="text-stone-200 text-xs truncate">{(record.label || "—").split(",")[0].trim()}</span>
               </div>
               {record.format && (
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-baseline gap-1.5">
                   <span className="text-stone-600 text-[10px] uppercase tracking-wider w-9 shrink-0">Fmt</span>
-                  <span className="text-stone-500 text-xs truncate">{record.format}</span>
+                  <span className="text-stone-500 text-[10px] truncate">{record.format}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Title + Artist */}
+          {/* Title + Artist below the art */}
           <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }} className="text-amber-50 font-semibold leading-tight mb-1">
             {record.title}
           </div>
@@ -1501,41 +1505,60 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             </>
           )}
 
-          {/* Sound Profile */}
+          {/* Collapsible Sound Profile */}
           {(() => {
             const fromSpotify = spotifyFeatures?.[record.id];
             const f = fromSpotify || estimateFeaturesFromRecord(record);
             const isSpotify = !!fromSpotify;
             const bars = [
-              { label: "Energy",       value: f.energy,       color: "bg-amber-600/70" },
-              { label: "Mood",         value: f.valence,      color: "bg-rose-600/60",    hint: f.valence > 0.6 ? "upbeat" : f.valence < 0.4 ? "melancholic" : "balanced" },
-              { label: "Danceability", value: f.danceability, color: "bg-emerald-700/60" },
-              { label: "Acoustic",     value: f.acousticness, color: "bg-stone-500/70" },
-              { label: "Loudness",     value: f.loudness ?? 0.70, color: "bg-orange-900/70", hint: (f.loudness ?? 0.70) > 0.80 ? "loud" : (f.loudness ?? 0.70) < 0.45 ? "dynamic" : "balanced" },
+              { label: "Energy",       value: f.energy,       color: "bg-amber-600/70",    hint: f.energy > 0.7 ? "high" : f.energy < 0.4 ? "low" : null },
+              { label: "Mood",         value: f.valence,      color: "bg-rose-600/60",     hint: f.valence > 0.6 ? "upbeat" : f.valence < 0.4 ? "melancholic" : null },
+              { label: "Danceability", value: f.danceability, color: "bg-emerald-700/60",  hint: f.danceability > 0.65 ? "danceable" : f.danceability < 0.4 ? "headphones" : null },
+              { label: "Acoustic",     value: f.acousticness, color: "bg-stone-500/70",    hint: null },
+              { label: "Loudness",     value: f.loudness ?? 0.70, color: "bg-orange-900/70", hint: (f.loudness ?? 0.70) > 0.80 ? "loud" : (f.loudness ?? 0.70) < 0.45 ? "dynamic" : null },
             ];
+            // Descriptor pills shown when collapsed
+            const descriptors = [];
+            if (f.energy > 0.7) descriptors.push({ label: "High Energy", cls: "bg-amber-900/30 border-amber-800/40 text-amber-400" });
+            else if (f.energy < 0.4) descriptors.push({ label: "Laid Back", cls: "bg-stone-800/40 border-stone-700/40 text-stone-400" });
+            if (f.valence > 0.6) descriptors.push({ label: "Feel Good", cls: "bg-rose-900/30 border-rose-800/40 text-rose-300" });
+            else if (f.valence < 0.35) descriptors.push({ label: "Melancholic", cls: "bg-indigo-900/30 border-indigo-800/40 text-indigo-400" });
+            if (f.danceability > 0.65) descriptors.push({ label: "Danceable", cls: "bg-emerald-900/30 border-emerald-800/40 text-emerald-400" });
+            else if (f.danceability < 0.4) descriptors.push({ label: "Headphone Music", cls: "bg-stone-800/40 border-stone-700/40 text-stone-400" });
             return (
               <div className="mt-4 mb-2">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
+                <button onClick={() => setSoundProfileOpen(o => !o)} className="flex items-center justify-between w-full py-1 mb-2">
+                  <span className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</span>
                   <div className="flex items-center gap-1.5">
                     <span className="text-stone-600 text-xs">~{Math.round(f.tempo)} BPM</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${isSpotify ? "border-emerald-900/40 text-emerald-700/80 bg-emerald-900/10" : "border-stone-800 text-stone-600 bg-stone-900/40"}`}>
                       {isSpotify ? "via Spotify" : "estimated"}
                     </span>
+                    <span className="text-stone-600 text-xs">{soundProfileOpen ? "▲" : "▼"}</span>
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  {bars.map(({ label, value, color, hint }) => (
-                    <div key={label} className="flex items-center gap-3">
-                      <div className="text-stone-500 text-xs w-20 shrink-0">
-                        {label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}
+                </button>
+                {!soundProfileOpen && descriptors.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {descriptors.map(d => (
+                      <span key={d.label} className={`text-xs px-2.5 py-0.5 rounded-full border ${d.cls}`}>{d.label}</span>
+                    ))}
+                  </div>
+                )}
+                {soundProfileOpen && (
+                  <div className="space-y-2">
+                    {bars.map(({ label, value, color, hint }) => (
+                      <div key={label} className="flex items-start gap-3">
+                        <div className="flex flex-col shrink-0 w-[76px]">
+                          <span className="text-stone-500 text-xs leading-tight">{label}</span>
+                          {hint && <span className="text-stone-700 text-[10px] leading-tight">{hint}</span>}
+                        </div>
+                        <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden mt-1.5">
+                          <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(value * 100)}%` }} />
+                        </div>
                       </div>
-                      <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden">
-                        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(value * 100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
