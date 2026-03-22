@@ -1330,7 +1330,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const heroIsUpgraded = heroBase && heroHi && heroHi !== heroBase;
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
-    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80]">
       <button className="absolute inset-0" onClick={slideClose} aria-label="Close" />
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col justify-end">
         <div
@@ -6171,7 +6171,7 @@ export default function VinylCrate() {
       </div>
       </div>
 
-      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
+      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {[
           ["crate",    "⏺", "Crate"],
           ["history",  "▷", "Log"],
