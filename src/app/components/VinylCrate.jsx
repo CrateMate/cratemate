@@ -6052,7 +6052,7 @@ export default function VinylCrate() {
       <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {[
           ["crate",    "⏺", "Crate"],
-          ["wants",    "◇", "Wants"],
+          ["wants",    "◉", "Wants"],
           ["hearts",   "♥", "Faves"],
           ["history",  "▷", "Log"],
           ["reco",     "✦", "Picks"],
@@ -6823,7 +6823,7 @@ export default function VinylCrate() {
                               <span className="text-[10px] text-amber-900/70">you have other {rec.artist} records</span>
                             )}
                             {rec.on_wantlist && (
-                              <span className="text-[10px] text-stone-500">◇ on wantlist</span>
+                              <span className="text-[10px] text-stone-500">◉ on wantlist</span>
                             )}
                           </div>
                         </div>
