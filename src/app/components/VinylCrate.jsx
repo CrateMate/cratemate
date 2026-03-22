@@ -6069,86 +6069,51 @@ export default function VinylCrate() {
               placeholder="Search artist, title, genre, song..."
               className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60" style={{ backgroundColor: "var(--bg-input)" }}
             />
+            {/* Row 1: sort pill · ∞/pages · view toggles · Discogs icon · Add */}
             <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                {[
-                  ["artist", "A–Z"],
-                  ["year", "Year"],
-                  ["genre", "Genre"],
-                  ["hearts", "♥"],
-                ].map(([k, l]) => (
-                  <button
-                    key={k}
-                    onClick={() => {
-                      if (sortBy === k) setSortDir(d => d === "asc" ? "desc" : "asc");
-                      else { setSortBy(k); setSortDir("asc"); }
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-0.5 ${
-                      sortBy === k ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"
-                    }`}
-                  >
-                    {l}{sortBy === k && <span className="text-[10px] leading-none">{sortDir === "asc" ? "↑" : "↓"}</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-0.5">
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`px-2 py-1 rounded-lg text-xs transition-all ${
-                    viewMode === "list" ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"
-                  }`}
-                  title="List view"
-                >
-                  ≡
-                </button>
-                <button
-                  onClick={() => setViewMode("drift")}
-                  className={`px-2 py-1 rounded-lg text-xs transition-all ${
-                    viewMode === "drift" ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"
-                  }`}
-                  title="Honeycomb view"
-                >
-                  ⬡
-                </button>
-              </div>
-              <div className="flex-1" />
-            </div>
+              {/* Cycling sort pill */}
+              <button
+                onClick={() => {
+                  const ORDER = ["artist", "year", "genre", "hearts"];
+                  const next = ORDER[(ORDER.indexOf(sortBy) + 1) % ORDER.length];
+                  setSortBy(next); setSortDir("asc");
+                }}
+                onContextMenu={(e) => { e.preventDefault(); setSortDir(d => d === "asc" ? "desc" : "asc"); }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-800/60 border border-stone-700/50 text-xs text-stone-300 hover:text-amber-300 transition-colors select-none"
+                title="Tap to cycle sort · right-click to flip direction"
+              >
+                <span>⇅</span>
+                <span>{{ artist: "A–Z", year: "Year", genre: "Genre", hearts: "♥" }[sortBy]}</span>
+                <span className="text-[10px] opacity-60">{sortDir === "asc" ? "↑" : "↓"}</span>
+              </button>
 
-            <div className="flex items-center gap-2">
-              <div className="text-xs text-stone-700">
-                {filtered.length} records{!infiniteScroll && totalPages > 1 ? ` · p${page}/${totalPages}` : ""}
-              </div>
-              {activeGenres.size > 0 && (
-                <button
-                  onClick={clearStatFilter}
-                  className="text-xs px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 text-amber-400"
-                >
-                  {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
-                </button>
-              )}
-              {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
-                <button
-                  onClick={clearStatFilter}
-                  className="text-xs px-2 py-0.5 rounded-full border border-stone-700 text-stone-500 hover:text-rose-400 hover:border-rose-900/50 transition-colors"
-                >
-                  Clear all ×
-                </button>
-              )}
+              {/* ∞ / pages toggle */}
               <button
                 onClick={() => { setInfiniteScroll(s => !s); setPage(1); setVisibleCount(PAGE_SIZE); }}
-                className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${infiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-600 hover:text-stone-400"}`}
+                className={`text-xs px-2 py-1 rounded-full border transition-colors ${infiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700/50 text-stone-500 hover:text-stone-300"}`}
                 title={infiniteScroll ? "Switch to pages" : "Switch to infinite scroll"}
               >
-                {infiniteScroll ? "∞ scroll" : "pages"}
+                {infiniteScroll ? "∞" : "p."}
               </button>
+
+              {/* View toggles */}
+              <div className="flex gap-0.5">
+                <button onClick={() => setViewMode("list")} className={`px-2 py-1 rounded-lg text-xs transition-all ${viewMode === "list" ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"}`} title="List view">≡</button>
+                <button onClick={() => setViewMode("drift")} className={`px-2 py-1 rounded-lg text-xs transition-all ${viewMode === "drift" ? "bg-stone-700 text-amber-300" : "text-stone-600 hover:text-stone-300"}`} title="Honeycomb view">⬡</button>
+              </div>
+
               <div className="flex-1" />
 
+              {/* Discogs — icon only (inline SVG mark) */}
               <div className="relative">
                 <button
                   onClick={() => setShowDiscogsMenu(s => !s)}
-                  className="text-xs px-2.5 py-1 rounded-lg border border-stone-700 text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all"
+                  className="w-7 h-7 rounded-full border border-stone-700 flex items-center justify-center text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all"
+                  title="Discogs"
                 >
-                  ⊙ Discogs
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 4a6 6 0 1 1 0 12A6 6 0 0 1 12 6zm0 2.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 1.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
+                  </svg>
                 </button>
                 {showDiscogsMenu && (
                   <div
@@ -6205,6 +6170,29 @@ export default function VinylCrate() {
               >
                 + Add
               </button>
+            </div>
+
+            {/* Row 2: filters / active state / record count */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-xs text-stone-700">
+                {filtered.length} records{!infiniteScroll && totalPages > 1 ? ` · p${page}/${totalPages}` : ""}
+              </div>
+              {activeGenres.size > 0 && (
+                <button
+                  onClick={clearStatFilter}
+                  className="text-xs px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 text-amber-400"
+                >
+                  {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
+                </button>
+              )}
+              {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
+                <button
+                  onClick={clearStatFilter}
+                  className="text-xs px-2 py-0.5 rounded-full border border-stone-700 text-stone-500 hover:text-rose-400 hover:border-rose-900/50 transition-colors"
+                >
+                  Clear all ×
+                </button>
+              )}
             </div>
 
             {importResult && (
