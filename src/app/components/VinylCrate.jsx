@@ -5217,16 +5217,25 @@ export default function VinylCrate() {
   useEffect(() => {
     if (theme !== "personal" || !personalTheme) return;
     const root = document.documentElement;
-    root.style.setProperty("--accent-personal", personalTheme.primaryHex);
-    root.style.setProperty("--accent-personal-2", personalTheme.secondaryHex);
-    root.style.setProperty("--accent-personal-bg", personalTheme.engaged ? "0.30" : "0.22");
-    if (personalTheme.dominantDecade <= 1975)
-      root.style.setProperty("--bg-app", "linear-gradient(160deg,#1c1208 0%,#0c0804 100%)");
-    else if (personalTheme.dominantDecade >= 1990)
-      root.style.setProperty("--bg-app", "linear-gradient(160deg,#0e1218 0%,#080c12 100%)");
+
+    // Build proportional genre gradient from the user's actual collection
+    const genreSlice = personalTheme.sorted.slice(0, 5);
+    const total = genreSlice.reduce((s, [, c]) => s + c, 0);
+    const stops = [];
+    let pos = 0;
+    genreSlice.forEach(([genre, count], i) => {
+      const [c0, c1] = getStoryGradient(genre);
+      stops.push(`${c0} ${(pos * 100).toFixed(1)}%`);
+      pos += count / total;
+      if (i === genreSlice.length - 1) stops.push(`${c1} 100%`);
+    });
+    const vivid = `linear-gradient(135deg, ${stops.join(", ")})`;
+    // Dark overlay (~72%) on top of vivid — bold but liveable
+    const withOverlay = `linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.72)), ${vivid}`;
+    root.style.setProperty("--bg-app", withOverlay);
+
     return () => {
-      ["--accent-personal", "--accent-personal-2", "--accent-personal-bg", "--bg-app"]
-        .forEach(v => root.style.removeProperty(v));
+      root.style.removeProperty("--bg-app");
     };
   }, [theme, personalTheme]);
 
