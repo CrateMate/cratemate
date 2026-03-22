@@ -1191,7 +1191,9 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const [tracklistOpen, setTracklistOpen] = useState(false);
   const [soundProfileOpen, setSoundProfileOpen] = useState(false);
   const artTapRef = useRef(0);
+  const [entered, setEntered] = useState(false);
   const [closing, setClosing] = useState(false);
+  useEffect(() => { requestAnimationFrame(() => setEntered(true)); }, []);
   function slideClose() {
     setClosing(true);
     setTimeout(onClose, 280);
@@ -1336,8 +1338,8 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
           style={{
             maxHeight: "92vh",
             paddingBottom: hasNowPlaying ? 84 : 28,
-            transform: closing ? "translateY(100%)" : "translateY(0)",
-            transition: "transform 0.28s cubic-bezier(0.4, 0, 1, 1)",
+            transform: (closing || !entered) ? "translateY(100%)" : "translateY(0)",
+            transition: entered ? "transform 0.28s cubic-bezier(0.4, 0, 1, 1)" : "none",
           }}
           onClick={(e) => e.stopPropagation()}
         >
