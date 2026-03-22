@@ -4714,6 +4714,34 @@ export default function VinylCrate() {
   const [trailSearch, setTrailSearch] = useState("");
   const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
   const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
+  const fetchingFeaturesRef = useRef(new Set()); // record IDs currently in-flight
+
+  // Shared fetch helper — deduplicates, normalises, writes to state.
+  // Returns true if features were successfully stored.
+  async function fetchOneFeature(record) {
+    const id = String(record.id);
+    if (fetchingFeaturesRef.current.has(id)) return false;
+    fetchingFeaturesRef.current.add(id);
+    try {
+      const res = await fetch("/api/spotify/features", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ record_id: record.id, artist: record.artist, title: record.title }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data?.energy == null) return false;
+      const normalized = data.loudness != null
+        ? { ...data, loudness: Math.min(1, Math.max(0, (data.loudness + 30) / 27)) }
+        : data;
+      setSpotifyFeatures(prev => ({ ...prev, [record.id]: normalized }));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      fetchingFeaturesRef.current.delete(id);
+    }
+  }
   const [storyGenerating, setStoryGenerating] = useState(false);
   const [storyCanvases, setStoryCanvases] = useState(null);
   const [showStoryPreview, setShowStoryPreview] = useState(false);
@@ -5372,6 +5400,41 @@ export default function VinylCrate() {
     ? filtered.slice(0, visibleCount)
     : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const hasMore = infiniteScroll && visibleCount < filtered.length;
+
+  // Lazy-load audio features when a detail card opens:
+  // 1. The opened record itself (immediate priority)
+  // 2. ±2 neighbors in the current sorted view (visible context)
+  // 3. Up to 3 most-played records still missing features (background value)
+  useEffect(() => {
+    if (!selected || !myRecords.length) return;
+    const queue = [];
+    // The opened record
+    if (!spotifyFeatures[selected.id]) queue.push(selected);
+    // Neighbors in current sorted view
+    const idx = sorted.findIndex(r => r.id === selected.id);
+    if (idx !== -1) {
+      const neighbors = sorted.slice(Math.max(0, idx - 2), Math.min(sorted.length, idx + 3));
+      for (const r of neighbors) {
+        if (!spotifyFeatures[r.id] && !queue.find(q => q.id === r.id)) queue.push(r);
+      }
+    }
+    // Top-played uncached (up to 3) to fill in high-value records passively
+    const topPlayed = [...myRecords]
+      .filter(r => !spotifyFeatures[r.id] && !queue.find(q => q.id === r.id))
+      .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
+      .slice(0, 3);
+    queue.push(...topPlayed);
+
+    if (queue.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const record of queue) {
+        if (cancelled) break;
+        await fetchOneFeature(record);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const honeycombRecords = (() => {
     const dir = honeycombSortDir === "asc" ? 1 : -1;
@@ -7808,24 +7871,14 @@ export default function VinylCrate() {
                   const analyzeCollection = async () => {
                     if (spotifyAnalyzing) return;
                     setSpotifyAnalyzing(true);
-                    const uncached = myRecords.filter(r => !spotifyFeatures[r.id]).slice(0, 25);
+                    // Sort uncached records by play count descending so most-listened
+                    // records get real data first, then process 10 per click.
+                    const uncached = [...myRecords]
+                      .filter(r => !spotifyFeatures[r.id])
+                      .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
+                      .slice(0, 10);
                     for (const record of uncached) {
-                      try {
-                        const res = await fetch("/api/spotify/features", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ record_id: record.id, artist: record.artist, title: record.title }),
-                        });
-                        if (res.ok) {
-                          const data = await res.json();
-                          if (data && data.energy != null) {
-                            const normalized = data.loudness != null
-                              ? { ...data, loudness: Math.min(1, Math.max(0, (data.loudness + 30) / 27)) }
-                              : data;
-                            setSpotifyFeatures(prev => ({ ...prev, [record.id]: normalized }));
-                          }
-                        }
-                      } catch {}
+                      await fetchOneFeature(record);
                     }
                     setSpotifyAnalyzing(false);
                   };
@@ -7865,7 +7918,7 @@ export default function VinylCrate() {
                           disabled={spotifyAnalyzing}
                           className="text-xs text-stone-600 hover:text-amber-400 transition-colors disabled:opacity-40"
                         >
-                          {spotifyAnalyzing ? `Analyzing… (${n} done)` : `↑ Analyze ${myRecords.length - n} more records`}
+                          {spotifyAnalyzing ? `Analyzing… (${n} done)` : `↑ Analyze next 10 (${myRecords.length - n} remaining)`}
                         </button>
                       ) : null}
                     </div>
