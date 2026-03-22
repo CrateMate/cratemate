@@ -1545,9 +1545,23 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                 {soundProfileOpen && (
                   <div className="space-y-2">
                     <div className="flex justify-end mb-1">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${isSpotify ? "border-emerald-900/40 text-emerald-700/80 bg-emerald-900/10" : "border-stone-800 text-stone-600 bg-stone-900/40"}`}>
-                        {isSpotify ? "via Spotify" : "estimated"}
-                      </span>
+                      {(() => {
+                        const src = fromSpotify?.source;
+                        const label = !isSpotify ? "estimated"
+                          : src === "tracks" ? "via Spotify ~"
+                          : src === "artist" ? "artist avg"
+                          : "via Spotify";
+                        const cls = !isSpotify
+                          ? "border-stone-800 text-stone-600 bg-stone-900/40"
+                          : src === "artist"
+                          ? "border-amber-900/40 text-amber-700/80 bg-amber-900/10"
+                          : "border-emerald-900/40 text-emerald-700/80 bg-emerald-900/10";
+                        return (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${cls}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </div>
                     {bars.map(({ label, value, color, hint }) => (
                       <div key={label} className="flex items-start gap-3">

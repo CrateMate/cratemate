@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { fetchAlbumFeatures } from "@/lib/spotify";
+import { fetchAlbumFeatures, type TracklistItem } from "@/lib/spotify";
 import {
   getSpotifyFeaturesCache,
   upsertSpotifyFeaturesCache,
@@ -32,7 +32,6 @@ export async function POST(request: Request) {
   const cacheKey = spotifyFeaturesKey(artist, title);
   const sharedCached = await getSpotifyFeaturesCache(cacheKey);
   if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
-    // Populate per-record cache and return
     const row = {
       record_id,
       energy: sharedCached.energy,
@@ -46,25 +45,51 @@ export async function POST(request: Request) {
     return NextResponse.json(row);
   }
 
-  // 3. Fetch features from Spotify (search → ReccoBeats audio features)
-  const features = await fetchAlbumFeatures(artist, title).catch(() => null);
+  // 3. Look up the Discogs tracklist from the release cache — used for Tier 2 fallback
+  let tracklist: TracklistItem[] | undefined;
+  try {
+    const { data: record } = await supabase
+      .from("records")
+      .select("discogs_id")
+      .eq("id", record_id)
+      .eq("user_id", userId)
+      .single();
+
+    if (record?.discogs_id) {
+      const { data: releaseCache } = await supabase
+        .from("discogs_metadata_cache")
+        .select("tracklist")
+        .eq("release_id", record.discogs_id)
+        .single();
+
+      if (releaseCache?.tracklist) {
+        const parsed = JSON.parse(releaseCache.tracklist);
+        if (Array.isArray(parsed)) tracklist = parsed as TracklistItem[];
+      }
+    }
+  } catch { /* tracklist lookup is best-effort */ }
+
+  // 4. Fetch features from Spotify → Tier 1 (album) → Tier 2 (tracks) → Tier 3 (artist)
+  const features = await fetchAlbumFeatures(artist, title, tracklist).catch(() => null);
   if (!features) return NextResponse.json(null);
 
-  // Store in per-record cache
-  const row = { record_id, ...features };
+  // `source` is a client-side label only — strip it before writing to DB
+  const { source, ...dbFields } = features;
+  const row = { record_id, ...dbFields };
   await supabase.from("spotify_features").upsert(row);
 
-  // Store in shared features cache
+  // Store in shared features cache (without source)
   await upsertSpotifyFeaturesCache(cacheKey, {
-    energy: features.energy,
-    valence: features.valence,
-    danceability: features.danceability,
-    acousticness: features.acousticness,
-    tempo: features.tempo,
-    loudness: features.loudness,
+    energy: dbFields.energy,
+    valence: dbFields.valence,
+    danceability: dbFields.danceability,
+    acousticness: dbFields.acousticness,
+    tempo: dbFields.tempo,
+    loudness: dbFields.loudness,
   });
 
-  return NextResponse.json(row);
+  // Return with source so the client can show the right badge
+  return NextResponse.json({ ...row, source });
 }
 
 // GET: return all cached features for the current user's collection
