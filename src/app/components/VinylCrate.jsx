@@ -607,7 +607,7 @@ function GenreTag({ genre, onClick, active }) {
             }
           : undefined
       }
-      className={`text-xs px-1.5 py-0.5 rounded-full border ${cls} whitespace-nowrap ${
+      className={`text-xs px-2 py-1 rounded-full border ${cls} whitespace-nowrap ${
         onClick ? "cursor-pointer" : ""
       } ${active ? "ring-1 ring-white/40" : ""}`}
     >
@@ -934,7 +934,7 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
 
 const WANTS_PAGE_SIZE = 25;
 
-function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold }) {
+function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold, nowPlaying }) {
   const [wantsPage, setWantsPage] = useState(1);
   const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(true);
   const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
@@ -993,21 +993,27 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           </div>
         </div>
       )}
-      <div className="px-4 py-1 flex items-center gap-2 flex-wrap">
+      <div className="px-4 py-1 flex items-center gap-2">
         <button
           onClick={onStartImport}
           disabled={isImporting}
           className="text-xs px-3 py-1.5 rounded-lg border border-stone-700 text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all disabled:opacity-40"
         >
-          {isImporting ? "Importing…" : "↓ Import Wantlist"}
+          {isImporting ? "Importing…" : "↓ Import"}
         </button>
+        {isImporting && progress !== null && (
+          <span className="text-[10px] text-stone-500">{progress}%</span>
+        )}
+        {wantlistImportJob?.status === "failed" && (
+          <span className="text-[10px] text-red-400">{wantlistImportJob.error || "Import failed"}</span>
+        )}
+        <div className="flex-1" />
         {pushPermission !== "granted" && (
           <button
             onClick={onSubscribePush}
-            className="text-xs px-3 py-1.5 rounded-lg border border-amber-900/40 bg-amber-950/20 text-amber-500 hover:bg-amber-900/30 hover:text-amber-300 transition-all"
-          >
-            🔔 Enable price alerts
-          </button>
+            title="Enable price alerts"
+            className="text-base text-stone-600 hover:text-amber-400 transition-colors px-1"
+          >🔔</button>
         )}
         {allGroups.length > 0 && (
           <button
@@ -1016,12 +1022,6 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           >
             {wantsInfiniteScroll ? "∞" : "p."}
           </button>
-        )}
-        {isImporting && progress !== null && (
-          <span className="text-[10px] text-stone-500">{progress}%</span>
-        )}
-        {wantlistImportJob?.status === "failed" && (
-          <span className="text-[10px] text-red-400">{wantlistImportJob.error || "Import failed"}</span>
         )}
       </div>
 
@@ -1055,7 +1055,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4 pb-8">
+        <div className="flex-1 overflow-y-auto px-4" style={{ paddingBottom: nowPlaying ? 96 : 32 }}>
           {visibleGroups.map((group) => {
             const key = group.master_id ? `master_${group.master_id}` : `release_${group.representative?.release_id}`;
             const repId = group.representative?.release_id;
@@ -1376,9 +1376,9 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             </div>
             <div className="flex flex-col gap-2.5 min-w-0 pt-1 flex-1">
               <div>
-                <div className="text-stone-200 text-sm truncate">{pressedYear || originalYear || "—"}</div>
+                <div className="text-stone-200 text-sm truncate">{originalYear || "—"}</div>
                 {isRepress && (
-                  <div className="text-stone-500 text-[11px] truncate mt-0.5">Orig. {record.year_original}</div>
+                  <div className="text-stone-500 text-[11px] truncate mt-0.5">{record.year_pressed} pressing</div>
                 )}
               </div>
               {condenseCondition(record.condition) && (
@@ -1535,13 +1535,15 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   ))}
                   <span className="flex-1" />
                   <span className="text-stone-600 text-xs shrink-0">~{Math.round(f.tempo)} BPM</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border shrink-0 ${isSpotify ? "border-emerald-900/40 text-emerald-700/80 bg-emerald-900/10" : "border-stone-800 text-stone-600 bg-stone-900/40"}`}>
-                    {isSpotify ? "via Spotify" : "estimated"}
-                  </span>
                   <span className="text-stone-600 text-xs shrink-0">{soundProfileOpen ? "▲" : "▼"}</span>
                 </button>
                 {soundProfileOpen && (
                   <div className="space-y-2">
+                    <div className="flex justify-end mb-1">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${isSpotify ? "border-emerald-900/40 text-emerald-700/80 bg-emerald-900/10" : "border-stone-800 text-stone-600 bg-stone-900/40"}`}>
+                        {isSpotify ? "via Spotify" : "estimated"}
+                      </span>
+                    </div>
                     {bars.map(({ label, value, color, hint }) => (
                       <div key={label} className="flex items-start gap-3">
                         <div className="flex flex-col shrink-0 w-[76px]">
@@ -7227,6 +7229,7 @@ export default function VinylCrate() {
           priceThresholds={priceThresholds}
           onSaveThreshold={savePriceThreshold}
           onRemoveThreshold={removePriceThreshold}
+          nowPlaying={!!nowPlaying}
           onStartImport={async () => {
             if (!wantlist) {
               // Load wantlist if not yet loaded
