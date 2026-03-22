@@ -108,7 +108,7 @@ export async function GET(request: Request) {
       // Get or refresh price
       let priceData: { lowest_listing: number | null; min_price: number | null; currency: string | null };
       const cached = await getPriceCache(threshold.release_id);
-      if (cached && isPriceCacheFresh(cached) && cached.lowest_listing !== undefined) {
+      if (cached && isPriceCacheFresh(cached) && cached.lowest_listing != null) {
         priceData = { lowest_listing: cached.lowest_listing ?? null, min_price: cached.min_price ?? null, currency: cached.currency ?? null };
         entry.price_source = "cache";
       } else {
