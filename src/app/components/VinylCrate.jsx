@@ -6028,33 +6028,44 @@ export default function VinylCrate() {
         </div>
       )}
 
-      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 overflow-x-auto scrollbar-hide ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
+      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {[
-          ["crate", "⏺ Crate"],
-          ["wants", "◇ Wants"],
-          ["hearts", "♥ Hearts"],
-          ["history", "▷ History"],
-          ["reco", "✦ Reco"],
-          ["stats", "◎ Stats"],
-          ["discover", "⊕ Discover"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => { setTab(id); setSelected(null); }}
-            className={`flex-1 py-1 rounded-xl text-xs font-medium transition-all shrink-0 ${
-              tab === id
-                ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
-                : viewMode === "drift" ? "text-stone-600 hover:text-stone-400 bg-black/40" : "text-stone-500 hover:text-stone-300"
-            }`}
-          >
-            {id === "crate" ? (
-              <span className="flex items-center justify-center gap-1">
-                <img src="/icon-192.png" alt="" width={11} height={11} className="rounded-sm opacity-75" />
-                Crate
-              </span>
-            ) : label}
-          </button>
-        ))}
+          ["crate",    "⏺", "Crate"],
+          ["wants",    "◇", "Wants"],
+          ["hearts",   "♥", "Faves"],
+          ["history",  "▷", "Log"],
+          ["reco",     "✦", "Picks"],
+          ["stats",    "◎", "Stats"],
+          ["discover", "⊕", "Connect"],
+        ].map(([id, icon, label]) => {
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => { setTab(id); setSelected(null); }}
+              className={`flex-1 py-1 rounded-xl text-xs font-medium transition-all ${
+                active
+                  ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
+                  : viewMode === "drift" ? "text-stone-600 hover:text-stone-400 bg-black/40" : "text-stone-500 hover:text-stone-300"
+              }`}
+            >
+              {active ? (
+                <span className="flex items-center justify-center gap-1">
+                  {id === "crate"
+                    ? <img src="/icon-192.png" alt="" width={11} height={11} className="rounded-sm opacity-75" />
+                    : icon}
+                  {label}
+                </span>
+              ) : (
+                <span className="flex items-center justify-center">
+                  {id === "crate"
+                    ? <img src="/icon-192.png" alt="" width={12} height={12} className="rounded-sm opacity-50" />
+                    : icon}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {tab === "crate" && (
