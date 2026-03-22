@@ -6071,21 +6071,28 @@ export default function VinylCrate() {
             />
             {/* Row 1: sort pill · ∞/pages · view toggles · Discogs icon · Add */}
             <div className="flex items-center gap-2">
-              {/* Cycling sort pill */}
-              <button
-                onClick={() => {
-                  const ORDER = ["artist", "year", "genre", "hearts"];
-                  const next = ORDER[(ORDER.indexOf(sortBy) + 1) % ORDER.length];
-                  setSortBy(next); setSortDir("asc");
-                }}
-                onContextMenu={(e) => { e.preventDefault(); setSortDir(d => d === "asc" ? "desc" : "asc"); }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-800/60 border border-stone-700/50 text-xs text-stone-300 hover:text-amber-300 transition-colors select-none"
-                title="Tap to cycle sort · right-click to flip direction"
-              >
-                <span>⇅</span>
-                <span>{{ artist: "A–Z", year: "Year", genre: "Genre", hearts: "♥" }[sortBy]}</span>
-                <span className="text-[10px] opacity-60">{sortDir === "asc" ? "↑" : "↓"}</span>
-              </button>
+              {/* Cycling sort pill — left side cycles type, right side flips direction */}
+              <div className="flex items-center rounded-full bg-stone-800/60 border border-stone-700/50 text-xs text-stone-300 select-none overflow-hidden">
+                <button
+                  onClick={() => {
+                    const ORDER = ["artist", "year", "genre", "hearts"];
+                    const next = ORDER[(ORDER.indexOf(sortBy) + 1) % ORDER.length];
+                    setSortBy(next); setSortDir("asc");
+                  }}
+                  className="flex items-center gap-1 pl-2.5 pr-2 py-1 hover:text-amber-300 transition-colors"
+                  title="Cycle sort"
+                >
+                  <span>⇅</span>
+                  <span>{{ artist: "A–Z", year: "Year", genre: "Genre", hearts: "♥" }[sortBy]}</span>
+                </button>
+                <button
+                  onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")}
+                  className="pl-1 pr-2.5 py-1 text-[10px] opacity-60 hover:opacity-100 hover:text-amber-300 transition-all border-l border-stone-700/50"
+                  title="Flip direction"
+                >
+                  {sortDir === "asc" ? "↑" : "↓"}
+                </button>
+              </div>
 
               {/* ∞ / pages toggle */}
               <button
@@ -6117,7 +6124,7 @@ export default function VinylCrate() {
                 </button>
                 {showDiscogsMenu && (
                   <div
-                    className="absolute right-0 bottom-full mb-1 z-50 rounded-xl border border-stone-700 bg-stone-900 shadow-lg overflow-hidden"
+                    className="absolute right-0 top-full mt-1 z-[70] rounded-xl border border-stone-700 bg-stone-900 shadow-lg overflow-hidden"
                     style={{ minWidth: 140 }}
                   >
                     {discogsConnected ? (
