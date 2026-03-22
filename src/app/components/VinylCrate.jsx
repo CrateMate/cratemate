@@ -426,15 +426,19 @@ export function CoverArt({ record, size = 64 }) {
   const needsITunes = isUpload || !upgraded;
 
   const [fallback, setFallback] = useState(() => _artCache.get(record.id) || null);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
-    if (!needsITunes) return;
-    return _enqueueArt(record, (url) => { if (url) setFallback(url); });
+    // Enqueue iTunes art if: no Discogs URL, user photo, or primary URL failed to load
+    if (!needsITunes && !imgError) return;
+    return _enqueueArt(record, (url) => {
+      if (url) { setFallback(url); setImgError(false); }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record.id]);
+  }, [record.id, imgError]);
 
   // Prefer iTunes art (higher quality); fall back to the Discogs URL so nothing goes blank
-  const src = fallback || upgraded;
+  const src = fallback || (imgError ? null : upgraded);
 
   if (src) {
     return (
@@ -446,7 +450,7 @@ export function CoverArt({ record, size = 64 }) {
           src={src}
           alt=""
           className="w-full h-full object-cover opacity-90"
-          onError={(e) => { e.currentTarget.style.display = "none"; }}
+          onError={() => setImgError(true)}
         />
       </div>
     );
@@ -709,7 +713,8 @@ function WantReleaseRow({ release, onPriceLoaded }) {
     >
       <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
         {release.thumb ? (
-          <img src={release.thumb} alt="" className="w-full h-full object-cover" />
+          <img src={release.thumb} alt="" className="w-full h-full object-cover"
+            onError={(e) => { e.currentTarget.style.display = "none"; }} />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-stone-700 text-xs">◇</div>
         )}
@@ -798,7 +803,8 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
       >
         <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-stone-800">
           {rep?.thumb ? (
-            <img src={rep.thumb} alt="" className="w-full h-full object-cover" />
+            <img src={rep.thumb} alt="" className="w-full h-full object-cover"
+              onError={(e) => { e.currentTarget.style.display = "none"; }} />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-stone-700">◇</div>
           )}
@@ -1191,6 +1197,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const [tracklistOpen, setTracklistOpen] = useState(false);
   const [soundProfileOpen, setSoundProfileOpen] = useState(false);
   const artTapRef = useRef(0);
+  const [heroFailed, setHeroFailed] = useState(false);
   const [entered, setEntered] = useState(false);
   const [closing, setClosing] = useState(false);
   useEffect(() => { requestAnimationFrame(() => setEntered(true)); }, []);
@@ -1365,9 +1372,9 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               }}
               title="Double-tap to log a play"
             >
-              {(heroHi || record.thumb) ? (
+              {(heroHi || record.thumb) && !heroFailed ? (
                 <img src={heroHi || record.thumb} alt="" className="w-full h-full object-cover pointer-events-none"
-                  onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  onError={() => setHeroFailed(true)} />
               ) : (
                 <div className="w-full h-full flex items-center justify-center pointer-events-none">
                   <VinylDisc record={record} size={206} />
@@ -8281,7 +8288,8 @@ export default function VinylCrate() {
           >
             <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
               {nowPlaying.record.thumb
-                ? <img src={nowPlaying.record.thumb} alt="" className="w-full h-full object-cover" />
+                ? <img src={nowPlaying.record.thumb} alt="" className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.style.display = "none"; }} />
                 : <div className="w-full h-full bg-stone-700" />}
             </div>
             <div className="flex-1 min-w-0">

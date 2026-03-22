@@ -1,4 +1,9 @@
 import { supabase } from "@/lib/supabase";
+import {
+  getSpotifyFeaturesCache,
+  upsertSpotifyFeaturesCache,
+  isSpotifyFeaturesCacheFresh,
+} from "@/lib/discogs/cache";
 
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID!;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET!;
@@ -234,9 +239,24 @@ async function fetchFeaturesByTracks(
 
 // Tier 3: find the artist on Spotify and average their top tracks.
 // Not album-specific but much better than genre estimates for any artist on Spotify.
+// Results are cached under the key "artist:{normalised(artist)}" for 90 days.
 async function fetchFeaturesByArtist(artist: string): Promise<SpotifyFeatures | null> {
   const isVA = /^various(\s+artists?)?$/i.test(artist.trim());
   if (isVA) return null;
+
+  const cacheKey = `artist:${normalise(artist)}`;
+
+  // Check artist-level cache first
+  const cached = await getSpotifyFeaturesCache(cacheKey);
+  if (cached && isSpotifyFeaturesCacheFresh(cached)) {
+    // null-energy sentinel means "not found" — skip API calls
+    if (cached.energy == null) return null;
+    return {
+      energy: cached.energy!, tempo: cached.tempo!, valence: cached.valence!,
+      danceability: cached.danceability!, acousticness: cached.acousticness!,
+      loudness: cached.loudness!, track_count: 0, source: "artist",
+    };
+  }
 
   const artistRes = await spotifyGet(
     `/search?q=${encodeURIComponent(artist)}&type=artist&limit=5`
@@ -250,7 +270,11 @@ async function fetchFeaturesByArtist(artist: string): Promise<SpotifyFeatures | 
     normalise(a.name).includes(normalise(artist)) ||
     normalise(artist).includes(normalise(a.name))
   );
-  if (!best) return null;
+  if (!best) {
+    // Cache "not found" sentinel for 14 days so we don't hammer the API
+    await upsertSpotifyFeaturesCache(cacheKey, {}, 14);
+    return null;
+  }
 
   const topRes = await spotifyGet(`/artists/${best.id}/top-tracks?market=US`);
   if (!topRes.ok) return null;
@@ -263,7 +287,17 @@ async function fetchFeaturesByArtist(artist: string): Promise<SpotifyFeatures | 
 
   const valid = await reccoBeatsFeatures(trackIds);
   if (valid.length === 0) return null;
-  return avgFeatures(valid, "artist");
+
+  const result = avgFeatures(valid, "artist");
+
+  // Cache artist-level features for 90 days
+  await upsertSpotifyFeaturesCache(cacheKey, {
+    energy: result.energy, tempo: result.tempo, valence: result.valence,
+    danceability: result.danceability, acousticness: result.acousticness,
+    loudness: result.loudness,
+  }, 90);
+
+  return result;
 }
 
 export async function fetchAlbumFeatures(

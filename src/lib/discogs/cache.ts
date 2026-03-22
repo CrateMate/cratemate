@@ -129,7 +129,8 @@ export async function getSpotifyFeaturesCache(key: string) {
 
 export async function upsertSpotifyFeaturesCache(
   key: string,
-  features: Omit<SpotifyFeaturesCacheRow, "cache_key" | "cached_at" | "expires_at">
+  features: Omit<SpotifyFeaturesCacheRow, "cache_key" | "cached_at" | "expires_at">,
+  ttlDays = 180
 ) {
   const now = new Date().toISOString();
   await supabase.from("spotify_features_cache").upsert(
@@ -137,7 +138,7 @@ export async function upsertSpotifyFeaturesCache(
       ...features,
       cache_key: key,
       cached_at: now,
-      expires_at: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString(),
     },
     { onConflict: "cache_key" }
   );

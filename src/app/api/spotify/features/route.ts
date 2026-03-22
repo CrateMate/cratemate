@@ -32,6 +32,8 @@ export async function POST(request: Request) {
   const cacheKey = spotifyFeaturesKey(artist, title);
   const sharedCached = await getSpotifyFeaturesCache(cacheKey);
   if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
+    // null-energy sentinel means all tiers failed for this title — skip API calls
+    if (sharedCached.energy == null) return NextResponse.json(null);
     const row = {
       record_id,
       energy: sharedCached.energy,
@@ -71,7 +73,11 @@ export async function POST(request: Request) {
 
   // 4. Fetch features from Spotify → Tier 1 (album) → Tier 2 (tracks) → Tier 3 (artist)
   const features = await fetchAlbumFeatures(artist, title, tracklist).catch(() => null);
-  if (!features) return NextResponse.json(null);
+  if (!features) {
+    // Cache "not found" sentinel for 14 days so we don't re-attempt every time
+    await upsertSpotifyFeaturesCache(cacheKey, {}, 14);
+    return NextResponse.json(null);
+  }
 
   // `source` is a client-side label only — strip it before writing to DB
   const { source, ...dbFields } = features;
