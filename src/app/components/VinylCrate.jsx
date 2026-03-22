@@ -4594,6 +4594,7 @@ export default function VinylCrate() {
   const [playSessions, setPlaySessions] = useState([]);
   const [viewMode, setViewMode] = useState("list");
   const [honeycombSort, setHoneycombSort] = useState("year");
+  const [honeycombSortDir, setHoneycombSortDir] = useState("asc");
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
   const [honeycombShape, setHoneycombShape] = useState(() => {
     try { return localStorage.getItem("cratemate_hc_shape") || "honeycomb"; } catch { return "honeycomb"; }
@@ -5272,13 +5273,14 @@ export default function VinylCrate() {
   const hasMore = infiniteScroll && visibleCount < filtered.length;
 
   const honeycombRecords = (() => {
+    const dir = honeycombSortDir === "asc" ? 1 : -1;
     if (honeycombSort === "year") {
       return [...filtered].sort((a, b) =>
-        (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999)
+        dir * ((a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999))
       );
     }
     if (honeycombSort === "az") {
-      return [...filtered].sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
+      return [...filtered].sort((a, b) => dir * (a.artist || "").localeCompare(b.artist || ""));
     }
     // Genre mode: biggest genre cluster first, most-played within genre first
     const primaryGenre = (r) => getGenres(r)[0] || "zzz";
@@ -6267,7 +6269,7 @@ export default function VinylCrate() {
                 />
               ) : (
               <HoneycombView
-                key={honeycombSort + honeycombShape}
+                key={honeycombSort + honeycombSortDir + honeycombShape}
                 records={honeycombRecords}
                 playCounts={playCounts}
                 zoom={honeycombZoom}
@@ -6359,15 +6361,27 @@ export default function VinylCrate() {
               {/* Top-right: sort cycle + shape toggles + hide button */}
               {!controlsHidden && (
               <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2">
-                <button
-                  onClick={() => {
-                    const order = ["year", "genre", "az"];
-                    setHoneycombSort(order[(order.indexOf(honeycombSort) + 1) % order.length]);
-                  }}
-                  className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-xs text-stone-400 hover:text-amber-300 transition-colors"
-                >
-                  ⇅ {honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : "A–Z"}
-                </button>
+                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden text-xs text-stone-400">
+                  <button
+                    onClick={() => {
+                      const order = ["year", "genre", "az"];
+                      setHoneycombSort(order[(order.indexOf(honeycombSort) + 1) % order.length]);
+                      setHoneycombSortDir("asc");
+                    }}
+                    className="flex items-center gap-1 pl-3 pr-2 py-1.5 hover:text-amber-300 transition-colors"
+                    title="Cycle sort"
+                  >
+                    <span>⇅</span>
+                    <span>{honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : "A–Z"}</span>
+                  </button>
+                  <button
+                    onClick={() => setHoneycombSortDir(d => d === "asc" ? "desc" : "asc")}
+                    className="pl-1 pr-3 py-1.5 text-[10px] opacity-60 hover:opacity-100 hover:text-amber-300 transition-all border-l border-white/10"
+                    title="Flip direction"
+                  >
+                    {honeycombSortDir === "asc" ? "↑" : "↓"}
+                  </button>
+                </div>
                 <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
                   <button onClick={() => setHoneycombShape("honeycomb")}
                     className={`px-3 py-1.5 text-xs transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⬡</button>
