@@ -5218,8 +5218,8 @@ export default function VinylCrate() {
     if (theme !== "personal" || !personalTheme) return;
     const root = document.documentElement;
 
-    // Build proportional genre gradient from the user's actual collection
-    const genreSlice = personalTheme.sorted.slice(0, 5);
+    // Build proportional genre gradient — same logic as collection card (top 4 genres)
+    const genreSlice = personalTheme.sorted.slice(0, 4);
     const total = genreSlice.reduce((s, [, c]) => s + c, 0);
     const stops = [];
     let pos = 0;
@@ -5230,8 +5230,8 @@ export default function VinylCrate() {
       if (i === genreSlice.length - 1) stops.push(`${c1} 100%`);
     });
     const vivid = `linear-gradient(135deg, ${stops.join(", ")})`;
-    // Dark overlay (~72%) on top of vivid — bold but liveable
-    const withOverlay = `linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.72)), ${vivid}`;
+    // Dark overlay (~55%) on top — lets the colors breathe through
+    const withOverlay = `linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0.55)), ${vivid}`;
     root.style.setProperty("--bg-app", withOverlay);
 
     return () => {

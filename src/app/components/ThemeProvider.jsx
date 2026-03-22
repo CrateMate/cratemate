@@ -20,12 +20,12 @@ function applyTheme(t) {
 
 function captureCurrentBg() {
   const root = document.documentElement;
-  // Prefer the JS-set inline variable (personal theme uses this)
   const inlineBg = root.style.getPropertyValue("--bg-app");
   if (inlineBg) return inlineBg;
-  // Fall back to computed (picks up CSS-defined --bg-app)
-  return getComputedStyle(root).getPropertyValue("--bg-app").trim() ||
-    "linear-gradient(160deg, #1c1610 0%, #0c0b09 100%)";
+  return (
+    getComputedStyle(root).getPropertyValue("--bg-app").trim() ||
+    "linear-gradient(160deg, #1c1610 0%, #0c0b09 100%)"
+  );
 }
 
 export default function ThemeProvider({ children }) {
@@ -51,45 +51,47 @@ export default function ThemeProvider({ children }) {
   function setTheme(t) {
     if (t === theme) return;
 
-    // Cancel any in-flight transition
     if (cleanupRef.current) { clearTimeout(cleanupRef.current); cleanupRef.current = null; }
 
-    // Snapshot the current background before switching
+    // Snapshot old background before switching
     const oldBg = captureCurrentBg();
 
-    // Show overlay covering the whole screen with the OLD theme
-    setOverlay({ bg: oldBg, collapsed: false });
-
-    // Switch theme immediately — new theme renders underneath
+    // Switch theme — body background updates immediately to new theme
     setThemeState(t);
     localStorage.setItem("cratemate_theme", t);
     applyTheme(t);
 
-    // Two rAFs to ensure the overlay is painted at full-screen before we animate
+    // Overlay carries the OLD background, sits at z-index 0 (behind all content)
+    // It starts covering the full screen, then collapses toward BR — revealing
+    // the new background from TL without touching the UI layer above
+    setOverlay({ bg: oldBg, collapsed: false });
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        // Collapse all 4 corners toward the bottom-right — diagonal wipe from TL→BR
         setOverlay(prev => prev ? { ...prev, collapsed: true } : null);
       });
     });
 
-    // Remove overlay after the CSS transition finishes
     cleanupRef.current = setTimeout(() => {
       setOverlay(null);
       cleanupRef.current = null;
-    }, 620);
+    }, 650);
   }
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
-      {children}
+      {/*
+        Background wash overlay — z-index 0, behind the content wrapper below.
+        Carries the OLD theme's background and collapses toward the bottom-right,
+        revealing the new theme background (on body) from top-left.
+      */}
       {overlay && (
         <div
           aria-hidden
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 9999,
+            zIndex: 0,
             pointerEvents: "none",
             background: overlay.bg,
             clipPath: overlay.collapsed
@@ -101,6 +103,14 @@ export default function ThemeProvider({ children }) {
           }}
         />
       )}
+      {/*
+        Content wrapper — z-index 1, always above the background overlay.
+        UI elements, modals, toasts (z-index 50+) all live inside here
+        and are never obscured by the background animation.
+      */}
+      <div style={{ position: "relative", zIndex: 1 }}>
+        {children}
+      </div>
     </ThemeContext.Provider>
   );
 }
