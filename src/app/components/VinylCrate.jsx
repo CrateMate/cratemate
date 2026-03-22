@@ -5991,7 +5991,7 @@ export default function VinylCrate() {
       className="h-dvh flex flex-col max-w-md mx-auto"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
-      {!selected && viewMode !== "drift" && (
+      {(!selected || tab !== "crate") && viewMode !== "drift" && (
         <div className="px-5 pt-7 pb-2 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <img src="/icon-192.png" alt="CrateMate" width={46} height={46} className="rounded-xl shrink-0" />
@@ -6096,7 +6096,7 @@ export default function VinylCrate() {
               Double-tap any record to instantly log a play and start your streak.
             </HintBanner>
           )}
-          {viewMode !== "drift" && !selected && <div className="px-4 space-y-2 mb-1">
+          {viewMode !== "drift" && (!selected || tab !== "crate") && <div className="px-4 space-y-2 mb-1">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -6592,34 +6592,6 @@ export default function VinylCrate() {
                 </>
               )}
             </div>
-          )}
-          {selected && (
-            <DetailSheet
-              record={selected}
-              hasNowPlaying={!!nowPlaying}
-              onClose={() => setSelected(null)}
-              onGenreClick={toggleGenre}
-              activeGenres={activeGenres}
-              onToggleForSale={toggleForSale}
-              onDelete={handleDelete}
-              onLogPlay={logPlay}
-              onUndoLogPlay={undoLogPlay}
-              onEnterTrail={(rec) => { enterTrail(rec); setSelected(null); }}
-              onRecordUpdate={(patch) => {
-                const updated = { ...selected, ...patch };
-                setSelected(updated);
-                setCollection((prev) => Array.isArray(prev) ? prev.map((r) => r.id === updated.id ? updated : r) : prev);
-              }}
-              playCount={playCounts[selected.id] || 0}
-              lastPlayedDate={lastPlayedDates[selected.id] || null}
-              onSeedNext={(rec) => {
-                setLastPlayed(rec);
-                setTab("reco");
-                setSelected(null);
-                setAutoTriggerReco(true);
-              }}
-              spotifyFeatures={spotifyFeatures}
-            />
           )}
         </div>
       )}
@@ -8005,6 +7977,35 @@ export default function VinylCrate() {
           )}
           </div>
         </div>
+      )}
+
+      {selected && (
+        <DetailSheet
+          record={selected}
+          hasNowPlaying={!!nowPlaying}
+          onClose={() => setSelected(null)}
+          onGenreClick={toggleGenre}
+          activeGenres={activeGenres}
+          onToggleForSale={toggleForSale}
+          onDelete={handleDelete}
+          onLogPlay={logPlay}
+          onUndoLogPlay={undoLogPlay}
+          onEnterTrail={(rec) => { enterTrail(rec); setSelected(null); }}
+          onRecordUpdate={(patch) => {
+            const updated = { ...selected, ...patch };
+            setSelected(updated);
+            setCollection((prev) => Array.isArray(prev) ? prev.map((r) => r.id === updated.id ? updated : r) : prev);
+          }}
+          playCount={playCounts[selected.id] || 0}
+          lastPlayedDate={lastPlayedDates[selected.id] || null}
+          onSeedNext={(rec) => {
+            setLastPlayed(rec);
+            setTab("reco");
+            setSelected(null);
+            setAutoTriggerReco(true);
+          }}
+          spotifyFeatures={spotifyFeatures}
+        />
       )}
 
       {showStoryPreview && storyCanvases && (
