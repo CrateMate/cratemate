@@ -1147,7 +1147,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
     >
       <CoverArt record={record} size={52} />
       <div className="flex-1 min-w-0">
-        <MarqueeTitle style={{ fontFamily: "'Fraunces',serif", fontSize: 15, color: '#fef3c7', lineHeight: 1.3 }}>
+        <MarqueeTitle style={{ fontFamily: "'Fraunces',serif", fontSize: 15, color: 'var(--text-heading)', lineHeight: 1.3 }}>
           {record.title}
         </MarqueeTitle>
         <div className="flex items-center gap-1 flex-wrap mt-0.5">
