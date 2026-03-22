@@ -415,9 +415,16 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
     // A cached cover is only "good" if it's not itself a low-res thumbnail.
     const cachedCoverOk = !!(cached?.cover_image && !isLowResThumb(cached.cover_image));
 
+    // year_original === year_pressed means the bad "no master" fallback was stored — we need to
+    // re-fetch the release to get master_id and try the master endpoint again.
+    const cachedYearBadFallback =
+      cached?.year_original != null &&
+      cached?.year_pressed != null &&
+      cached.year_original === cached.year_pressed;
+
     let release: DiscogsRelease | null = null;
     const needsReleaseCall = (needsYearFix || needsReleaseDateFix || (needsThumb && !thumb)) &&
-      (needsReleaseDateFix || !(cached?.year_pressed && cached?.year_original && (!needsThumb || cachedCoverOk)));
+      (needsReleaseDateFix || cachedYearBadFallback || !(cached?.year_pressed && cached?.year_original && (!needsThumb || cachedCoverOk)));
 
     if (needsReleaseCall) {
       await new Promise((r) => setTimeout(r, RATE_DELAY_MS));
@@ -444,10 +451,12 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
     const patch: Record<string, unknown> = {};
     if (needsYearFix) {
       const pressedYear = cached?.year_pressed ?? (release ? toYear(release.year) : null);
-      let originalYear = cached?.year_original ?? pressedYear;
+      // Don't fall back to pressedYear here — only set originalYear once we have
+      // an authoritative source (the master release). If no master exists, leave null.
+      let originalYear: number | null = cachedYearBadFallback ? null : (cached?.year_original ?? null);
 
-      // Only fetch master if we don't already have year_original cached.
-      if (!cached?.year_original) {
+      // Fetch master if we don't have a trustworthy year_original yet.
+      if (originalYear == null || cachedYearBadFallback) {
         const masterId =
           release && typeof (release as { master_id?: unknown }).master_id === "number"
             ? ((release as { master_id: number }).master_id)
@@ -457,15 +466,20 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
           const masterRes = await fetchWithRetry(`${DISCOGS_API}/masters/${masterId}`, access_token, access_token_secret);
           if (masterRes.ok) {
             const master = await masterRes.json();
-            originalYear = toYear(master.year) || originalYear;
+            const masterYear = toYear(master.year);
+            if (masterYear) originalYear = masterYear;
             if (!thumb) thumb = releaseThumb(master as DiscogsRelease);
-            // Cache the original year so we never call the master again.
+            // Cache the original year so we don't call the master again.
             await upsertReleaseCache(releaseId, {
               year_original: originalYear ?? undefined,
               cover_image: (thumb || cached?.cover_image) ?? undefined,
               thumb: (thumb || cached?.cover_image) ?? undefined,
             });
           }
+        }
+        // If release has no master_id, clear the bad fallback from cache so we don't retry forever.
+        if (!masterId && cachedYearBadFallback) {
+          await upsertReleaseCache(releaseId, { year_original: null });
         }
       }
 
