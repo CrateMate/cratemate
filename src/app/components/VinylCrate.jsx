@@ -1191,8 +1191,11 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const [tracklistOpen, setTracklistOpen] = useState(false);
   const [soundProfileOpen, setSoundProfileOpen] = useState(false);
   const artTapRef = useRef(0);
-  const [pullY, setPullY] = useState(0);
-  const pullStartY = useRef(null);
+  const [closing, setClosing] = useState(false);
+  function slideClose() {
+    setClosing(true);
+    setTimeout(onClose, 280);
+  }
 
   function toggleFav(key, title) {
     const getFavKey = (f) => (typeof f === "object" ? f.key : f);
@@ -1326,38 +1329,28 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50">
-      <button className="absolute inset-0" onClick={onClose} aria-label="Close" />
+      <button className="absolute inset-0" onClick={slideClose} aria-label="Close" />
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col justify-end">
         <div
           className="bg-stone-950 border border-stone-800/80 border-b-0 rounded-t-3xl px-5 pt-5 overflow-y-auto"
           style={{
             maxHeight: "92vh",
             paddingBottom: hasNowPlaying ? 84 : 28,
-            transform: pullY > 0 ? `translateY(${pullY}px)` : undefined,
-            transition: pullY === 0 ? "transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)" : "none",
+            transform: closing ? "translateY(100%)" : "translateY(0)",
+            transition: "transform 0.28s cubic-bezier(0.4, 0, 1, 1)",
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Pull-down handle to dismiss */}
-          <div
-            className="w-10 h-1.5 bg-white/20 rounded-full mx-auto mb-4 cursor-grab active:cursor-grabbing"
-            style={{ touchAction: "none" }}
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              pullStartY.current = e.clientY;
-            }}
-            onPointerMove={(e) => {
-              if (pullStartY.current === null) return;
-              const delta = Math.max(0, e.clientY - pullStartY.current);
-              setPullY(delta);
-            }}
-            onPointerUp={(e) => {
-              if (pullStartY.current === null) return;
-              const delta = Math.max(0, e.clientY - pullStartY.current);
-              pullStartY.current = null;
-              if (delta > 80) { onClose(); } else { setPullY(0); }
-            }}
-          />
+          {/* Tap-to-dismiss handle */}
+          <button
+            onClick={slideClose}
+            className="flex items-center justify-center mx-auto mb-4 w-10 h-5 text-stone-600 hover:text-stone-400 transition-colors"
+            aria-label="Close"
+          >
+            <svg width="20" height="10" viewBox="0 0 20 10" fill="none">
+              <path d="M2 2l8 6 8-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
 
           {/* Header: album art (double-tap to log) + metadata to the right */}
           <div className="flex gap-3 mb-4 items-start">
