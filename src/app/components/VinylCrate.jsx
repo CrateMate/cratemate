@@ -2195,6 +2195,42 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
 function ImportProgressBar({ importResult, enrichLoading }) {
   const stage = importResult?.stage;
   const recordCount = (importResult?.imported || 0) + (importResult?.updated || 0);
+  const progress = importResult?.enrichProgress;
+  const meta = importResult?.meta;
+
+  let enrichLine = null;
+  if (stage === "enriching" || enrichLoading) {
+    const hasProgress = progress?.considered > 0;
+    enrichLine = (
+      <>
+        <span className="text-amber-500 animate-spin inline-block">⟳</span>
+        <span className="text-amber-500/70">
+          {hasProgress
+            ? `Fetching metadata… ${progress.processed} of ${progress.considered}`
+            : "Fetching metadata…"}
+        </span>
+      </>
+    );
+  } else if (meta?.timedOut) {
+    enrichLine = (
+      <>
+        <span className="text-stone-500">·</span>
+        <span className="text-stone-500">Metadata still syncing — check back in a minute</span>
+      </>
+    );
+  } else if (stage === "done" && meta) {
+    const nothingToDo = meta.considered === 0;
+    enrichLine = (
+      <>
+        <span className="text-emerald-400">✓</span>
+        <span className="text-emerald-400/70">
+          {nothingToDo ? "Everything up to date" : `${meta.updated || 0} records updated`}
+        </span>
+      </>
+    );
+  } else {
+    enrichLine = <span className="text-stone-600">· Metadata pending</span>;
+  }
 
   return (
     <div className="space-y-1">
@@ -2204,25 +2240,9 @@ function ImportProgressBar({ importResult, enrichLoading }) {
           Collection loaded{recordCount > 0 ? ` (${recordCount} records)` : ""}
         </span>
       </div>
-      <div className="flex items-center gap-1.5">
-        {stage === "enriching" || enrichLoading ? (
-          <>
-            <span className="text-amber-500 animate-spin inline-block">⟳</span>
-            <span className="text-amber-500/70">Enriching metadata…</span>
-          </>
-        ) : stage === "done" && importResult?.meta ? (
-          <>
-            <span className="text-emerald-400">✓</span>
-            <span className="text-emerald-400/70">
-              Metadata updated ({importResult.meta.updated || 0} of {importResult.meta.considered || 0})
-            </span>
-          </>
-        ) : (
-          <span className="text-stone-600">· Metadata pending</span>
-        )}
-      </div>
+      <div className="flex items-center gap-1.5">{enrichLine}</div>
       {importResult?.has_more && (
-        <div className="text-stone-500 text-[10px]">More pages will be imported in the background.</div>
+        <div className="text-stone-500 text-[10px]">Large collection — remaining records importing in background.</div>
       )}
     </div>
   );
@@ -4758,6 +4778,9 @@ export default function VinylCrate() {
   const [discogsUsername, setDiscogsUsername] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState(() => {
+    try { return localStorage.getItem("cratemate_last_synced") || null; } catch { return null; }
+  });
   const [showAddModal, setShowAddModal] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [enrichLoading, setEnrichLoading] = useState(false);
@@ -5559,9 +5582,14 @@ export default function VinylCrate() {
           setImportResult((prev) => ({ ...prev, enrichJobId: enrichData.job_id, stage: "enriching" }));
           setEnrichLoading(true);
           // Poll enrichment in background
-          runEnrichAll("full")
+          runEnrichAll("full", (progress) => {
+            setImportResult((prev) => ({ ...prev, enrichProgress: progress }));
+          })
             .then((meta) => {
               setImportResult((prev) => ({ ...prev, meta, stage: "done" }));
+              const syncedAt = new Date().toISOString();
+              try { localStorage.setItem("cratemate_last_synced", syncedAt); } catch {}
+              setLastSyncedAt(syncedAt);
               refreshRecords();
             })
             .catch((enrichErr) => {
@@ -5581,7 +5609,7 @@ export default function VinylCrate() {
     }
   }
 
-  async function runEnrichAll(mode) {
+  async function runEnrichAll(mode, onProgress) {
     // Start both jobs simultaneously — release metadata (Discogs) and artist dates (MusicBrainz)
     // are independent so they can run in parallel.
     const [metaRes, artistRes] = await Promise.all([
@@ -5598,15 +5626,27 @@ export default function VinylCrate() {
     if (!metaJobId) throw new Error("Missing metadata job id");
     if (!artistJobId) throw new Error("Missing artist job id");
 
-    // Poll both jobs in one loop until both are done
+    // Poll both jobs until done or 4-minute timeout (400 × 600ms = 240s)
+    const MAX_POLLS = 400;
+    let polls = 0;
     let metaDone = false, artistDone = false;
     let metaLatest = metaData, artistLatest = artistData;
     while (!metaDone || !artistDone) {
       await new Promise((r) => setTimeout(r, 600));
+      polls++;
+      if (polls > MAX_POLLS) {
+        // Timed out — let the server-side job finish on its own
+        return { updated: 0, considered: metaLatest.considered || 0, timedOut: true };
+      }
       if (!metaDone) {
         const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`);
         const data = await readJsonOrText(res);
-        if (res.ok) metaLatest = data;
+        if (res.ok) {
+          metaLatest = data;
+          if (onProgress && data.considered > 0) {
+            onProgress({ processed: data.processed || 0, considered: data.considered || 0 });
+          }
+        }
         if (data?.status === "completed" || data?.status === "failed") metaDone = true;
       }
       if (!artistDone) {
@@ -6206,8 +6246,20 @@ export default function VinylCrate() {
                           disabled={importLoading}
                           className="w-full text-left text-xs px-3 py-2 text-stone-400 hover:text-amber-300 hover:bg-stone-800 transition-colors disabled:opacity-40"
                         >
-                          {importLoading ? "Importing..." : `↓ Import${discogsUsername ? ` @${discogsUsername}` : ""}`}
+                          {importLoading ? "Importing..." : `↓ Sync${discogsUsername ? ` @${discogsUsername}` : ""}`}
                         </button>
+                        {lastSyncedAt && !importLoading && (
+                          <div className="px-3 pb-1.5 text-[10px] text-stone-600">
+                            {(() => {
+                              const mins = Math.round((Date.now() - new Date(lastSyncedAt).getTime()) / 60000);
+                              if (mins < 2) return "Synced just now";
+                              if (mins < 60) return `Synced ${mins}m ago`;
+                              const hrs = Math.round(mins / 60);
+                              if (hrs < 24) return `Synced ${hrs}h ago`;
+                              return `Synced ${Math.round(hrs / 24)}d ago`;
+                            })()}
+                          </div>
+                        )}
                         <button
                           onClick={async () => {
                             setShowDiscogsMenu(false);
@@ -6460,7 +6512,12 @@ export default function VinylCrate() {
                   <button onClick={() => setHoneycombShape("tiles")}
                     className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "tiles" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>▦</button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); toggleScreensaver(); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const next = !screensaverEnabled;
+                      localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
+                      setScreensaverEnabled(next);
+                    }}
                     title={screensaverEnabled ? "Disable auto-pan" : "Enable auto-pan"}
                     className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${screensaverEnabled ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}
                   >⟳</button>
