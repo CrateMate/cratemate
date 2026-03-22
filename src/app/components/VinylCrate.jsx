@@ -8163,10 +8163,10 @@ export default function VinylCrate() {
       )}
 
       {showSettings && (
-        <div className="fixed inset-0 z-[70] flex flex-col justify-end" onClick={() => setShowSettings(false)}>
+        <div className="fixed inset-0 z-[200] flex flex-col justify-end" onClick={() => setShowSettings(false)}>
           <div
-            className="w-full max-w-md mx-auto rounded-t-3xl border border-stone-800/60 pb-10 pt-5 px-5 overflow-y-auto"
-            style={{ background: "var(--bg-surface, #0c0b09)", maxHeight: "80vh" }}
+            className="w-full max-w-md mx-auto rounded-t-3xl border border-stone-800/60 pt-5 px-5 overflow-y-auto"
+            style={{ background: "var(--bg-surface, #0c0b09)", maxHeight: "80vh", paddingBottom: nowPlaying ? 96 : 40 }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
