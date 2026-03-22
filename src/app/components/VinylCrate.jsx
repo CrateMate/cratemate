@@ -1183,7 +1183,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onUndoLogPlay, onEnterTrail, onRecordUpdate, playCount, lastPlayedDate, spotifyFeatures }) {
+function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onRecordUpdate, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1382,19 +1382,22 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                 )}
               </div>
               {condenseCondition(record.condition) && (
-                <div className="text-stone-200 text-sm truncate">{condenseCondition(record.condition)}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-stone-600 text-[10px] shrink-0">M/S</span>
+                  <span className="text-stone-200 text-sm">{condenseCondition(record.condition)}</span>
+                </div>
               )}
               {record.label && (
-                <div className="text-stone-400 text-xs truncate">{record.label.split(",")[0].trim()}</div>
+                <MarqueeTitle style={{ fontSize: 12, color: "#a8a29e" }}>
+                  {record.label.split(",")[0].trim()}
+                </MarqueeTitle>
               )}
               {playCount > 0 && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onUndoLogPlay?.(record.id); }}
-                    className="text-stone-700 hover:text-stone-400 text-xs transition-colors"
-                    title="Undo last play"
-                  >↩</button>
+                  {playCountThisYear > 0 && playCountThisYear < playCount && (
+                    <span className="text-stone-700 text-xs">· {playCountThisYear} this year</span>
+                  )}
                 </div>
               )}
               {/* Genre pills — to the right of art */}
@@ -1402,9 +1405,6 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                 {getGenres(record).map((g) => (
                   <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
                 ))}
-                {record.is_compilation && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-stone-700/50 text-stone-500">Comp.</span>
-                )}
               </div>
             </div>
           </div>
@@ -1413,15 +1413,20 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
           <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }} className="text-amber-50 font-semibold leading-tight mb-1">
             {record.title}
           </div>
-          <div className="text-sm mb-4">
+          <div className="flex items-baseline gap-2 flex-wrap mb-4">
             {record.discogs_id ? (
               <a
                 href={`/artist/${record.discogs_id}`}
                 onClick={(e) => e.stopPropagation()}
-                className="text-amber-400/80 underline decoration-dotted underline-offset-2 hover:text-amber-300 transition-colors cursor-pointer"
+                className="text-amber-400/80 text-sm underline decoration-dotted underline-offset-2 hover:text-amber-300 transition-colors cursor-pointer"
               >{stripArtistNum(record.artist)}</a>
             ) : (
-              <span className="text-stone-400">{stripArtistNum(record.artist)}</span>
+              <span className="text-stone-400 text-sm">{stripArtistNum(record.artist)}</span>
+            )}
+            {(getFormat(record) || record.is_compilation) && (
+              <span className="text-stone-600 text-xs shrink-0">
+                {[getFormat(record), record.is_compilation ? "Comp." : null].filter(Boolean).join(" · ")}
+              </span>
             )}
           </div>
 
@@ -7266,7 +7271,7 @@ export default function VinylCrate() {
                                       {count > 1 && (
                                         <span className="text-stone-500 text-[10px]">×{count}</span>
                                       )}
-                                      {mostRecentPlay && (
+                                      {mostRecentPlay && new Date(mostRecentPlay.played_at).toDateString() === new Date().toDateString() && (
                                         <button
                                           onClick={async (e) => {
                                             e.stopPropagation();
@@ -8126,7 +8131,6 @@ export default function VinylCrate() {
           onToggleForSale={toggleForSale}
           onDelete={handleDelete}
           onLogPlay={logPlay}
-          onUndoLogPlay={undoLogPlay}
           onEnterTrail={(rec) => { enterTrail(rec); setSelected(null); }}
           onRecordUpdate={(patch) => {
             const updated = { ...selected, ...patch };
@@ -8134,6 +8138,7 @@ export default function VinylCrate() {
             setCollection((prev) => Array.isArray(prev) ? prev.map((r) => r.id === updated.id ? updated : r) : prev);
           }}
           playCount={playCounts[selected.id] || 0}
+          playCountThisYear={playSessions.filter(s => String(s.record_id) === String(selected.id) && new Date(s.played_at).getFullYear() === new Date().getFullYear()).length}
           lastPlayedDate={lastPlayedDates[selected.id] || null}
           onSeedNext={(rec) => {
             setLastPlayed(rec);
