@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/spotify/callback(.*)",
   "/crate/(.*)",
   "/api/crate/(.*)",
+  "/api/cron/(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
