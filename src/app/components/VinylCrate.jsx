@@ -4974,7 +4974,12 @@ export default function VinylCrate() {
     const mins = Math.floor((Date.now() - new Date(loggedAt).getTime()) / 60000);
     if (mins < 1) return "Now Playing";
     if (mins < 60) return `Last played · ${mins}m ago`;
-    return `Last played · ${Math.floor(mins / 60)}h ago`;
+    if (mins < 1440) return `Last played · ${Math.floor(mins / 60)}h ago`;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const logged = new Date(loggedAt); logged.setHours(0, 0, 0, 0);
+    const days = Math.round((today - logged) / 86400000);
+    if (days === 1) return "Last played · yesterday";
+    return `Last played · ${days} days ago`;
   }
 
   async function handleDoubleTap(record) {
@@ -8203,7 +8208,10 @@ export default function VinylCrate() {
           className="fixed bottom-0 left-0 right-0 z-[190] border-t border-stone-800/60 backdrop-blur-md"
           style={{ background: "rgba(12,11,9,0.92)" }}
         >
-          <div className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto">
+          <div
+            className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto cursor-pointer"
+            onClick={() => setSelected(nowPlaying.record)}
+          >
             <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
               {nowPlaying.record.thumb
                 ? <img src={nowPlaying.record.thumb} alt="" className="w-full h-full object-cover" />
@@ -8214,11 +8222,12 @@ export default function VinylCrate() {
               <div className="text-stone-500 text-xs">{relativePlayTime(nowPlaying.loggedAt)}</div>
             </div>
             <button
-              onClick={() => { enterTrail(nowPlaying.record); setSelected(null); }}
+              onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record); setSelected(null); }}
               className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
             >▷ Session</button>
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 const sid = playSessions[0]?.id;
                 setDismissedSessionId(sid);
                 try { localStorage.setItem("cratemate_np_dismissed", sid || ""); } catch {}
