@@ -6052,10 +6052,10 @@ export default function VinylCrate() {
       <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {[
           ["crate",    "⏺", "Crate"],
-          ["wants",    "◉", "Wants"],
-          ["hearts",   "♥", "Faves"],
           ["history",  "▷", "Log"],
           ["reco",     "✦", "Picks"],
+          ["hearts",   "♥", "Faves"],
+          ["wants",    "◉", "Wants"],
           ["stats",    "◎", "Stats"],
           ["discover", "⊕", "Connect"],
         ].map(([id, icon, label]) => {
