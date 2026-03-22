@@ -1222,17 +1222,20 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
     }).catch(() => {});
   }
   const [heroUrl, setHeroUrl] = useState("");
-  const [itunesUrl, setItunesUrl] = useState("");
+  // Initialize from _artCache immediately — CoverArt populates this for visible records
+  const [itunesUrl, setItunesUrl] = useState(() => _artCache.get(record?.id) || "");
   const preferThumb = !!record?.thumb;
 
   useEffect(() => {
     setHeroUrl("");
-    setItunesUrl("");
+    // Pull from art cache first (synchronous — no API call needed)
+    setItunesUrl(_artCache.get(record?.id) || "");
   }, [record?.id]);
 
-  // Try iTunes for a high-res hero whenever the record lacks good art.
+  // Fetch iTunes art as fallback for records without a working thumb
   useEffect(() => {
     if (!record?.artist && !record?.title) return;
+    if (_artCache.get(record?.id)) return; // already have it
     if (record?.thumb && !isUserPhoto(record.thumb)) return; // already have decent art
     let cancelled = false;
     fetchITunesArt(record.artist, record.title).then((url) => {
@@ -1373,17 +1376,29 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               }}
               title="Double-tap to log a play"
             >
-              {heroSrcOverride !== false && (heroHi || record.thumb) ? (
+              {heroSrcOverride !== false && (heroHi || itunesUrl || record.thumb) ? (
                 <img
                   src={heroSrcOverride || heroHi || record.thumb}
                   alt=""
                   className="w-full h-full object-cover pointer-events-none"
                   onError={() => {
-                    const current = heroSrcOverride || heroHi || record.thumb;
-                    const thumb = record.thumb;
-                    // If we failed on the high-res URL and thumb is different, try thumb next
-                    if (current !== thumb && thumb) {
-                      setHeroSrcOverride(thumb);
+                    const itunes = _artCache.get(record.id) || itunesUrl;
+                    if (heroSrcOverride == null) {
+                      // Failed on heroHi — try thumb if it's a different URL
+                      if (record.thumb && record.thumb !== heroHi) {
+                        setHeroSrcOverride(record.thumb);
+                      } else if (itunes && itunes !== heroHi) {
+                        setHeroSrcOverride(itunes);
+                      } else {
+                        setHeroSrcOverride(false);
+                      }
+                    } else if (heroSrcOverride === record.thumb) {
+                      // Failed on thumb — try iTunes if not already tried
+                      if (itunes && itunes !== heroHi && itunes !== record.thumb) {
+                        setHeroSrcOverride(itunes);
+                      } else {
+                        setHeroSrcOverride(false);
+                      }
                     } else {
                       setHeroSrcOverride(false); // all options exhausted → VinylDisc
                     }
