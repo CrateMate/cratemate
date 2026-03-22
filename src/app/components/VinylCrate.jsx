@@ -4717,17 +4717,29 @@ export default function VinylCrate() {
   // Auto-hide header on scroll down, reveal on scroll up
   const [headerVisible, setHeaderVisible] = useState(true);
   const lastScrollY = useRef(0);
+  // Accumulate upward movement — prevents iOS rubber-band bounce from re-showing header
+  const upScrollAccum = useRef(0);
+  const SHOW_ACCUM = 24; // px of upward travel required before header re-appears
   function handleTabScroll(e) {
     const y = e.currentTarget.scrollTop;
     const delta = y - lastScrollY.current;
-    if (Math.abs(delta) < 8) return;
-    if (delta > 0 && y > 40) setHeaderVisible(false);
-    else if (delta < 0) setHeaderVisible(true);
     lastScrollY.current = y;
+    if (Math.abs(delta) < 4) return;
+    if (delta > 0) {
+      upScrollAccum.current = 0;
+      if (y > 40) setHeaderVisible(false);
+    } else {
+      upScrollAccum.current += Math.abs(delta);
+      if (upScrollAccum.current >= SHOW_ACCUM) {
+        upScrollAccum.current = 0;
+        setHeaderVisible(true);
+      }
+    }
   }
   useEffect(() => {
     setHeaderVisible(true);
     lastScrollY.current = 0;
+    upScrollAccum.current = 0;
   }, [tab]);
 
   const [isDiscoverable, setIsDiscoverable] = useState(false);
@@ -6008,12 +6020,13 @@ export default function VinylCrate() {
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
       <div style={{
-        overflow: "hidden",
-        maxHeight: headerVisible ? "100px" : "0px",
+        display: "grid",
+        gridTemplateRows: headerVisible ? "1fr" : "0fr",
         opacity: headerVisible ? 1 : 0,
-        transition: "max-height 0.28s ease, opacity 0.22s ease",
+        transition: "grid-template-rows 0.28s ease, opacity 0.22s ease",
         pointerEvents: headerVisible ? "auto" : "none",
       }}>
+      <div style={{ overflow: "hidden" }}>
       {(!selected || tab !== "crate") && viewMode !== "drift" && (
         <div className="px-5 pt-7 pb-2 flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -6071,6 +6084,7 @@ export default function VinylCrate() {
           </div>
         </div>
       )}
+      </div>
       </div>
 
       <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${selected || viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
