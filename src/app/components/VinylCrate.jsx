@@ -2302,14 +2302,18 @@ function ImportProgressBar({ importResult, enrichLoading }) {
   // Enrichment / metadata line
   let enrichLine = null;
   if (stage === "enriching" || enrichLoading) {
-    const hasProgress = progress?.considered > 0;
+    const offset = progress?.offset;
+    const total  = progress?.total;
+    const progressLabel = offset != null && total
+      ? `${offset} of ${total} records`
+      : offset != null
+        ? `${offset} records`
+        : null;
     enrichLine = (
       <div className="flex items-center gap-1.5">
         <span className="text-amber-500 animate-spin inline-block">⟳</span>
         <span className="text-amber-500/70">
-          {hasProgress
-            ? `Fetching metadata… ${progress.processed} of ${progress.considered}`
-            : "Fetching metadata…"}
+          {progressLabel ? `Fetching metadata… ${progressLabel}` : "Fetching metadata…"}
         </span>
       </div>
     );
@@ -4764,7 +4768,7 @@ export default function VinylCrate() {
         setEnrichLoading(true);
         setImportResult(prev => ({ ...prev, stage: "enriching" }));
         pollEnrichJobs(metaJobId, artistJobId, metaJob, artistJob, (progress) => {
-          setImportResult(prev => ({ ...prev, enrichProgress: progress }));
+          setImportResult(prev => ({ ...prev, enrichProgress: { ...progress, total: myRecords.length } }));
         }).then((meta) => {
           setImportResult(prev => ({ ...prev, meta, stage: "done" }));
           refreshRecords();
@@ -5864,7 +5868,7 @@ export default function VinylCrate() {
       // Step 2 — Enrichment (metadata + artist dates)
       setEnrichLoading(true);
       runEnrichAll("full", (progress) => {
-        setImportResult((prev) => ({ ...prev, enrichProgress: progress }));
+        setImportResult((prev) => ({ ...prev, enrichProgress: { ...progress, total: myRecords.length } }));
       })
         .then((meta) => {
           setImportResult((prev) => ({ ...prev, meta, stage: "done" }));
@@ -5915,8 +5919,12 @@ export default function VinylCrate() {
       const data = await readJsonOrText(res);
       if (res.ok) {
         metaLatest = data;
-        if (onProgress && data.considered > 0) {
-          onProgress({ processed: data.processed || 0, considered: data.considered || 0 });
+        if (onProgress) {
+          onProgress({
+            processed: data.processed || 0,
+            considered: data.considered || 0,
+            offset: data.batch_offset ?? null,
+          });
         }
       }
     }
