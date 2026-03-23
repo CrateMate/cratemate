@@ -6070,31 +6070,40 @@ export default function VinylCrate() {
     function score(r, direction) {
       const rf = resolveFeatures(r);
       const eDiff = rf.energy - cf.energy;
-      const tDiff = rf.tempo  - cf.tempo;
-      const lDiff = (rf.loudness ?? 0.70) - (cf.loudness ?? 0.70);
 
-      // Era and genre proximity — rewards records that feel connected to the center
-      const eraBonus   = Math.abs((r.year_original || 1980) - (centerRecord.year_original || 1980)) <= 20 ? 0.3 : 0;
-      const genreBonus = getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.2 : 0;
+      // --- 5D proximity scoring ---
+      // Weighted Euclidean distance across all sound dimensions.
+      // Smaller distance = more similar sound = higher score.
+      // Energy direction (lower/higher) is a hard gate, not a score component.
+      const normTempo = (v) => (v ?? 120) / 200; // normalise BPM to ~0-1 range
+      const dist5D = Math.sqrt(
+        0.35 * Math.pow(rf.energy - cf.energy, 2) +
+        0.25 * Math.pow((rf.valence ?? 0.5) - (cf.valence ?? 0.5), 2) +
+        0.15 * Math.pow((rf.acousticness ?? 0.5) - (cf.acousticness ?? 0.5), 2) +
+        0.15 * Math.pow((rf.danceability ?? 0.5) - (cf.danceability ?? 0.5), 2) +
+        0.10 * Math.pow(normTempo(rf.tempo) - normTempo(cf.tempo), 2)
+      );
+      // Convert distance to a 0-1 proximity score — closer = higher
+      const proximity = 1 - Math.min(dist5D / 0.8, 1);
+
+      // Soft era / genre affinity bonus (secondary — keeps suggestions feeling connected)
+      const eraBonus   = Math.abs((r.year_original || 1980) - (centerRecord.year_original || 1980)) <= 20 ? 0.15 : 0;
+      const genreBonus = getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.10 : 0;
 
       let s;
       if (direction === "windDown") {
-        if (eDiff >= 0) return -1; // must be lower energy
-        // Reward a moderate step down (up to 0.4 energy units), not a jump to the globally quietest
-        const energyScore = Math.min(Math.abs(eDiff), 0.4) / 0.4;
-        const tempoScore  = Math.max(0, -tDiff / 150);
-        s = energyScore * 1.0 + tempoScore * 0.3 + eraBonus + genreBonus;
+        if (eDiff >= 0) return -1; // must be lower energy — hard gate
+        // Primary: nearest neighbour in the direction of lower energy
+        s = proximity + eraBonus + genreBonus;
       } else if (direction === "liftUp") {
-        if (eDiff <= 0) return -1; // must be higher energy
-        // Same logic — reward a moderate step up, not a jump to the globally loudest
-        const energyScore = Math.min(Math.abs(eDiff), 0.4) / 0.4;
-        const tempoScore  = Math.max(0, tDiff / 150);
-        s = energyScore * 1.0 + tempoScore * 0.3 + eraBonus + genreBonus;
+        if (eDiff <= 0) return -1; // must be higher energy — hard gate
+        // Primary: nearest neighbour in the direction of higher energy
+        s = proximity + eraBonus + genreBonus;
       } else {
-        // Detour: same energy orbit, different mood angle, loose era coherence.
-        // Feels like a tangent that still fits the session — not random.
+        // Detour: similar energy orbit, different valence/mood angle.
+        // Penalise if too close in valence (want contrast), reward energy closeness.
         const energyClose    = 1 - Math.abs(eDiff);
-        const valenceDiff    = Math.abs(rf.valence - cf.valence);
+        const valenceDiff    = Math.abs((rf.valence ?? 0.5) - (cf.valence ?? 0.5));
         const acousticClose  = 1 - Math.abs((rf.acousticness ?? 0.5) - (cf.acousticness ?? 0.5));
         const diffGenreBonus = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.25 : 0;
         const sameEra        = Math.abs((r.year_original || 1980) - (centerRecord.year_original || 1980)) <= 15 ? 0.2 : 0;
