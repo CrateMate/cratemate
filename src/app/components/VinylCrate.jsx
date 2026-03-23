@@ -1486,22 +1486,22 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             )}
           </div>
 
-          {/* 3 action buttons */}
-          <div className={`grid ${record.for_sale ? "grid-cols-2" : "grid-cols-3"} gap-2 mb-4`}>
-            <button
-              onClick={() => onToggleForSale?.(record)}
-              className={`py-2.5 rounded-xl border text-xs font-medium transition-colors ${
-                record.for_sale
-                  ? "bg-rose-900/35 border-rose-700/50 text-rose-300 hover:bg-rose-900/50"
-                  : "bg-rose-900/15 border-rose-900/30 text-rose-400/70 hover:bg-rose-900/25 hover:text-rose-300"
-              }`}
-            >{record.for_sale ? "✓ For Sale" : "Mark Sale"}</button>
+          {/* Action buttons — Session primary, Mark Sale secondary */}
+          <div className="flex flex-col gap-2 mb-4">
             {!record.for_sale && (
               <button
                 onClick={() => { onEnterTrail?.(record); onClose(); }}
-                className="py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-xs font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors col-span-2"
+                className="w-full py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-sm font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
               >⬡ Start Session</button>
             )}
+            <button
+              onClick={() => onToggleForSale?.(record)}
+              className={`w-full py-2 rounded-xl border text-xs font-medium transition-colors ${
+                record.for_sale
+                  ? "bg-rose-900/35 border-rose-700/50 text-rose-300 hover:bg-rose-900/50"
+                  : "border-stone-800/40 text-stone-600 hover:text-stone-400 hover:border-stone-700/60"
+              }`}
+            >{record.for_sale ? "✓ For Sale — tap to remove" : "Mark for sale"}</button>
           </div>
 
           {/* Last played */}
@@ -4730,6 +4730,13 @@ export default function VinylCrate() {
   useEffect(() => { try { localStorage.setItem("cratemate_hc_shape", honeycombShape); } catch {} }, [honeycombShape]);
   useEffect(() => { try { localStorage.setItem("cratemate_hide_for_sale", hideForSale ? "1" : "0"); } catch {} }, [hideForSale]);
 
+  // Escape key closes detail sheet
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape" && selected) setSelected(null); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selected]);
+
   // Service worker update banner
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -7356,7 +7363,11 @@ export default function VinylCrate() {
           </div>
 
           {myRecords.length === 0 && (
-            <div className="text-stone-600 text-sm text-center py-6">Import or add records to get recommendations.</div>
+            <div className="text-center py-10 px-4">
+              <div className="text-4xl mb-3">⬡</div>
+              <div className="text-stone-300 text-sm font-medium mb-1">Your crate is empty</div>
+              <div className="text-stone-600 text-xs">Import your Discogs collection to get personalised picks.</div>
+            </div>
           )}
 
           {recoLoading && (

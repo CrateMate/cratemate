@@ -60,6 +60,15 @@
 
 ---
 
+## Recently Added
+
+- **Apple Music + Tidal streaming match** — "From your Apple Music / Tidal" section in reco tab. OAuth connect, pull recent listening history, cross-reference against owned vinyl, surface what you stream but don't own. No audio features needed. YouTube Music has no viable public API — skip.
+- **Blurred session UI** — free users see 3 blurred album art slots in trail view with Deep Cuts lock overlay
+- **Blurred sound profile in detail card** — frosted overlay on audio radar for free users
+- **Stripe paywall** — subscriptions table, webhook, checkout flow, customer portal
+
+---
+
 ## Monetization Ideas
 
 - **Free tier:** import up to 100 records, basic play logging, public crate link, heuristic recommendations
