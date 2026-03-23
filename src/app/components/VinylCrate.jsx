@@ -1198,9 +1198,6 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
             <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
           ))}
         </div>
-        {bpm != null && (
-          <div className="text-stone-600 text-[11px]">♩ {Math.round(bpm)}</div>
-        )}
         {playCount > 0 && (
           <div className="text-stone-600 text-[11px]">· {playCount}</div>
         )}
@@ -3165,66 +3162,67 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
               const suggestion = suggestions?.[key];
               const rec = suggestion?.record;
               const isLoading = loading && !suggestions;
-              // Hide the slot entirely if suggestions are loaded and nothing qualifies
               if (!isLoading && suggestions && !rec && key !== "sideways") return null;
+              const isSideways = key === "sideways";
               return (
                 <div
                   key={key}
-                  style={{ position: "absolute", left: offsetX, top: offsetY, width: SLOT, height: SLOT }}
+                  style={{ position: "absolute", left: offsetX, top: offsetY, width: SLOT }}
                 >
-                  {/* Direction label */}
+                  {/* Direction label — always above */}
                   <div style={{
                     position: "absolute",
-                    fontSize: 9,
-                    color: color,
-                    opacity: 0.7,
-                    whiteSpace: "nowrap",
-                    bottom: "calc(100% + 4px)",
-                    left: "50%",
-                    transform: "translateX(-50%)",
+                    fontSize: 9, color, opacity: 0.7, whiteSpace: "nowrap",
+                    bottom: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)",
                   }}>
                     {label}
                   </div>
 
-                  {isLoading ? (
-                    <div className="rounded-xl w-full h-full animate-pulse" style={{ background: "#1c1917" }} />
-                  ) : rec ? (
-                    <button
-                      onClick={() => onNavigate(rec)}
-                      className="rounded-xl overflow-hidden w-full h-full relative transition-transform hover:scale-105 active:scale-95"
-                      style={{ border: `1.5px solid ${color}40`, boxShadow: `0 4px 20px rgba(0,0,0,0.6)` }}
-                    >
-                      <CoverArt record={rec} size={SLOT} />
-                      <div style={{
-                        position: "absolute", inset: 0,
-                        background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 45%)",
-                        display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 5,
-                      }}>
-                        {/* Tilde badge for estimated features */}
-                        {suggestion.estimated && (
-                          <span style={{
-                            position: "absolute", top: 4, right: 4,
-                            fontSize: 8, color: "#a8a29e", opacity: 0.7,
-                            background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "1px 3px",
-                          }}>~</span>
-                        )}
-                        <p style={{ color: "#fef3c7", fontSize: 8, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
-                        <p style={{ color: "#a8a29e", fontSize: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 3 }}>{rec.artist}</p>
-                        {/* Explanation pills */}
-                        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                          {suggestion.explanation.map(pill => (
-                            <span key={pill} style={{
-                              fontSize: 6, color: color, opacity: 0.85,
-                              background: "rgba(0,0,0,0.45)", borderRadius: 3, padding: "1px 3px",
-                              whiteSpace: "nowrap",
-                            }}>{pill}</span>
-                          ))}
+                  {/* Art box */}
+                  <div style={{ width: SLOT, height: SLOT, position: "relative" }}>
+                    {isLoading ? (
+                      <div className="rounded-xl w-full h-full animate-pulse" style={{ background: "#1c1917" }} />
+                    ) : rec ? (
+                      <button
+                        onClick={() => onNavigate(rec)}
+                        className="rounded-xl overflow-hidden w-full h-full relative transition-transform hover:scale-105 active:scale-95"
+                        style={{ border: `1.5px solid ${color}40`, boxShadow: `0 4px 20px rgba(0,0,0,0.6)` }}
+                      >
+                        <CoverArt record={rec} size={SLOT} />
+                        <div style={{
+                          position: "absolute", inset: 0,
+                          background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 50%)",
+                          display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 5,
+                        }}>
+                          {suggestion.estimated && (
+                            <span style={{ position: "absolute", top: 4, right: 4, fontSize: 8, color: "#a8a29e", opacity: 0.7, background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "1px 3px" }}>~</span>
+                          )}
+                          <p style={{ color: "#fef3c7", fontSize: 8, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
+                          <p style={{ color: "#a8a29e", fontSize: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.artist}</p>
                         </div>
+                      </button>
+                    ) : (
+                      <div className="rounded-xl w-full h-full flex items-center justify-center" style={{ background: "#1c1917", border: "1px dashed #3c3532" }}>
+                        <span className="text-stone-700 text-xs">?</span>
                       </div>
-                    </button>
-                  ) : (
-                    <div className="rounded-xl w-full h-full flex items-center justify-center" style={{ background: "#1c1917", border: "1px dashed #3c3532" }}>
-                      <span className="text-stone-700 text-xs">?</span>
+                    )}
+
+                    {/* Detour: explanation pills to the right of art */}
+                    {isSideways && rec && suggestion?.explanation?.length > 0 && (
+                      <div style={{ position: "absolute", left: SLOT + 8, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", gap: 2 }}>
+                        {suggestion.explanation.map(pill => (
+                          <span key={pill} style={{ fontSize: 7, color, opacity: 0.9, background: "rgba(0,0,0,0.55)", borderRadius: 3, padding: "2px 4px", whiteSpace: "nowrap" }}>{pill}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Wind down / lift up: explanation pills below art */}
+                  {!isSideways && rec && suggestion?.explanation?.length > 0 && (
+                    <div style={{ paddingTop: 4, display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
+                      {suggestion.explanation.map(pill => (
+                        <span key={pill} style={{ fontSize: 7, color, opacity: 0.9, background: "rgba(0,0,0,0.55)", borderRadius: 3, padding: "2px 4px", whiteSpace: "nowrap" }}>{pill}</span>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -7583,8 +7581,6 @@ export default function VinylCrate() {
                       }}
                       className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
                     >
-                      ✗ vis
-                    </button>
                     <button
                       onClick={() => {
                         if (allExpanded) setExpandedHearts(new Set());
@@ -7817,115 +7813,7 @@ export default function VinylCrate() {
 
       {tab === "reco" && (
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
-          {!seenHints["reco_spotify"] && spotifyLinked === false && (
-            <HintBanner onDismiss={() => dismissHint("reco_spotify")}>
-              Connect Spotify to get recommendations based on what you&apos;ve actually been listening to.
-            </HintBanner>
-          )}
           <div className="px-4 space-y-3 pt-0">
-
-          {/* Spotify listening recommendations */}
-          <div className="rounded-xl border border-stone-800/60 overflow-hidden">
-            <button
-              onClick={() => setSpotifyExpanded(e => !e)}
-              className={`w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors cursor-pointer ${spotifyExpanded ? "border-b border-stone-800/40" : ""}`}
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-              <span className="text-xs text-stone-400 uppercase tracking-widest font-medium flex-1">From your Spotify</span>
-              <span className="flex items-center gap-1.5 text-[10px] text-stone-600">
-                {spotifyLinked === true && spotifyRecs?.length > 0 && !spotifyExpanded && <span>{spotifyRecs.length} albums</span>}
-                <span>{spotifyExpanded ? "▲" : "▼"}</span>
-              </span>
-            </button>
-
-            {spotifyExpanded && (
-              <>
-                {spotifyLinked === null && (
-                  <div className="px-4 py-4 text-stone-700 text-xs">Checking Spotify...</div>
-                )}
-
-                {spotifyLinked === false && (
-                  <div className="px-4 py-4 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-stone-300 text-sm font-medium">Connect Spotify</div>
-                      <div className="text-stone-600 text-xs mt-0.5">See which albums you play most but don&apos;t have on vinyl</div>
-                    </div>
-                    <button
-                      onClick={() => { window.location.href = "/api/spotify/auth"; }}
-                      className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border border-[#1DB954]/40 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 transition-colors"
-                    >
-                      Connect
-                    </button>
-                  </div>
-                )}
-
-                {spotifyLinked === true && spotifyRecsLoading && (
-                  <div className="px-4 py-4 text-stone-600 text-xs">Loading your listening history...</div>
-                )}
-
-                {spotifyLinked === true && !spotifyRecsLoading && spotifyRecs !== null && spotifyRecs.length === 0 && (
-                  <div className="px-4 py-4 text-stone-600 text-xs">All your top played albums are already in your crate.</div>
-                )}
-
-                {spotifyLinked === true && !spotifyRecsLoading && spotifyRecs && spotifyRecs.length > 0 && (
-                  <div className="divide-y divide-stone-800/40">
-                    {spotifyRecs.slice(0, 10).map((rec) => (
-                      <div key={`${rec.artist}|${rec.album}`} className="flex items-center gap-3 px-4 py-3">
-                        {rec.image ? (
-                          <img src={rec.image} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-stone-800" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-lg bg-stone-800 shrink-0 flex items-center justify-center text-stone-600 text-xs">◇</div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-amber-50 font-medium truncate">{rec.album}</div>
-                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            <span className="text-[10px] text-stone-500 truncate">{rec.artist}{rec.year ? ` · ${rec.year}` : ""}</span>
-                            {rec.artist_in_crate && (
-                              <span className="text-[10px] text-amber-900/70">you have other {rec.artist} records</span>
-                            )}
-                            {rec.on_wantlist && (
-                              <span className="text-[10px] text-stone-500">◉ on wantlist</span>
-                            )}
-                          </div>
-                        </div>
-                        <a
-                          href={`https://www.discogs.com/search/?artist=${encodeURIComponent(rec.artist)}&q=${encodeURIComponent(rec.album)}&type=release&format=Vinyl`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
-                        >
-                          Find vinyl ↗
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {spotifyLinked === true && !spotifyRecsLoading && (
-                  <div className="px-4 py-2 border-t border-stone-800/40">
-                  <div className="flex justify-between items-center">
-                    <button
-                      onClick={() => { setSpotifyLinked(null); setSpotifyRecs(null); }}
-                      className="text-[10px] text-stone-700 hover:text-stone-500 transition-colors"
-                    >
-                      Refresh
-                    </button>
-                    <button
-                      onClick={async () => {
-                        await fetch("/api/spotify/status", { method: "DELETE" });
-                        setSpotifyLinked(false);
-                        setSpotifyRecs(null);
-                      }}
-                      className="text-[10px] text-stone-700 hover:text-rose-500 transition-colors"
-                    >
-                      Disconnect Spotify
-                    </button>
-                  </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
 
           {/* Genre + Decade filters */}
           {myRecords.length > 0 && (() => {
@@ -8286,6 +8174,105 @@ export default function VinylCrate() {
       )}
 
       {tab === "wants" && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Spotify listening recs — collapsed section at top of wantlist */}
+        <div className="shrink-0 px-4 pt-3 pb-1">
+          <div className="rounded-xl border border-stone-800/60 overflow-hidden">
+            <button
+              onClick={() => setSpotifyExpanded(e => !e)}
+              className={`w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors cursor-pointer ${spotifyExpanded ? "border-b border-stone-800/40" : ""}`}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+              <span className="text-xs text-stone-400 uppercase tracking-widest font-medium flex-1">From your Spotify</span>
+              <span className="flex items-center gap-1.5 text-[10px] text-stone-600">
+                {spotifyLinked === true && spotifyRecs?.length > 0 && !spotifyExpanded && <span>{spotifyRecs.length} albums</span>}
+                <span>{spotifyExpanded ? "▲" : "▼"}</span>
+              </span>
+            </button>
+            {spotifyExpanded && (
+              <>
+                {spotifyLinked === null && (
+                  <div className="px-4 py-4 text-stone-700 text-xs">Checking Spotify...</div>
+                )}
+                {spotifyLinked === false && (
+                  <div className="px-4 py-4 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-stone-300 text-sm font-medium">Connect Spotify</div>
+                      <div className="text-stone-600 text-xs mt-0.5">See which albums you play most but don&apos;t have on vinyl</div>
+                    </div>
+                    <button
+                      onClick={() => { window.location.href = "/api/spotify/auth"; }}
+                      className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border border-[#1DB954]/40 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 transition-colors"
+                    >
+                      Connect
+                    </button>
+                  </div>
+                )}
+                {spotifyLinked === true && spotifyRecsLoading && (
+                  <div className="px-4 py-4 text-stone-600 text-xs">Loading your listening history...</div>
+                )}
+                {spotifyLinked === true && !spotifyRecsLoading && spotifyRecs !== null && spotifyRecs.length === 0 && (
+                  <div className="px-4 py-4 text-stone-600 text-xs">All your top played albums are already in your crate.</div>
+                )}
+                {spotifyLinked === true && !spotifyRecsLoading && spotifyRecs && spotifyRecs.length > 0 && (
+                  <div className="divide-y divide-stone-800/40">
+                    {spotifyRecs.slice(0, 10).map((rec) => (
+                      <div key={`${rec.artist}|${rec.album}`} className="flex items-center gap-3 px-4 py-3">
+                        {rec.image ? (
+                          <img src={rec.image} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-stone-800" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-stone-800 shrink-0 flex items-center justify-center text-stone-600 text-xs">◇</div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-amber-50 font-medium truncate">{rec.album}</div>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className="text-[10px] text-stone-500 truncate">{rec.artist}{rec.year ? ` · ${rec.year}` : ""}</span>
+                            {rec.artist_in_crate && (
+                              <span className="text-[10px] text-amber-900/70">you have other {rec.artist} records</span>
+                            )}
+                            {rec.on_wantlist && (
+                              <span className="text-[10px] text-stone-500">◉ on wantlist</span>
+                            )}
+                          </div>
+                        </div>
+                        <a
+                          href={`https://www.discogs.com/search/?artist=${encodeURIComponent(rec.artist)}&q=${encodeURIComponent(rec.album)}&type=release&format=Vinyl`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
+                        >
+                          Find vinyl ↗
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {spotifyLinked === true && !spotifyRecsLoading && (
+                  <div className="px-4 py-2 border-t border-stone-800/40">
+                    <div className="flex justify-between items-center">
+                      <button
+                        onClick={() => { setSpotifyLinked(null); setSpotifyRecs(null); }}
+                        className="text-[10px] text-stone-700 hover:text-stone-500 transition-colors"
+                      >
+                        Refresh
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await fetch("/api/spotify/status", { method: "DELETE" });
+                          setSpotifyLinked(false);
+                          setSpotifyRecs(null);
+                        }}
+                        className="text-[10px] text-stone-700 hover:text-rose-500 transition-colors"
+                      >
+                        Disconnect Spotify
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
         <WantlistTab
           wantlist={wantlist}
           wantlistImportJob={wantlistImportJob}
@@ -8319,6 +8306,7 @@ export default function VinylCrate() {
             if (res.ok) setWantlist(await res.json());
           }}
         />
+        </div>
       )}
 
       {tab === "stats" && (
@@ -9242,7 +9230,7 @@ export default function VinylCrate() {
       )}
 
       {/* Now Playing banner */}
-      {nowPlaying && viewMode !== "drift" && (
+      {nowPlaying && viewMode !== "drift" && tab !== "hearts" && (
         <div
           className="fixed bottom-0 left-0 right-0 z-[190] border-t border-stone-800/60 backdrop-blur-md"
           style={{ background: "rgba(12,11,9,0.92)" }}
