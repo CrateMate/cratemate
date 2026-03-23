@@ -101,6 +101,57 @@ export async function getEnrichJob(jobId: string, userId: string) {
   return data as EnrichJobRow | null;
 }
 
+/** Process one small batch (2 records) and return the updated job row.
+ *  Called on every client poll so each request stays within Vercel's 10s limit. */
+export async function runEnrichJobPage(jobId: string): Promise<EnrichJobRow> {
+  const { data: job } = await supabase.from(JOB_TABLE).select("*").eq("id", jobId).single();
+  if (!job) throw new Error("Job not found");
+  if (job.status === "completed" || job.status === "failed") return job as EnrichJobRow;
+
+  const now = new Date().toISOString();
+  await supabase.from(JOB_TABLE).update({
+    status: "running",
+    started_at: job.started_at || now,
+    updated_at: now,
+  }).eq("id", jobId);
+
+  const userId = job.user_id;
+  const mode: "full" | "thumb" = job.mode === "thumb" ? "thumb" : "full";
+  const force = !!job.force;
+  const offset = job.batch_offset ?? 0;
+
+  try {
+    // Process 2 records per page — safely within Vercel's 10s function limit
+    const page = await enrichPage({ userId, mode, limit: 2, offset, force });
+    const processed = (job.processed || 0) + page.processed;
+    const updated = (job.updated || 0) + page.updated;
+    const considered = (job.considered || 0) + page.considered;
+    const nextOffset = page.next_offset ?? null;
+    const done = !nextOffset;
+
+    const patch: Record<string, unknown> = {
+      processed, updated, considered,
+      warning: page.warning || job.warning || null,
+      batch_offset: nextOffset,
+      updated_at: now,
+    };
+    if (done) {
+      patch.status = "completed";
+      patch.completed_at = now;
+    }
+
+    const { data: updatedJob } = await supabase
+      .from(JOB_TABLE).update(patch).eq("id", jobId).select().single();
+    return (updatedJob || { ...job, ...patch }) as EnrichJobRow;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Job page failed";
+    const { data: failedJob } = await supabase.from(JOB_TABLE).update({
+      status: "failed", error: message, updated_at: now,
+    }).eq("id", jobId).select().single();
+    return (failedJob || job) as EnrichJobRow;
+  }
+}
+
 export async function runEnrichJob(jobId: string) {
   const { data: job } = await supabase.from(JOB_TABLE).select("*").eq("id", jobId).single();
   if (!job) return;

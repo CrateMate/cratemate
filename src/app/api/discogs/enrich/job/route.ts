@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { createEnrichJob, runEnrichJob } from "@/lib/discogs/enrich-job";
+import { createEnrichJob, runEnrichJobPage } from "@/lib/discogs/enrich-job";
 
 type ModeParam = "full" | "thumb";
 
@@ -16,10 +16,9 @@ export async function POST(request: Request) {
 
   try {
     const job = await createEnrichJob({ userId, mode, limit, force });
-    setTimeout(() => {
-      void runEnrichJob(job.id);
-    }, 0);
-    return NextResponse.json({ job_id: job.id, status: job.status }, { status: 202 });
+    // Run the first page synchronously so the client gets real progress immediately
+    const updated = await runEnrichJobPage(job.id);
+    return NextResponse.json({ job_id: job.id, ...updated }, { status: 202 });
   } catch (error) {
     const message =
       error instanceof Error

@@ -2317,13 +2317,6 @@ function ImportProgressBar({ importResult, enrichLoading }) {
         </span>
       </div>
     );
-  } else if (meta?.timedOut) {
-    enrichLine = (
-      <div className="flex items-center gap-1.5">
-        <span className="text-stone-500">·</span>
-        <span className="text-stone-500">Metadata still syncing — check back in a minute</span>
-      </div>
-    );
   } else if (stage === "done" && meta) {
     const nothingToDo = meta.considered === 0;
     enrichLine = (
@@ -5813,35 +5806,28 @@ export default function VinylCrate() {
     if (!metaJobId) throw new Error("Missing metadata job id");
     if (!artistJobId) throw new Error("Missing artist job id");
 
-    // Poll both jobs until done or 4-minute timeout (400 × 600ms = 240s)
-    const MAX_POLLS = 400;
-    let polls = 0;
-    let metaDone = false, artistDone = false;
-    let metaLatest = metaData, artistLatest = artistData;
-    while (!metaDone || !artistDone) {
+    // Poll metadata job until done — each GET advances one batch, no timeout
+    let metaLatest = metaData;
+    while (metaLatest.status !== "completed" && metaLatest.status !== "failed") {
       await new Promise((r) => setTimeout(r, 600));
-      polls++;
-      if (polls > MAX_POLLS) {
-        // Timed out — let the server-side job finish on its own
-        return { updated: 0, considered: metaLatest.considered || 0, timedOut: true };
-      }
-      if (!metaDone) {
-        const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`);
-        const data = await readJsonOrText(res);
-        if (res.ok) {
-          metaLatest = data;
-          if (onProgress && data.considered > 0) {
-            onProgress({ processed: data.processed || 0, considered: data.considered || 0 });
-          }
+      const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`);
+      const data = await readJsonOrText(res);
+      if (res.ok) {
+        metaLatest = data;
+        if (onProgress && data.considered > 0) {
+          onProgress({ processed: data.processed || 0, considered: data.considered || 0 });
         }
-        if (data?.status === "completed" || data?.status === "failed") metaDone = true;
       }
-      if (!artistDone) {
-        const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`);
-        const data = await readJsonOrText(res);
-        if (res.ok) artistLatest = data;
-        if (data?.status === "completed" || data?.status === "failed") artistDone = true;
-      }
+    }
+
+    // Artist job polls independently — don't block metadata completion on it
+    let artistLatest = artistData;
+    for (let i = 0; i < 200; i++) {
+      if (artistLatest.status === "completed" || artistLatest.status === "failed") break;
+      await new Promise((r) => setTimeout(r, 800));
+      const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`);
+      const data = await readJsonOrText(res);
+      if (res.ok) artistLatest = data;
     }
 
     if (metaLatest.status === "failed") throw new Error(metaLatest.error || "Metadata job failed");
