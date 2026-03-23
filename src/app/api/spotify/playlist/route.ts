@@ -18,32 +18,6 @@ function cleanTrackTitle(title: string): string {
   return title.replace(/\s*=\s*.+$/, "").trim();
 }
 
-async function searchTrackUri(trackTitle: string, rawArtist: string, token: string): Promise<string | null> {
-  const artist = cleanArtist(rawArtist);
-  const title = cleanTrackTitle(trackTitle);
-
-  const trySearch = async (q: string) => {
-    const res = await fetch(
-      `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[playlist/search] ${res.status} for query "${q}":`, body);
-      return null;
-    }
-    const data = await res.json();
-    return (data.tracks?.items || [])[0]?.uri ?? null;
-  };
-
-  // 1. Strict field search with cleaned title
-  const uri = await trySearch(`track:"${title}" artist:"${artist}"`);
-  if (uri) return uri;
-
-  // 2. Plain text fallback
-  return trySearch(`${title} ${artist}`);
-}
-
 async function spotifyPost(path: string, token: string, body: unknown) {
   return fetch(`https://api.spotify.com/v1${path}`, {
     method: "POST",
@@ -51,6 +25,8 @@ async function spotifyPost(path: string, token: string, body: unknown) {
     body: JSON.stringify(body),
   });
 }
+
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
@@ -63,15 +39,62 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing name or tracks" }, { status: 400 });
     }
 
-    // Get token once — reuse for all calls
     const token = await getUserAccessToken(userId);
     if (!token) return NextResponse.json({ error: "no_access_token" }, { status: 400 });
+    console.log("[playlist] got user token for userId:", userId);
+
+    // Shared rate-limit backoff across all searches in this request
+    let rateLimitWaitUntil = 0;
+
+    const trySearch = async (q: string): Promise<string | null> => {
+      const wait = rateLimitWaitUntil - Date.now();
+      if (wait > 0) await sleep(wait);
+
+      const res = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.status === 429) {
+        const retryAfter = (parseInt(res.headers.get("Retry-After") || "10") + 1) * 1000;
+        console.log(`[playlist/search] rate limited, waiting ${retryAfter}ms`);
+        rateLimitWaitUntil = Date.now() + retryAfter;
+        await sleep(retryAfter);
+        // Retry once after backoff
+        const retry = await fetch(
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!retry.ok) {
+          console.error(`[playlist/search] retry ${retry.status} for query "${q}"`);
+          return null;
+        }
+        const data = await retry.json();
+        return (data.tracks?.items || [])[0]?.uri ?? null;
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(`[playlist/search] ${res.status} for query "${q}":`, body);
+        return null;
+      }
+      const data = await res.json();
+      return (data.tracks?.items || [])[0]?.uri ?? null;
+    };
+
+    const searchTrackUri = async (trackTitle: string, rawArtist: string): Promise<string | null> => {
+      const artist = cleanArtist(rawArtist);
+      const title = cleanTrackTitle(trackTitle);
+      const uri = await trySearch(`track:"${title}" artist:"${artist}"`);
+      if (uri) return uri;
+      return trySearch(`${title} ${artist}`);
+    };
 
     // Search each track
     const uris: string[] = [];
     const notFound: string[] = [];
     for (const track of tracks) {
-      const uri = await searchTrackUri(track.trackTitle, track.artist, token);
+      const uri = await searchTrackUri(track.trackTitle, track.artist);
       uri ? uris.push(uri) : notFound.push(`${cleanArtist(track.artist)} — ${cleanTrackTitle(track.trackTitle)}`);
       await sleep(200);
     }
