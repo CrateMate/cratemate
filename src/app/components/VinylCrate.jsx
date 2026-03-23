@@ -1496,15 +1496,11 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   : "bg-rose-900/15 border-rose-900/30 text-rose-400/70 hover:bg-rose-900/25 hover:text-rose-300"
               }`}
             >{record.for_sale ? "✓ For Sale" : "Mark Sale"}</button>
-            <button
-              onClick={() => { onSeedNext(record); onClose(); }}
-              className="py-2.5 rounded-xl bg-amber-900/25 border border-amber-800/35 text-amber-400 text-xs font-medium hover:bg-amber-900/40 transition-colors"
-            >▶︎ Picks</button>
             {!record.for_sale && (
               <button
-                onClick={() => onEnterTrail?.(record)}
-                className="py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-xs font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
-              >⬡ Session</button>
+                onClick={() => { onEnterTrail?.(record); onClose(); }}
+                className="py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-xs font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors col-span-2"
+              >⬡ Start Session</button>
             )}
           </div>
 
@@ -2915,9 +2911,9 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                     color: color,
                     opacity: 0.7,
                     whiteSpace: "nowrap",
-                    ...(key === "windDown" ? { right: "calc(100% + 4px)", top: "50%", transform: "translateY(-50%)" } : {}),
-                    ...(key === "liftUp"   ? { left:  "calc(100% + 4px)", top: "50%", transform: "translateY(-50%)" } : {}),
-                    ...(key === "sideways" ? { bottom: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)" } : {}),
+                    bottom: "calc(100% + 4px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
                   }}>
                     {label}
                   </div>
@@ -6072,12 +6068,14 @@ export default function VinylCrate() {
           ? eDiff * 1.5 + Math.max(0, tDiff / 150) + Math.max(0, lDiff) * 0.6
           : eDiff - 1;
       } else {
-        // sideways: similar energy + different genre/valence
-        const energyClose   = 1 - Math.abs(eDiff);
-        const valenceDiff   = Math.abs(rf.valence - cf.valence);
-        const loudnessClose = 1 - Math.abs(lDiff);
-        const diffGenre     = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.6 : 0;
-        s = energyClose * 0.35 + valenceDiff * 0.25 + diffGenre + loudnessClose * 0.15;
+        // Detour: same energy orbit, different mood angle, loose era coherence.
+        // Feels like a tangent that still fits the session — not random.
+        const energyClose    = 1 - Math.abs(eDiff);
+        const valenceDiff    = Math.abs(rf.valence - cf.valence);
+        const acousticClose  = 1 - Math.abs((rf.acousticness ?? 0.5) - (cf.acousticness ?? 0.5));
+        const diffGenreBonus = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.25 : 0;
+        const sameEra        = Math.abs((r.year_original || 1980) - (centerRecord.year_original || 1980)) <= 15 ? 0.2 : 0;
+        s = energyClose * 0.4 + valenceDiff * 0.25 + acousticClose * 0.1 + diffGenreBonus + sameEra;
       }
 
       // Recency penalty: played in last 7 days → 30% score
@@ -7313,15 +7311,6 @@ export default function VinylCrate() {
               icon: "📅",
               title: "Today's Pick",
               sub: `Seasonal & cultural fit for ${new Date().toLocaleString("default", { month: "long", day: "numeric" })}`,
-            },
-            {
-              type: "next",
-              icon: "▶︎",
-              title: "Play Next",
-              sub: lastPlayed
-                ? `After "${(lastPlayed.title || "").slice(0, 30)}${lastPlayed.title?.length > 30 ? "..." : ""}"`
-                : "Tap a record in Crate first",
-              disabled: !lastPlayed,
             },
           ].map(({ type, icon, title, sub, disabled }) => (
             <button
