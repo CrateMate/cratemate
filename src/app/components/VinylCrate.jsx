@@ -1209,7 +1209,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onRecordUpdate, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures }) {
+function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onCompare, onRecordUpdate, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1486,7 +1486,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             )}
           </div>
 
-          {/* Action buttons — Session primary, Mark Sale secondary */}
+          {/* Action buttons — Session primary, Compare + Mark Sale secondary */}
           <div className="flex flex-col gap-2 mb-4">
             {!record.for_sale && (
               <button
@@ -1494,6 +1494,10 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                 className="w-full py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-sm font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
               >⬡ Start Session</button>
             )}
+            <button
+              onClick={() => onCompare?.(record)}
+              className="w-full py-2 rounded-xl border border-stone-800/40 text-stone-500 text-xs font-medium hover:text-stone-300 hover:border-stone-700/60 transition-colors"
+            >⇄ Compare</button>
             <button
               onClick={() => onToggleForSale?.(record)}
               className={`w-full py-2 rounded-xl border text-xs font-medium transition-colors ${
@@ -2826,6 +2830,209 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
   }
 
   return null;
+}
+
+// ─── CompareView ────────────────────────────────────────────────────────────
+function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playCountB, lastPlayedA, lastPlayedB, collection, onToggleForSale, onOpenRecord, onClose }) {
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [entered, setEntered] = useState(false);
+  useEffect(() => { requestAnimationFrame(() => setEntered(true)); }, []);
+
+  const isPickerMode = !recordB;
+
+  const filtered = isPickerMode
+    ? (collection || [])
+        .filter(r => r.id !== recordA?.id && (
+          (r.title || "").toLowerCase().includes(pickerQuery.toLowerCase()) ||
+          (r.artist || "").toLowerCase().includes(pickerQuery.toLowerCase())
+        ))
+        .slice(0, 40)
+    : [];
+
+  const DIMS = [
+    { key: "energy",       label: "Energy" },
+    { key: "valence",      label: "Mood" },
+    { key: "danceability", label: "Dance" },
+    { key: "acousticness", label: "Acoustic" },
+    { key: "loudness",     label: "Loudness" },
+  ];
+
+  function fmtLastPlayed(d) {
+    if (!d) return null;
+    const diff = Date.now() - new Date(d).getTime();
+    const days = Math.floor(diff / 86400000);
+    if (days === 0) return "today";
+    if (days === 1) return "yesterday";
+    return `${days}d ago`;
+  }
+
+  function RecordCol({ record, features, playCount, lastPlayed, side }) {
+    const f = features || estimateFeaturesFromRecord(record);
+    const isEst = !features;
+    const accentA = "#f59e0b"; // amber
+    const accentB = "#2dd4bf"; // teal
+    const accent = side === "A" ? accentA : accentB;
+    return (
+      <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
+        {/* Cover art — tappable to open detail */}
+        <button onClick={() => onOpenRecord(record)} className="rounded-xl overflow-hidden shrink-0 relative" style={{ width: 110, height: 110, border: `2px solid ${accent}40` }}>
+          <CoverArt record={record} size={110} />
+          {isEst && (
+            <span style={{ position: "absolute", top: 3, right: 3, fontSize: 8, background: "rgba(0,0,0,0.6)", color: "#a8a29e", borderRadius: 3, padding: "1px 3px" }}>~</span>
+          )}
+        </button>
+        {/* Title + artist */}
+        <div className="w-full text-center px-1">
+          <div className="text-amber-50 font-semibold leading-tight truncate" style={{ fontSize: 11 }}>{record.title}</div>
+          <div className="text-stone-400 truncate" style={{ fontSize: 10 }}>{stripArtistNum(record.artist)}</div>
+          {record.year_original && <div className="text-stone-600" style={{ fontSize: 9 }}>{record.year_original}</div>}
+        </div>
+        {/* Genre tags */}
+        <div className="flex flex-wrap gap-1 justify-center px-1">
+          {getGenres(record).slice(0, 3).map(g => (
+            <span key={g} style={{ fontSize: 8, padding: "1px 5px", borderRadius: 99, background: "rgba(255,255,255,0.05)", color: "#78716c", border: "1px solid #44403c" }}>{g}</span>
+          ))}
+        </div>
+        {/* Play count + last played */}
+        <div className="text-center" style={{ fontSize: 9, color: "#57534e" }}>
+          {playCount > 0 ? `${playCount} play${playCount !== 1 ? "s" : ""}` : "never played"}
+          {lastPlayed && <span> · {fmtLastPlayed(lastPlayed)}</span>}
+        </div>
+        {/* BPM */}
+        <div style={{ fontSize: 9, color: "#57534e" }}>~{Math.round(f.tempo || 120)} BPM</div>
+        {/* Mark for sale */}
+        <button
+          onClick={() => onToggleForSale(record)}
+          className={`w-full py-1.5 rounded-lg border text-center transition-colors`}
+          style={{
+            fontSize: 9,
+            borderColor: record.for_sale ? "#be123c60" : "#3c3532",
+            color: record.for_sale ? "#fda4af" : "#57534e",
+            background: record.for_sale ? "rgba(190,18,60,0.12)" : "transparent",
+          }}
+        >{record.for_sale ? "✓ For Sale" : "Mark for sale"}</button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[260] flex flex-col"
+      style={{
+        background: "rgba(0,0,0,0.97)",
+        transform: entered ? "translateY(0)" : "translateY(100%)",
+        transition: "transform 0.28s cubic-bezier(0.32,0.72,0,1)",
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-10 pb-3 shrink-0">
+        <button onClick={onClose} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">← Close</button>
+        <span className="text-stone-600 text-xs uppercase tracking-widest">{isPickerMode ? "Pick a record to compare" : "Compare"}</span>
+        <div className="w-16" />
+      </div>
+
+      {isPickerMode ? (
+        // ── Picker mode ──
+        <div className="flex-1 flex flex-col overflow-hidden px-4">
+          {/* Selected record A preview */}
+          <div className="flex items-center gap-3 mb-4 p-3 rounded-xl" style={{ background: "#1c1917" }}>
+            <div className="rounded-lg overflow-hidden shrink-0" style={{ width: 44, height: 44 }}>
+              <CoverArt record={recordA} size={44} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-amber-50 truncate" style={{ fontSize: 12 }}>{recordA.title}</div>
+              <div className="text-stone-500 truncate" style={{ fontSize: 10 }}>{stripArtistNum(recordA.artist)}</div>
+            </div>
+            <div className="text-amber-500/60 text-xs shrink-0">comparing…</div>
+          </div>
+          <input
+            autoFocus
+            value={pickerQuery}
+            onChange={e => setPickerQuery(e.target.value)}
+            placeholder="Search your crate…"
+            className="w-full bg-stone-900 border border-stone-700 rounded-xl px-4 py-2.5 text-sm text-stone-200 placeholder-stone-600 outline-none mb-3"
+          />
+          <div className="flex-1 overflow-y-auto space-y-1">
+            {filtered.map(r => (
+              <button
+                key={r.id}
+                onClick={() => onOpenRecord(r, true)}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/[0.05] text-left transition-colors"
+              >
+                <div className="rounded-lg overflow-hidden shrink-0" style={{ width: 36, height: 36 }}>
+                  <CoverArt record={r} size={36} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-stone-200 truncate" style={{ fontSize: 12 }}>{r.title}</div>
+                  <div className="text-stone-500 truncate" style={{ fontSize: 10 }}>{stripArtistNum(r.artist)}{r.year_original ? ` · ${r.year_original}` : ""}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        // ── Comparison mode ──
+        <div className="flex-1 overflow-y-auto px-4 pb-8">
+          {/* Two column header */}
+          <div className="flex gap-3 mb-5">
+            <RecordCol record={recordA} features={featuresA} playCount={playCountA} lastPlayed={lastPlayedA} side="A" />
+            <div className="w-px bg-stone-800/60 shrink-0 self-stretch" />
+            <RecordCol record={recordB} features={featuresB} playCount={playCountB} lastPlayed={lastPlayedB} side="B" />
+          </div>
+
+          {/* Butterfly chart */}
+          <div className="mb-2">
+            <div className="text-stone-600 text-xs uppercase tracking-widest text-center mb-3">Sound Profile</div>
+            {DIMS.map(({ key, label }) => {
+              const fA = featuresA || estimateFeaturesFromRecord(recordA);
+              const fB = featuresB || estimateFeaturesFromRecord(recordB);
+              const vA = key === "loudness" ? (fA.loudness ?? 0.70) : (fA[key] ?? 0.5);
+              const vB = key === "loudness" ? (fB.loudness ?? 0.70) : (fB[key] ?? 0.5);
+              const pA = Math.round(vA * 100);
+              const pB = Math.round(vB * 100);
+              return (
+                <div key={key} className="flex items-center gap-2 mb-2.5">
+                  {/* Left bar (Record A) — grows left */}
+                  <div className="flex-1 flex justify-end">
+                    <div className="h-2 rounded-full" style={{ width: `${pA}%`, background: "#f59e0b80", maxWidth: "100%" }} />
+                  </div>
+                  {/* Centre label */}
+                  <div className="text-stone-600 shrink-0 text-center" style={{ fontSize: 9, width: 52 }}>{label}</div>
+                  {/* Right bar (Record B) — grows right */}
+                  <div className="flex-1 flex justify-start">
+                    <div className="h-2 rounded-full" style={{ width: `${pB}%`, background: "#2dd4bf80", maxWidth: "100%" }} />
+                  </div>
+                </div>
+              );
+            })}
+            {/* Tempo row — shown as raw numbers since BPM is more legible than normalised */}
+            {(() => {
+              const fA = featuresA || estimateFeaturesFromRecord(recordA);
+              const fB = featuresB || estimateFeaturesFromRecord(recordB);
+              return (
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-stone-800/40">
+                  <div className="flex-1 text-right" style={{ fontSize: 10, color: "#f59e0b99" }}>{Math.round(fA.tempo || 120)} BPM</div>
+                  <div className="text-stone-700 shrink-0 text-center" style={{ fontSize: 9, width: 52 }}>Tempo</div>
+                  <div className="flex-1 text-left" style={{ fontSize: 10, color: "#2dd4bf99" }}>{Math.round(fB.tempo || 120)} BPM</div>
+                </div>
+              );
+            })()}
+            {/* Legend */}
+            <div className="flex justify-between mt-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ background: "#f59e0b" }} />
+                <span className="text-stone-500" style={{ fontSize: 9 }}>{recordA.title?.slice(0, 18)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-stone-500" style={{ fontSize: 9 }}>{recordB.title?.slice(0, 18)}</span>
+                <div className="w-2 h-2 rounded-full" style={{ background: "#2dd4bf" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, playCounts, savePrompt, saving, onSaveSession, onDiscardSession }) {
@@ -4704,6 +4911,8 @@ export default function VinylCrate() {
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [compareBase, setCompareBase] = useState(null);   // record A
+  const [compareTarget, setCompareTarget] = useState(null); // record B (null = picker mode)
   const [userLocation, setUserLocation] = useState(null); // { city_name, latitude, longitude }
   const [todayWeather, setTodayWeather] = useState(null); // { condition, label, mood, temperature_c, city_name }
   const [citySearch, setCitySearch] = useState({ query: "", results: [], open: false, loading: false });
@@ -8453,6 +8662,7 @@ export default function VinylCrate() {
           onDelete={handleDelete}
           onLogPlay={logPlay}
           onEnterTrail={(rec) => { enterTrail(rec); setSelected(null); }}
+          onCompare={(rec) => { setCompareBase(rec); setCompareTarget(null); setSelected(null); }}
           onRecordUpdate={(patch) => {
             const updated = { ...selected, ...patch };
             setSelected(updated);
@@ -8475,6 +8685,34 @@ export default function VinylCrate() {
         <StoryPreviewModal
           canvases={storyCanvases}
           onClose={() => { setShowStoryPreview(false); setStoryCanvases(null); }}
+        />
+      )}
+
+      {/* Compare overlay */}
+      {compareBase && (
+        <CompareView
+          recordA={compareBase}
+          recordB={compareTarget}
+          featuresA={spotifyFeatures?.[compareBase.id] || null}
+          featuresB={compareTarget ? (spotifyFeatures?.[compareTarget.id] || null) : null}
+          playCountA={playCounts[compareBase.id] || 0}
+          playCountB={compareTarget ? (playCounts[compareTarget.id] || 0) : 0}
+          lastPlayedA={lastPlayedDates[compareBase.id] || null}
+          lastPlayedB={compareTarget ? (lastPlayedDates[compareTarget.id] || null) : null}
+          collection={myRecords}
+          onToggleForSale={toggleForSale}
+          onOpenRecord={(rec, isPick) => {
+            if (isPick) {
+              // User selected record B from the picker
+              setCompareTarget(rec);
+            } else {
+              // Tap on a record card → open its detail sheet
+              setCompareBase(null);
+              setCompareTarget(null);
+              setSelected(rec);
+            }
+          }}
+          onClose={() => { setCompareBase(null); setCompareTarget(null); }}
         />
       )}
 
