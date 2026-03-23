@@ -7426,7 +7426,8 @@ export default function VinylCrate() {
             let data;
             try { data = await res.json(); } catch { data = { error: "parse_error" }; }
             if (data.error === "insufficient_scope") {
-              setSpotifyConnectedForPlaylists(false);
+              // Surface the actual Spotify error so we can debug
+              setExportResult({ exportError: "insufficient_scope", detail: JSON.stringify(data.spotify_error || {}) });
             } else if (data.error && !data.playlistUrl) {
               setExportResult({ exportError: data.error, detail: data.detail });
             } else {

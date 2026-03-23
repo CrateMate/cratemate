@@ -1,6 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 import { spotifyUserPost, getUserAccessToken } from "@/lib/spotify";
 
 type TrackInput = { artist: string; trackTitle: string };
@@ -37,29 +36,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing name or tracks" }, { status: 400 });
     }
 
-    // Get Spotify user id and access token
-    const { data: tokenRow, error: dbError } = await supabase
-      .from("spotify_user_tokens")
-      .select("spotify_user_id")
-      .eq("user_id", userId)
-      .single();
-
-    if (dbError) {
-      console.error("[playlist] DB error:", dbError);
-      return NextResponse.json({ error: "db_error", detail: dbError.message }, { status: 500 });
-    }
-
-    if (!tokenRow?.spotify_user_id) {
-      console.error("[playlist] No spotify_user_id for user", userId);
-      return NextResponse.json({ error: "no_spotify_id" }, { status: 400 });
-    }
-
-    const spotifyUserId = tokenRow.spotify_user_id;
-
     const accessToken = await getUserAccessToken(userId);
     if (!accessToken) {
-      console.error("[playlist] No access token for user", userId);
       return NextResponse.json({ error: "no_access_token" }, { status: 400 });
+    }
+
+    // Fetch Spotify user ID fresh from the token — don't rely on stored value
+    const meRes = await fetch("https://api.spotify.com/v1/me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!meRes.ok) {
+      const meErr = await meRes.json().catch(() => ({}));
+      console.error("[playlist] /me failed:", meRes.status, JSON.stringify(meErr));
+      return NextResponse.json({ error: "me_failed", status: meRes.status, detail: meErr }, { status: 500 });
+    }
+    const me = await meRes.json();
+    const spotifyUserId: string = me.id;
+
+    if (!spotifyUserId) {
+      return NextResponse.json({ error: "no_spotify_user_id" }, { status: 500 });
     }
 
     // Search each track for its Spotify URI
@@ -83,14 +78,15 @@ export async function POST(req: NextRequest) {
       { name, public: isPublic, description: "Created with CrateMate" }
     );
 
-    if (createRes.status === 403) {
-      const body = await createRes.json().catch(() => ({}));
-      console.error("[playlist] Spotify 403 on create:", JSON.stringify(body));
-      return NextResponse.json({ error: "insufficient_scope" }, { status: 403 });
-    }
     if (!createRes.ok) {
       const errBody = await createRes.json().catch(() => ({}));
-      console.error("[playlist] Spotify error on create:", createRes.status, JSON.stringify(errBody));
+      console.error("[playlist] Spotify create error:", createRes.status, JSON.stringify(errBody));
+      if (createRes.status === 403) {
+        return NextResponse.json({
+          error: "insufficient_scope",
+          spotify_error: errBody,
+        }, { status: 403 });
+      }
       return NextResponse.json({ error: "spotify_error", status: createRes.status, detail: errBody }, { status: 500 });
     }
 
@@ -102,14 +98,11 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < uris.length; i += 100) {
       const batch = uris.slice(i, i + 100);
       const addRes = await spotifyUserPost(`/playlists/${playlistId}/tracks`, userId, { uris: batch });
-      if (addRes.status === 403) {
-        return NextResponse.json({ error: "insufficient_scope" }, { status: 403 });
-      }
       if (!addRes.ok) {
         const errBody = await addRes.json().catch(() => ({}));
-        console.error("[playlist] Spotify error adding tracks:", addRes.status, JSON.stringify(errBody));
-        // Playlist was created, return partial success
-        return NextResponse.json({ playlistUrl, matched: uris.slice(0, i).length, total: tracks.length, notFound, warning: "partial" });
+        console.error("[playlist] Spotify add tracks error:", addRes.status, JSON.stringify(errBody));
+        // Playlist was created — return partial success
+        return NextResponse.json({ playlistUrl, matched: i, total: tracks.length, notFound, warning: "partial" });
       }
     }
 
