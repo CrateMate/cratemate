@@ -8,11 +8,11 @@ export async function GET() {
 
   const { data } = await supabase
     .from("spotify_user_tokens")
-    .select("spotify_user_id, updated_at, scope")
+    .select("spotify_user_id, updated_at")
     .eq("user_id", userId)
     .single();
 
-  return NextResponse.json({ connected: !!data, spotify_user_id: data?.spotify_user_id || null, scope: data?.scope || null });
+  return NextResponse.json({ connected: !!data, spotify_user_id: data?.spotify_user_id || null });
 }
 
 export async function DELETE() {

@@ -67,7 +67,6 @@ export async function GET(request: Request) {
     refresh_token,
     expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
     spotify_user_id: profile.id || null,
-    scope: scope || null,
     updated_at: new Date().toISOString(),
   });
 

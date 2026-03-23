@@ -4988,7 +4988,7 @@ export default function VinylCrate() {
   const [recoFilterGenres, setRecoFilterGenres] = useState(new Set());
   const [recoFilterDecades, setRecoFilterDecades] = useState(new Set());
   const [spotifyLinked, setSpotifyLinked] = useState(null); // null=unknown, true/false
-  const [spotifyGrantedScope, setSpotifyGrantedScope] = useState(null);
+
   const [spotifyRecs, setSpotifyRecs] = useState(null);
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
   const [spotifyExpanded, setSpotifyExpanded] = useState(false);
@@ -5564,7 +5564,6 @@ export default function VinylCrate() {
         const status = statusRes.ok ? await statusRes.json() : null;
         const connected = !!status?.connected;
         setSpotifyLinked(connected);
-        setSpotifyGrantedScope(status?.scope || null);
         if (!connected) setSpotifyExpanded(true);
         if (connected) {
           setSpotifyRecsLoading(true);
@@ -7879,8 +7878,7 @@ export default function VinylCrate() {
                 )}
 
                 {spotifyLinked === true && !spotifyRecsLoading && (
-                  <div className="px-4 py-2 border-t border-stone-800/40 space-y-1">
-                  {spotifyGrantedScope && <div className="text-[9px] text-stone-700 break-all">scope: {spotifyGrantedScope}</div>}
+                  <div className="px-4 py-2 border-t border-stone-800/40">
                   <div className="flex justify-between items-center">
                     <button
                       onClick={() => { setSpotifyLinked(null); setSpotifyRecs(null); }}
