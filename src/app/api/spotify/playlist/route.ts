@@ -64,17 +64,6 @@ export async function POST(req: NextRequest) {
     const token = await getUserAccessToken(userId);
     if (!token) return NextResponse.json({ error: "no_access_token" }, { status: 400 });
 
-    // Get Spotify user ID
-    const meRes = await fetch("https://api.spotify.com/v1/me", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!meRes.ok) {
-      const err = await meRes.json().catch(() => ({}));
-      console.error("[playlist] /me failed:", meRes.status, err);
-      return NextResponse.json({ error: "me_failed", status: meRes.status }, { status: 500 });
-    }
-    const { id: spotifyUserId } = await meRes.json();
-
     // Search each track
     const uris: string[] = [];
     const notFound: string[] = [];
@@ -96,7 +85,7 @@ export async function POST(req: NextRequest) {
 
     // Create playlist
     const createRes = await spotifyPost(
-      `/users/${encodeURIComponent(spotifyUserId)}/playlists`,
+      `/me/playlists`,
       token,
       { name, public: isPublic, description: "Created with CrateMate" }
     );
