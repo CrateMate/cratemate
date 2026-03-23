@@ -509,9 +509,11 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
               thumb: (thumb || cached?.cover_image) ?? undefined,
             });
           }
-        } else if (needsReleaseCall) {
+        } else if (needsReleaseCall && release) {
           // Fresh release fetch confirmed no master (master_id = 0 from Discogs, already stored
           // in cache above). Use pressing year as best effort; sentinel stops future re-fetching.
+          // Only runs when the release API call succeeded — if it failed, release is null and
+          // we leave originalYear as null so the record is retried next sync.
           if (pressedYear) {
             originalYear = pressedYear;
             await upsertReleaseCache(releaseId, { year_original: pressedYear });

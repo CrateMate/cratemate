@@ -2,6 +2,7 @@ export const runtime = "edge";
 
 const ALLOWED_HOSTS = [
   "i.discogs.com",
+  "img.discogs.com",
   "i1.sndcdn.com",
   "is1-ssl.mzstatic.com",
   "is2-ssl.mzstatic.com",

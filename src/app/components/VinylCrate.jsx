@@ -130,7 +130,7 @@ function AddRecordModal({ onClose, onAdd }) {
             >
               {r.thumb ? (
                 <img
-                  src={r.thumb}
+                  src={proxyArtUrl(upgradeDiscogsThumb(r.thumb) || r.thumb)}
                   alt=""
                   className="w-10 h-10 rounded object-cover flex-shrink-0 opacity-80"
                 />
@@ -349,6 +349,19 @@ function upgradeDiscogsThumb(url) {
   return str;
 }
 
+/** Route Discogs image URLs through our proxy to avoid CORS/hotlink issues.
+ *  iTunes and user-uploaded URLs are returned as-is (they don't need proxying). */
+function proxyArtUrl(url) {
+  if (!url) return url;
+  try {
+    const h = new URL(url).hostname;
+    if (h === "i.discogs.com" || h === "img.discogs.com") {
+      return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+    }
+  } catch {}
+  return url;
+}
+
 // New Discogs imgproxy CDN thumbnails are HMAC-signed — can't upgrade the URL itself.
 // Detect them so we can show them immediately but also queue iTunes to swap in something better.
 function isLowQualityImgproxy(url) {
@@ -447,7 +460,7 @@ export function CoverArt({ record, size = 64 }) {
         style={{ width: size, height: size, boxShadow: "0 3px 16px rgba(0,0,0,0.55)" }}
       >
         <img
-          src={src}
+          src={proxyArtUrl(src) || src}
           alt=""
           className="w-full h-full object-cover opacity-90"
           onError={() => setImgError(true)}
@@ -713,7 +726,7 @@ function WantReleaseRow({ release, onPriceLoaded }) {
     >
       <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
         {release.thumb ? (
-          <img src={release.thumb} alt="" className="w-full h-full object-cover"
+          <img src={proxyArtUrl(upgradeDiscogsThumb(release.thumb) || release.thumb)} alt="" className="w-full h-full object-cover"
             onError={(e) => { e.currentTarget.style.display = "none"; }} />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-stone-700 text-xs">◇</div>
@@ -803,7 +816,7 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
       >
         <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-stone-800">
           {rep?.thumb ? (
-            <img src={rep.thumb} alt="" className="w-full h-full object-cover"
+            <img src={proxyArtUrl(upgradeDiscogsThumb(rep.thumb) || rep.thumb)} alt="" className="w-full h-full object-cover"
               onError={(e) => { e.currentTarget.style.display = "none"; }} />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-stone-700">◇</div>
@@ -1378,7 +1391,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             >
               {heroSrcOverride !== false && (heroHi || itunesUrl || record.thumb) ? (
                 <img
-                  src={heroSrcOverride || heroHi || record.thumb}
+                  src={proxyArtUrl(heroSrcOverride || heroHi || record.thumb)}
                   alt=""
                   className="w-full h-full object-cover pointer-events-none"
                   onError={() => {
@@ -8319,7 +8332,7 @@ export default function VinylCrate() {
           >
             <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
               {nowPlaying.record.thumb
-                ? <img src={nowPlaying.record.thumb} alt="" className="w-full h-full object-cover"
+                ? <img src={proxyArtUrl(upgradeDiscogsThumb(nowPlaying.record.thumb) || nowPlaying.record.thumb)} alt="" className="w-full h-full object-cover"
                     onError={(e) => { e.currentTarget.style.display = "none"; }} />
                 : <div className="w-full h-full bg-stone-700" />}
             </div>
