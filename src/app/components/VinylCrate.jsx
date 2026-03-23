@@ -5543,6 +5543,19 @@ export default function VinylCrate() {
 
   useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, activeLabel]);
 
+  // If returning from Spotify OAuth, reset state so the status re-checks on next reco tab visit
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("spotify") === "connected") {
+      setSpotifyLinked(null);
+      setSpotifyRecs(null);
+      setSpotifyExpanded(true);
+      // Clean up the URL without a page reload
+      const clean = window.location.pathname;
+      window.history.replaceState({}, "", clean);
+    }
+  }, []);
+
   // Load Spotify status + recs when Reco tab first opens
   useEffect(() => {
     if (tab !== "reco" || spotifyLinked !== null) return;
