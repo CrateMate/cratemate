@@ -17,6 +17,10 @@ function parseMbDate(dateStr: unknown): { year: number | null; month: number | n
 
 export type MemberDates = {
   name: string;
+  // When they were in the band — used to filter by record year.
+  joinedYear: number | null;
+  leftYear:   number | null;
+  // Their own life dates.
   birthYear:  number | null;
   birthMonth: number | null;
   birthDay:   number | null;
@@ -62,6 +66,8 @@ type MbArtistStub = {
 type MbRelation = {
   type?: string;
   direction?: string;
+  begin?: string;  // year member joined the band
+  end?: string;    // year member left the band
   artist?: {
     name?: string;
     type?: string;
@@ -116,10 +122,14 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       // Skip nested sub-groups (e.g. a supergroup as a member).
       if ((rel.artist.type || "").toLowerCase() !== "person") continue;
 
-      const birth = parseMbDate(rel.artist["life-span"]?.begin);
-      const death = parseMbDate(rel.artist["life-span"]?.end);
+      const birth  = parseMbDate(rel.artist["life-span"]?.begin);
+      const death  = parseMbDate(rel.artist["life-span"]?.end);
+      const joined = parseMbDate(rel.begin);
+      const left   = parseMbDate(rel.end);
       members.push({
         name:       rel.artist.name || "",
+        joinedYear: joined.year,
+        leftYear:   left.year,
         birthYear:  birth.year,  birthMonth: birth.month,  birthDay:  birth.day,
         deathYear:  death.year,  deathMonth: death.month,  deathDay:  death.day,
       });
