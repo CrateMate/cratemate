@@ -8,27 +8,38 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Strip Discogs-style disambiguation suffixes: "Artist (2)" → "Artist" */
+function cleanArtist(artist: string): string {
+  return artist.replace(/\s*\(\d+\)$/, "").trim();
+}
+
+async function searchTrackUri(trackTitle: string, rawArtist: string, token: string): Promise<string | null> {
+  const artist = cleanArtist(rawArtist);
+
+  const trySearch = async (q: string) => {
+    const res = await fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.tracks?.items || [])[0]?.uri ?? null;
+  };
+
+  // 1. Strict field search
+  const uri = await trySearch(`track:"${trackTitle}" artist:"${artist}"`);
+  if (uri) return uri;
+
+  // 2. Plain text fallback (no quotes, handles edge cases)
+  return trySearch(`${trackTitle} ${artist}`);
+}
+
 async function spotifyPost(path: string, token: string, body: unknown) {
   return fetch(`https://api.spotify.com/v1${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-}
-
-async function searchTrackUri(trackTitle: string, artist: string, token: string): Promise<string | null> {
-  try {
-    const q = `track:"${trackTitle}" artist:"${artist}"`;
-    const res = await fetch(
-      `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=3`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return (data.tracks?.items || [])[0]?.uri ?? null;
-  } catch {
-    return null;
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -42,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing name or tracks" }, { status: 400 });
     }
 
-    // Get token once — reuse for all calls so there's no chance of a different token mid-request
+    // Get token once — reuse for all calls
     const token = await getUserAccessToken(userId);
     if (!token) return NextResponse.json({ error: "no_access_token" }, { status: 400 });
 
@@ -64,6 +75,16 @@ export async function POST(req: NextRequest) {
       const uri = await searchTrackUri(track.trackTitle, track.artist, token);
       uri ? uris.push(uri) : notFound.push(`${track.artist} — ${track.trackTitle}`);
       await sleep(200);
+    }
+
+    // Don't create an empty playlist
+    if (uris.length === 0) {
+      return NextResponse.json({
+        error: "no_tracks_found",
+        matched: 0,
+        total: tracks.length,
+        notFound,
+      }, { status: 422 });
     }
 
     // Create playlist

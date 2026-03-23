@@ -7440,8 +7440,9 @@ export default function VinylCrate() {
             let data;
             try { data = await res.json(); } catch { data = { error: "parse_error" }; }
             if (data.error === "insufficient_scope") {
-              // Surface the actual Spotify error so we can debug
-              setExportResult({ exportError: "insufficient_scope", detail: JSON.stringify(data.spotify_error || {}) });
+              setSpotifyConnectedForPlaylists(false);
+            } else if (data.error === "no_tracks_found") {
+              setExportResult({ exportError: "None of the selected tracks were found on Spotify.", notFound: data.notFound });
             } else if (data.error && !data.playlistUrl) {
               setExportResult({ exportError: data.error, detail: data.detail });
             } else {
