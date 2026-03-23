@@ -31,7 +31,7 @@ async function getToken(): Promise<string> {
   return _tokenCache.token;
 }
 
-async function spotifyGet(path: string): Promise<Response> {
+export async function spotifyGet(path: string): Promise<Response> {
   const token = await getToken();
   return fetch(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
