@@ -6114,9 +6114,17 @@ export default function VinylCrate() {
     const pickedKeys = new Set(seenKeys);
 
     function pick(dir) {
-      const best = sorted(dir).find(r => !pickedKeys.has(getCanonicalKey(r)));
-      if (best) pickedKeys.add(getCanonicalKey(best));
-      return best || null;
+      // Take top 4 valid candidates and pick with weighted randomness —
+      // 50% chance of #1, otherwise random among #2-#4.
+      // Prevents the same record winning every session while keeping quality high.
+      const pool = sorted(dir)
+        .filter(r => !pickedKeys.has(getCanonicalKey(r)) && score(r, dir) > 0)
+        .slice(0, 4);
+      if (!pool.length) return null;
+      const idx = Math.random() < 0.5 ? 0 : Math.floor(Math.random() * Math.min(pool.length, 3));
+      const chosen = pool[idx];
+      pickedKeys.add(getCanonicalKey(chosen));
+      return chosen;
     }
 
     return {
