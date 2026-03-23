@@ -4988,6 +4988,7 @@ export default function VinylCrate() {
   const [recoFilterGenres, setRecoFilterGenres] = useState(new Set());
   const [recoFilterDecades, setRecoFilterDecades] = useState(new Set());
   const [spotifyLinked, setSpotifyLinked] = useState(null); // null=unknown, true/false
+  const [spotifyGrantedScope, setSpotifyGrantedScope] = useState(null);
   const [spotifyRecs, setSpotifyRecs] = useState(null);
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
   const [spotifyExpanded, setSpotifyExpanded] = useState(false);
@@ -5551,6 +5552,7 @@ export default function VinylCrate() {
         const status = statusRes.ok ? await statusRes.json() : null;
         const connected = !!status?.connected;
         setSpotifyLinked(connected);
+        setSpotifyGrantedScope(status?.scope || null);
         if (connected) {
           setSpotifyRecsLoading(true);
           const recsRes = await fetch("/api/spotify/listening");
@@ -7866,7 +7868,9 @@ export default function VinylCrate() {
                 )}
 
                 {spotifyLinked === true && !spotifyRecsLoading && (
-                  <div className="px-4 py-2 border-t border-stone-800/40 flex justify-between items-center">
+                  <div className="px-4 py-2 border-t border-stone-800/40 space-y-1">
+                  {spotifyGrantedScope && <div className="text-[9px] text-stone-700 break-all">scope: {spotifyGrantedScope}</div>}
+                  <div className="flex justify-between items-center">
                     <button
                       onClick={() => { setSpotifyLinked(null); setSpotifyRecs(null); }}
                       className="text-[10px] text-stone-700 hover:text-stone-500 transition-colors"
@@ -7883,6 +7887,7 @@ export default function VinylCrate() {
                     >
                       Disconnect Spotify
                     </button>
+                  </div>
                   </div>
                 )}
               </>
