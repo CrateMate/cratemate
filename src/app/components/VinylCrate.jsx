@@ -7423,15 +7423,17 @@ export default function VinylCrate() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: playlistName, tracks, isPublic: playlistIsPublic }),
             });
-            const data = await res.json();
+            let data;
+            try { data = await res.json(); } catch { data = { error: "parse_error" }; }
             if (data.error === "insufficient_scope") {
               setSpotifyConnectedForPlaylists(false);
+            } else if (data.error && !data.playlistUrl) {
+              setExportResult({ exportError: data.error, detail: data.detail });
             } else {
               setExportResult(data);
             }
           } catch {
-            // network error — treat as disconnected
-            setSpotifyConnectedForPlaylists(false);
+            setExportResult({ exportError: "network_error" });
           } finally {
             setExportingPlaylist(false);
           }
@@ -7670,6 +7672,12 @@ export default function VinylCrate() {
                     </div>
                   ) : exportResult ? (
                     <div className="py-2 space-y-1.5">
+                      {exportResult.exportError ? (
+                        <div className="text-sm text-rose-400">
+                          Export failed ({exportResult.exportError}{exportResult.detail ? `: ${exportResult.detail}` : ""}).{" "}
+                          <button onClick={() => setExportResult(null)} className="underline text-stone-500">Dismiss</button>
+                        </div>
+                      ) : <>
                       <div className="text-sm text-stone-300">✓ Playlist created — {exportResult.matched} of {exportResult.total} tracks added</div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <a
@@ -7700,6 +7708,7 @@ export default function VinylCrate() {
                           {exportResult.notFound.map((t, i) => <div key={i}>{t}</div>)}
                         </div>
                       )}
+                      </>}
                     </div>
                   ) : (
                     <button
