@@ -1,5 +1,5 @@
 // CrateMate Service Worker
-const CACHE_NAME = "cratemate-v3";
+const CACHE_NAME = "cratemate-v4";
 const OFFLINE_DB = "cratemate-offline";
 const OFFLINE_STORE = "offline-plays";
 
@@ -21,9 +21,19 @@ self.addEventListener("install", (e) => {
 // ---------- Activate ----------
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys().then((keys) => {
+      const oldCaches = keys.filter((k) => k !== CACHE_NAME);
+      return Promise.all(oldCaches.map((k) => caches.delete(k)))
+        .then(() => self.clients.claim())
+        .then(() => {
+          // Only notify if this is an upgrade (old caches existed), not first install
+          if (oldCaches.length > 0) {
+            return self.clients.matchAll({ type: "window" }).then((clients) => {
+              clients.forEach((client) => client.postMessage({ type: "SW_UPDATED" }));
+            });
+          }
+        });
+    })
   );
 });
 
