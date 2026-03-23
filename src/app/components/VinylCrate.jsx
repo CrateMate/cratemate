@@ -7365,18 +7365,18 @@ export default function VinylCrate() {
           .filter(r => (r.favorite_tracks || []).length > 0)
           .map(r => ({
             ...r,
-            decade: Math.floor(((r.year_original || r.year_pressed) || 1975) / 10) * 10,
-            primaryGenre: (r.genre || [])[0] || "Unknown",
+            decade: getDecade(r),
+            primaryGenre: getGenres(r)[0] || "Unknown",
             energy: spotifyFeatures?.[r.id]?.energy ?? null,
           }));
 
-        const heartsGenreOptions = [...new Set(heartedRecords.flatMap(r => r.genre || []))].sort();
-        const heartsYearOptions = [...new Set(heartedRecords.map(r => r.year_original || r.year_pressed).filter(Boolean))].sort((a, b) => a - b);
+        const heartsGenreOptions = [...new Set(heartedRecords.flatMap(r => getGenres(r)))].sort();
+        const heartsDecadeOptions = [...new Set(heartedRecords.map(r => r.decade).filter(Boolean))].sort();
 
         const dir = heartsSortDir === "asc" ? 1 : -1;
         const heartsFiltered = heartedRecords
-          .filter(r => heartsGenreFilter.length === 0 || (r.genre || []).some(g => heartsGenreFilter.includes(g)))
-          .filter(r => heartsYearFilter.length === 0 || heartsYearFilter.includes(r.year_original || r.year_pressed))
+          .filter(r => heartsGenreFilter.length === 0 || getGenres(r).some(g => heartsGenreFilter.includes(g)))
+          .filter(r => heartsYearFilter.length === 0 || heartsYearFilter.includes(r.decade))
           .sort((a, b) => {
             if (heartsSort === "genre") return dir * a.primaryGenre.localeCompare(b.primaryGenre);
             if (heartsSort === "year") return dir * ((a.year_original || a.year_pressed || 0) - (b.year_original || b.year_pressed || 0));
@@ -7471,15 +7471,15 @@ export default function VinylCrate() {
                     </div>
                   )}
                   {/* Year pills */}
-                  {heartsYearOptions.length > 0 && (
+                  {heartsDecadeOptions.length > 0 && (
                     <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-                      {heartsYearOptions.map(y => (
+                      {heartsDecadeOptions.map(d => (
                         <button
-                          key={y}
-                          onClick={() => setHeartsYearFilter(prev => prev.includes(y) ? prev.filter(x => x !== y) : [...prev, y])}
-                          className={`shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${heartsYearFilter.includes(y) ? "bg-amber-900/40 border-amber-700/50 text-amber-300" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                          key={d}
+                          onClick={() => setHeartsYearFilter(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])}
+                          className={`shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${heartsYearFilter.includes(d) ? "bg-amber-900/40 border-amber-700/50 text-amber-300" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
                         >
-                          {y}
+                          {d}
                         </button>
                       ))}
                     </div>
