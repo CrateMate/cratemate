@@ -2853,7 +2853,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         <button onClick={onClose} className="text-stone-500 hover:text-stone-300 text-sm flex items-center gap-1.5 transition-colors">
           ← Close
         </button>
-        <span className="text-stone-600 text-xs uppercase tracking-widest">Assisted Listening</span>
+        <span className="text-stone-600 text-xs uppercase tracking-widest">Your Session</span>
         <div className="w-12" />
       </div>
 
@@ -6073,15 +6073,23 @@ export default function VinylCrate() {
       const tDiff = rf.tempo  - cf.tempo;
       const lDiff = (rf.loudness ?? 0.70) - (cf.loudness ?? 0.70);
 
+      // Era and genre proximity — rewards records that feel connected to the center
+      const eraBonus   = Math.abs((r.year_original || 1980) - (centerRecord.year_original || 1980)) <= 20 ? 0.3 : 0;
+      const genreBonus = getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.2 : 0;
+
       let s;
       if (direction === "windDown") {
-        s = eDiff < 0
-          ? Math.abs(eDiff) * 1.5 + Math.max(0, -tDiff / 150) + Math.max(0, -lDiff) * 0.6
-          : eDiff - 1;
+        if (eDiff >= 0) return -1; // must be lower energy
+        // Reward a moderate step down (up to 0.4 energy units), not a jump to the globally quietest
+        const energyScore = Math.min(Math.abs(eDiff), 0.4) / 0.4;
+        const tempoScore  = Math.max(0, -tDiff / 150);
+        s = energyScore * 1.0 + tempoScore * 0.3 + eraBonus + genreBonus;
       } else if (direction === "liftUp") {
-        s = eDiff > 0
-          ? eDiff * 1.5 + Math.max(0, tDiff / 150) + Math.max(0, lDiff) * 0.6
-          : eDiff - 1;
+        if (eDiff <= 0) return -1; // must be higher energy
+        // Same logic — reward a moderate step up, not a jump to the globally loudest
+        const energyScore = Math.min(Math.abs(eDiff), 0.4) / 0.4;
+        const tempoScore  = Math.max(0, tDiff / 150);
+        s = energyScore * 1.0 + tempoScore * 0.3 + eraBonus + genreBonus;
       } else {
         // Detour: same energy orbit, different mood angle, loose era coherence.
         // Feels like a tangent that still fits the session — not random.
