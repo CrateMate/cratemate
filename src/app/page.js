@@ -44,7 +44,8 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      router.replace("/app");
+      const query = window.location.search;
+      router.replace(query ? `/app${query}` : "/app");
     }
   }, [isLoaded, isSignedIn, router]);
 
