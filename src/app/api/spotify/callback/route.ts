@@ -48,7 +48,8 @@ export async function GET(request: Request) {
   }
 
   const tokenData = await tokenRes.json();
-  const { access_token, refresh_token, expires_in } = tokenData;
+  const { access_token, refresh_token, expires_in, scope } = tokenData;
+  console.log("[spotify/callback] granted scope:", scope);
 
   if (!access_token || !refresh_token) {
     return NextResponse.redirect(`${base}/?spotify=error`);
