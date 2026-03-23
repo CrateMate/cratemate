@@ -2903,6 +2903,8 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
             {directions.map(({ key, label, offsetX, offsetY, color }) => {
               const rec = suggestions?.[key];
               const isLoading = loading && !suggestions;
+              // Hide the slot entirely if suggestions are loaded and nothing qualifies
+              if (!isLoading && suggestions && !rec && key !== "sideways") return null;
               return (
                 <div
                   key={key}
@@ -6092,13 +6094,15 @@ export default function VinylCrate() {
 
       let s;
       if (direction === "windDown") {
-        if (eDiff > -0.08) return -1; // must be meaningfully lower energy (not just noise)
-        // Primary: nearest neighbour in the direction of lower energy
-        s = proximity + eraBonus + genreBonus;
+        if (eDiff > -0.04) return -1; // below 0.04 = noise, hide slot
+        // Prefer ideal shift (≥0.08); acceptable shift (0.04–0.08) gets a small penalty
+        const idealBonus = eDiff <= -0.08 ? 0.15 : 0;
+        s = proximity + eraBonus + genreBonus + idealBonus;
       } else if (direction === "liftUp") {
-        if (eDiff < 0.08) return -1; // must be meaningfully higher energy (not just noise)
-        // Primary: nearest neighbour in the direction of higher energy
-        s = proximity + eraBonus + genreBonus;
+        if (eDiff < 0.04) return -1; // below 0.04 = noise, hide slot
+        // Prefer ideal shift (≥0.08); acceptable shift (0.04–0.08) gets a small penalty
+        const idealBonus = eDiff >= 0.08 ? 0.15 : 0;
+        s = proximity + eraBonus + genreBonus + idealBonus;
       } else {
         // Detour: similar energy orbit, different valence/mood angle.
         // Penalise if too close in valence (want contrast), reward energy closeness.
