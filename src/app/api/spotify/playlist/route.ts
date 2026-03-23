@@ -13,8 +13,14 @@ function cleanArtist(artist: string): string {
   return artist.replace(/\s*\(\d+\)$/, "").trim();
 }
 
+/** Strip alternate-language subtitles Discogs adds: "Title = Título" → "Title" */
+function cleanTrackTitle(title: string): string {
+  return title.replace(/\s*=\s*.+$/, "").trim();
+}
+
 async function searchTrackUri(trackTitle: string, rawArtist: string, token: string): Promise<string | null> {
   const artist = cleanArtist(rawArtist);
+  const title = cleanTrackTitle(trackTitle);
 
   const trySearch = async (q: string) => {
     const res = await fetch(
@@ -26,12 +32,12 @@ async function searchTrackUri(trackTitle: string, rawArtist: string, token: stri
     return (data.tracks?.items || [])[0]?.uri ?? null;
   };
 
-  // 1. Strict field search
-  const uri = await trySearch(`track:"${trackTitle}" artist:"${artist}"`);
+  // 1. Strict field search with cleaned title
+  const uri = await trySearch(`track:"${title}" artist:"${artist}"`);
   if (uri) return uri;
 
-  // 2. Plain text fallback (no quotes, handles edge cases)
-  return trySearch(`${trackTitle} ${artist}`);
+  // 2. Plain text fallback
+  return trySearch(`${title} ${artist}`);
 }
 
 async function spotifyPost(path: string, token: string, body: unknown) {
@@ -73,7 +79,7 @@ export async function POST(req: NextRequest) {
     const notFound: string[] = [];
     for (const track of tracks) {
       const uri = await searchTrackUri(track.trackTitle, track.artist, token);
-      uri ? uris.push(uri) : notFound.push(`${track.artist} — ${track.trackTitle}`);
+      uri ? uris.push(uri) : notFound.push(`${cleanArtist(track.artist)} — ${cleanTrackTitle(track.trackTitle)}`);
       await sleep(200);
     }
 
