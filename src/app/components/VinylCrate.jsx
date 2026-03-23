@@ -6092,11 +6092,11 @@ export default function VinylCrate() {
 
       let s;
       if (direction === "windDown") {
-        if (eDiff >= 0) return -1; // must be lower energy — hard gate
+        if (eDiff > -0.08) return -1; // must be meaningfully lower energy (not just noise)
         // Primary: nearest neighbour in the direction of lower energy
         s = proximity + eraBonus + genreBonus;
       } else if (direction === "liftUp") {
-        if (eDiff <= 0) return -1; // must be higher energy — hard gate
+        if (eDiff < 0.08) return -1; // must be meaningfully higher energy (not just noise)
         // Primary: nearest neighbour in the direction of higher energy
         s = proximity + eraBonus + genreBonus;
       } else {
