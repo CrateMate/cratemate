@@ -4742,33 +4742,42 @@ export default function VinylCrate() {
     return () => navigator.serviceWorker.removeEventListener("message", handler);
   }, []);
 
-  // Resume interrupted enrichment job on app open
+  // Resume interrupted enrichment — on mount AND every time app comes back to foreground
   useEffect(() => {
-    const saved = loadEnrichJobs();
-    if (!saved) return;
-    const { metaJobId, artistJobId } = saved;
+    function tryResumeEnrich() {
+      // Don't double-start if already polling
+      if (enrichRunningRef.current) return;
+      const saved = loadEnrichJobs();
+      if (!saved) return;
+      const { metaJobId, artistJobId } = saved;
 
-    // Fetch current status of both jobs before deciding whether to resume
-    Promise.all([
-      fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`).then(r => r.ok ? r.json() : null),
-      fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`).then(r => r.ok ? r.json() : null),
-    ]).then(([metaJob, artistJob]) => {
-      if (!metaJob) { clearEnrichJobs(); return; }
-      // Already done — just clear storage
-      if (metaJob.status === "completed" || metaJob.status === "failed") { clearEnrichJobs(); return; }
+      Promise.all([
+        fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`).then(r => r.ok ? r.json() : null),
+        fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`).then(r => r.ok ? r.json() : null),
+      ]).then(([metaJob, artistJob]) => {
+        if (!metaJob) { clearEnrichJobs(); return; }
+        if (metaJob.status === "completed" || metaJob.status === "failed") { clearEnrichJobs(); return; }
 
-      // Still running — resume polling and show progress
-      setEnrichLoading(true);
-      setImportResult(prev => ({ ...prev, stage: "enriching" }));
-      pollEnrichJobs(metaJobId, artistJobId, metaJob, artistJob, (progress) => {
-        setImportResult(prev => ({ ...prev, enrichProgress: progress }));
-      }).then((meta) => {
-        setImportResult(prev => ({ ...prev, meta, stage: "done" }));
-        refreshRecords();
-      }).catch(() => {
-        setImportResult(prev => ({ ...prev, stage: "done" }));
-      }).finally(() => setEnrichLoading(false));
-    }).catch(() => clearEnrichJobs());
+        setEnrichLoading(true);
+        setImportResult(prev => ({ ...prev, stage: "enriching" }));
+        pollEnrichJobs(metaJobId, artistJobId, metaJob, artistJob, (progress) => {
+          setImportResult(prev => ({ ...prev, enrichProgress: progress }));
+        }).then((meta) => {
+          setImportResult(prev => ({ ...prev, meta, stage: "done" }));
+          refreshRecords();
+        }).catch(() => {
+          setImportResult(prev => ({ ...prev, stage: "done" }));
+        }).finally(() => setEnrichLoading(false));
+      }).catch(() => clearEnrichJobs());
+    }
+
+    // Run on mount (handles full page reload)
+    tryResumeEnrich();
+
+    // Run every time the app comes back to foreground (handles backgrounding)
+    function onVisibility() { if (document.visibilityState === "visible") tryResumeEnrich(); }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -4821,6 +4830,7 @@ export default function VinylCrate() {
   // Undo pending
   const [undoPending, setUndoPending] = useState(null); // { record, sessionId }
   const undoTimerRef = useRef(null);
+  const enrichRunningRef = useRef(false); // true while pollEnrichJobs is active
 
   // Play Trail
   const [trailActive, setTrailActive] = useState(false);
@@ -5893,6 +5903,7 @@ export default function VinylCrate() {
   }
 
   async function pollEnrichJobs(metaJobId, artistJobId, metaInitial, artistInitial, onProgress) {
+    enrichRunningRef.current = true;
     // Poll metadata job until done
     let metaLatest = metaInitial || { status: "running" };
     while (metaLatest.status !== "completed" && metaLatest.status !== "failed") {
@@ -5917,6 +5928,7 @@ export default function VinylCrate() {
       if (res.ok) artistLatest = data;
     }
 
+    enrichRunningRef.current = false;
     clearEnrichJobs();
     if (metaLatest.status === "failed") throw new Error(metaLatest.error || "Metadata job failed");
 
