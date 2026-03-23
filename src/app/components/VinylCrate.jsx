@@ -1207,7 +1207,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onCompare, onRecordUpdate, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures }) {
+function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onCompare, onRecordUpdate, onEnrich, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1238,6 +1238,8 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ favorite_tracks: next }),
     }).catch(() => {});
+    // Hearting a track signals strong interest — silently enrich this record
+    if (!alreadyFaved) onEnrich?.(record.id);
   }
   const [heroUrl, setHeroUrl] = useState("");
   // Initialize from _artCache immediately — CoverArt populates this for visible records
@@ -5136,6 +5138,22 @@ export default function VinylCrate() {
   const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
   const fetchingFeaturesRef = useRef(new Set()); // record IDs currently in-flight
 
+  // Fire-and-forget Discogs + MusicBrainz enrichment for a single record.
+  // Checks missing fields server-side — safe to call on every interaction.
+  const enrichingRef = useRef(new Set()); // deduplicate in-flight calls
+  function silentEnrich(recordId) {
+    const key = String(recordId);
+    if (enrichingRef.current.has(key)) return;
+    enrichingRef.current.add(key);
+    fetch("/api/discogs/enrich/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recordId }),
+    })
+      .catch(() => {})
+      .finally(() => enrichingRef.current.delete(key));
+  }
+
   // Shared fetch helper — deduplicates, normalises, writes to state.
   // Returns true if features were successfully stored.
   async function fetchOneFeature(record) {
@@ -5913,6 +5931,30 @@ export default function VinylCrate() {
     return () => { cancelled = true; };
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Lazy Discogs + MusicBrainz enrichment triggered by detail card open.
+  // Fires for the opened record + ±2 neighbors in the current sorted view,
+  // plus up to 3 most-played records still missing basic metadata.
+  // All calls are fire-and-forget — server checks what's actually missing.
+  useEffect(() => {
+    if (!selected || !myRecords.length) return;
+    const queue = [selected];
+    const idx = sorted.findIndex(r => r.id === selected.id);
+    if (idx !== -1) {
+      const neighbors = sorted.slice(Math.max(0, idx - 2), Math.min(sorted.length, idx + 3));
+      for (const r of neighbors) {
+        if (!queue.find(q => q.id === r.id)) queue.push(r);
+      }
+    }
+    // Passive fill: top-played records still missing year_original or thumb
+    const topPlayed = [...myRecords]
+      .filter(r => !queue.find(q => q.id === r.id) && (r.year_original == null || !r.thumb))
+      .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
+      .slice(0, 3);
+    queue.push(...topPlayed);
+    // Stagger calls: immediate for focused record, then 2s apart to stay within rate limits
+    queue.forEach((r, i) => setTimeout(() => silentEnrich(r.id), i * 2000));
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const honeycombRecords = (() => {
     const dir = honeycombSortDir === "asc" ? 1 : -1;
     if (honeycombSort === "year") {
@@ -6625,6 +6667,8 @@ export default function VinylCrate() {
     setPlayCounts((prev) => ({ ...prev, [recordId]: (prev[recordId] || 0) + 1 }));
     setLastPlayedDates((prev) => ({ ...prev, [recordId]: playedAt }));
     setPlaySessions((prev) => [{ id: sessionId, record_id: recordId, played_at: playedAt }, ...prev]);
+    // Silently enrich the played record — user interest signal
+    silentEnrich(recordId);
     return sessionId;
   }
 
@@ -9066,6 +9110,7 @@ export default function VinylCrate() {
           onToggleForSale={toggleForSale}
           onDelete={handleDelete}
           onLogPlay={logPlay}
+          onEnrich={silentEnrich}
           onEnterTrail={(rec) => { enterTrail(rec); setSelected(null); }}
           onCompare={(rec) => { setCompareBase(rec); setCompareTarget(null); setSelected(null); }}
           onRecordUpdate={(patch) => {

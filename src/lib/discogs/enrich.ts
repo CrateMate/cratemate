@@ -598,6 +598,275 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
   };
 }
 
+// ─── Single-record enrichment (used by action-triggered lazy enrichment) ────
+
+type DbRecordFull = DbRecord & {
+  artist_birth_month?: number | null;
+  artist_birth_year?: number | null;
+  artist_birth_day?: number | null;
+  artist_death_year?: number | null;
+  artist_death_month?: number | null;
+  artist_death_day?: number | null;
+  release_day?: number | null;
+};
+
+/**
+ * Enrich a single record with Discogs + MusicBrainz data.
+ * Checks which fields are already populated and skips any API call that isn't needed.
+ * Safe to call fire-and-forget — fully idempotent.
+ *
+ * MusicBrainz jitter (0–1200ms random delay) is applied before each MB call so that
+ * parallel invocations (e.g. ±2 neighbors opening simultaneously) don't all hit
+ * MusicBrainz at the same instant.
+ */
+export async function enrichSingleRecord(
+  userId: string,
+  recordId: number
+): Promise<{ updated: boolean; skipped: boolean }> {
+  // Fetch the record with all enrichment-relevant fields
+  const { data: record } = await supabase
+    .from("records")
+    .select(
+      "id, discogs_id, year_pressed, year_original, is_compilation, thumb, artist, title, " +
+      "release_month, release_day, artist_birth_month, artist_birth_year, artist_birth_day, " +
+      "artist_death_year, artist_death_month, artist_death_day"
+    )
+    .eq("id", recordId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!record) return { updated: false, skipped: true };
+
+  const r = record as unknown as DbRecordFull;
+
+  // Decide what's needed before any API call
+  const needsThumb = isMissingThumb(r.thumb) || isLowResThumb(r.thumb);
+  const needsYearFix =
+    r.year_original == null ||
+    r.year_pressed == null ||
+    r.is_compilation == null ||
+    (r.year_original != null && r.year_pressed != null && r.year_original === r.year_pressed);
+  const needsReleaseDateFix = r.release_month == null;
+  // release_day === 0 is the "checked, not found" sentinel — skip
+  const needsMbReleaseDate =
+    !r.is_compilation &&
+    r.release_day == null &&
+    r.year_original != null &&
+    !!r.artist &&
+    !!r.title;
+  // artist_birth_month === 0 is the "checked" sentinel (0 = group or not found) — skip
+  const needsMbArtist = !r.is_compilation && r.artist_birth_month == null && !!r.artist;
+
+  const needsDiscogs = r.discogs_id != null && (needsThumb || needsYearFix || needsReleaseDateFix);
+
+  if (!needsDiscogs && !needsMbReleaseDate && !needsMbArtist) {
+    return { updated: false, skipped: true };
+  }
+
+  const patch: Record<string, unknown> = {};
+
+  // ── Discogs enrichment ────────────────────────────────────────────────────
+  if (needsDiscogs) {
+    // Fetch Discogs OAuth token — fall through to MB-only if not connected
+    const { data: tokenData } = await supabase
+      .from("discogs_tokens")
+      .select("access_token, access_token_secret")
+      .eq("user_id", userId)
+      .single();
+
+    if (tokenData) {
+      const { access_token, access_token_secret } = tokenData;
+      const releaseId = Number(r.discogs_id);
+
+      const cached = await getReleaseCache(releaseId);
+      const cachedCoverOk = !!(cached?.cover_image && !isLowResThumb(cached.cover_image));
+      const cachedYearSentinel = cached?.master_id === 0;
+      const cachedYearBadFallback =
+        !cachedYearSentinel &&
+        cached?.year_original != null &&
+        cached?.year_pressed != null &&
+        cached.year_original === cached.year_pressed;
+      const yearLessConfirmed = cachedYearSentinel && !cached?.year_pressed;
+
+      const needsReleaseCall =
+        !yearLessConfirmed &&
+        (needsYearFix || needsReleaseDateFix || (needsThumb && !cachedCoverOk)) &&
+        (cachedYearBadFallback ||
+          needsReleaseDateFix ||
+          !(cached?.year_pressed && cached?.year_original && (!needsThumb || cachedCoverOk)));
+
+      let release: DiscogsRelease | null = null;
+
+      if (needsReleaseCall) {
+        const releaseRes = await fetchWithRetry(
+          `${DISCOGS_API}/releases/${releaseId}`,
+          access_token,
+          access_token_secret
+        );
+        if (releaseRes.ok) {
+          release = (await releaseRes.json()) as DiscogsRelease;
+          const tracks = flattenTracklist(
+            (release as { tracklist?: unknown[] }).tracklist || []
+          );
+          const releaseMasterId =
+            typeof (release as { master_id?: unknown }).master_id === "number"
+              ? (release as { master_id: number }).master_id
+              : null;
+          await upsertReleaseCache(releaseId, {
+            year_pressed: toYear(release.year) ?? undefined,
+            cover_image: releaseThumb(release) || undefined,
+            thumb: releaseThumb(release) || undefined,
+            tracklist: JSON.stringify(tracks),
+            master_id: releaseMasterId,
+          });
+        }
+      } else if (cached) {
+        release = {
+          year: cached.year_pressed,
+          master_id: cached.master_id ?? undefined,
+        } as unknown as DiscogsRelease;
+      }
+
+      let thumb = "";
+      if (release) {
+        thumb = (cachedCoverOk ? cached!.cover_image! : null) || releaseThumb(release);
+      }
+
+      if (needsYearFix && release) {
+        const pressedYear = cached?.year_pressed ?? toYear(release.year);
+        const yearIsSentinelResolved =
+          cachedYearSentinel &&
+          cached?.year_original != null &&
+          cached.year_original === cached.year_pressed;
+        let originalYear: number | null =
+          cachedYearBadFallback ? null :
+          yearIsSentinelResolved ? cached!.year_original! :
+          (cached?.year_original ?? null);
+
+        if (originalYear == null) {
+          const masterId =
+            release && typeof (release as { master_id?: unknown }).master_id === "number"
+              ? (release as { master_id: number }).master_id
+              : null;
+          if (masterId) {
+            await new Promise((res) => setTimeout(res, RATE_DELAY_MS));
+            const masterRes = await fetchWithRetry(
+              `${DISCOGS_API}/masters/${masterId}`,
+              access_token,
+              access_token_secret
+            );
+            if (masterRes.ok) {
+              const master = await masterRes.json();
+              const masterYear = toYear(master.year);
+              if (masterYear) {
+                originalYear = masterYear;
+              } else if (pressedYear) {
+                originalYear = pressedYear;
+                await upsertReleaseCache(releaseId, { master_id: 0 });
+              }
+              if (!thumb) thumb = releaseThumb(master as DiscogsRelease);
+              await upsertReleaseCache(releaseId, {
+                year_original: originalYear ?? undefined,
+                cover_image: (thumb || cached?.cover_image) ?? undefined,
+                thumb: (thumb || cached?.cover_image) ?? undefined,
+              });
+            }
+          } else if (needsReleaseCall && release && pressedYear) {
+            originalYear = pressedYear;
+            await upsertReleaseCache(releaseId, { year_original: pressedYear });
+          }
+        }
+
+        const compilation = release ? isCompilationFromFormats(release.formats) : null;
+        if (pressedYear != null) patch.year_pressed = pressedYear;
+        if (originalYear != null) patch.year_original = originalYear;
+        if (compilation != null) patch.is_compilation = compilation;
+      }
+
+      if (release) {
+        const released = (release as { released?: unknown })?.released;
+        const { month, day } = parseReleaseDate(released);
+        if (month != null) patch.release_month = month;
+        if (day != null) patch.release_day = day;
+      }
+
+      // Artwork fallback — only for truly missing covers
+      if (!thumb && isMissingThumb(r.thumb)) {
+        if (cachedCoverOk) {
+          thumb = cached!.cover_image!;
+        } else {
+          try { thumb = await iTunesArtworkFallback(r); } catch { /* ignore */ }
+          if (!thumb) {
+            try { thumb = await searchCoverFallback(r); } catch { /* ignore */ }
+          }
+          if (thumb) await upsertReleaseCache(releaseId, { cover_image: thumb, thumb });
+        }
+      }
+
+      if (thumb && (isMissingThumb(r.thumb) || isLowResThumb(r.thumb))) {
+        patch.thumb = thumb;
+      }
+    }
+  }
+
+  // ── MusicBrainz release date ──────────────────────────────────────────────
+  if (needsMbReleaseDate) {
+    // Random jitter so parallel calls (window neighbours) don't all hit MB at once
+    await new Promise((res) => setTimeout(res, Math.random() * 1200));
+    const { day, month } = await fetchReleaseDate(r.artist!, r.title!, r.year_original ?? null);
+    patch.release_day = day ?? 0; // 0 = sentinel "checked, not found"
+    if (r.release_month == null && month != null) patch.release_month = month;
+  }
+
+  // ── MusicBrainz artist dates ──────────────────────────────────────────────
+  if (needsMbArtist) {
+    // Check shared artist_metadata cache before hitting MB
+    const { data: artistCached } = await supabase
+      .from("artist_metadata")
+      .select("artist_type, birth_year, birth_month, birth_day, death_year, death_month, death_day, members")
+      .eq("artist_name", r.artist!)
+      .single();
+
+    let dates;
+    if (artistCached) {
+      dates = {
+        artistType: artistCached.artist_type as "person" | "group" | "other" | null,
+        birthYear: artistCached.birth_year, birthMonth: artistCached.birth_month,
+        birthDay: artistCached.birth_day, deathYear: artistCached.death_year,
+        deathMonth: artistCached.death_month, deathDay: artistCached.death_day,
+        members: Array.isArray(artistCached.members) ? artistCached.members : [],
+      };
+    } else {
+      // Jitter only if we haven't already jittered for MB release date above
+      if (!needsMbReleaseDate) {
+        await new Promise((res) => setTimeout(res, Math.random() * 1200));
+      }
+      dates = await fetchArtistDates(r.artist!);
+      await supabase.from("artist_metadata").upsert({
+        artist_name: r.artist!,
+        artist_type: dates.artistType,
+        birth_year: dates.birthYear, birth_month: dates.birthMonth, birth_day: dates.birthDay,
+        death_year: dates.deathYear, death_month: dates.deathMonth, death_day: dates.deathDay,
+        members: dates.members.length > 0 ? dates.members : null,
+        cached_at: new Date().toISOString(),
+      });
+    }
+
+    const isGroup = dates.artistType === "group";
+    patch.artist_birth_month = isGroup ? 0 : (dates.birthMonth ?? 0);
+    patch.artist_birth_year = isGroup ? null : dates.birthYear;
+    patch.artist_birth_day = isGroup ? null : dates.birthDay;
+    patch.artist_death_year = isGroup ? null : dates.deathYear;
+    patch.artist_death_month = isGroup ? null : dates.deathMonth;
+    patch.artist_death_day = isGroup ? null : dates.deathDay;
+  }
+
+  if (Object.keys(patch).length === 0) return { updated: false, skipped: true };
+
+  await supabase.from("records").update(patch).eq("id", recordId).eq("user_id", userId);
+  return { updated: true, skipped: false };
+}
+
 export async function enrichReleaseDates({ userId }: { userId: string }) {
   // Fetch non-compilation records missing release_day (null = never checked via MusicBrainz)
   const { data: records, error } = await supabase
