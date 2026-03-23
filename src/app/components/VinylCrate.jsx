@@ -2901,7 +2901,8 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
 
             {/* Directional slots */}
             {directions.map(({ key, label, offsetX, offsetY, color }) => {
-              const rec = suggestions?.[key];
+              const suggestion = suggestions?.[key];
+              const rec = suggestion?.record;
               const isLoading = loading && !suggestions;
               // Hide the slot entirely if suggestions are loaded and nothing qualifies
               if (!isLoading && suggestions && !rec && key !== "sideways") return null;
@@ -2935,11 +2936,29 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                       <CoverArt record={rec} size={SLOT} />
                       <div style={{
                         position: "absolute", inset: 0,
-                        background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 55%)",
+                        background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 45%)",
                         display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 5,
                       }}>
+                        {/* Tilde badge for estimated features */}
+                        {suggestion.estimated && (
+                          <span style={{
+                            position: "absolute", top: 4, right: 4,
+                            fontSize: 8, color: "#a8a29e", opacity: 0.7,
+                            background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "1px 3px",
+                          }}>~</span>
+                        )}
                         <p style={{ color: "#fef3c7", fontSize: 8, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
-                        <p style={{ color: "#a8a29e", fontSize: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.artist}</p>
+                        <p style={{ color: "#a8a29e", fontSize: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 3 }}>{rec.artist}</p>
+                        {/* Explanation pills */}
+                        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                          {suggestion.explanation.map(pill => (
+                            <span key={pill} style={{
+                              fontSize: 6, color: color, opacity: 0.85,
+                              background: "rgba(0,0,0,0.45)", borderRadius: 3, padding: "1px 3px",
+                              whiteSpace: "nowrap",
+                            }}>{pill}</span>
+                          ))}
+                        </div>
                       </div>
                     </button>
                   ) : (
@@ -6066,6 +6085,24 @@ export default function VinylCrate() {
     function resolveFeatures(r) {
       return features[r.id] || estimateFeaturesFromRecord(r);
     }
+    function hasRealFeatures(r) {
+      return !!features[r.id];
+    }
+
+    // Build micro-explanation pills for a suggestion
+    function buildExplanation(r, direction) {
+      const rf = resolveFeatures(r);
+      const eDiff = rf.energy - cf.energy;
+      const pills = [];
+      if (direction === "windDown") pills.push(`↓ energy`);
+      else if (direction === "liftUp") pills.push(`↑ energy`);
+      else pills.push(`↔ same energy`);
+      const topGenre = getGenres(r)[0];
+      if (topGenre) pills.push(topGenre);
+      const year = r.year_original;
+      if (year) pills.push(`${Math.floor(year / 10) * 10}s`);
+      return pills.slice(0, 3);
+    }
 
     const cf = resolveFeatures(centerRecord);
 
@@ -6104,14 +6141,18 @@ export default function VinylCrate() {
         const idealBonus = eDiff >= 0.08 ? 0.15 : 0;
         s = proximity + eraBonus + genreBonus + idealBonus;
       } else {
-        // Detour: similar energy orbit, different valence/mood angle.
-        // Penalise if too close in valence (want contrast), reward energy closeness.
-        const energyClose    = 1 - Math.abs(eDiff);
-        const valenceDiff    = Math.abs((rf.valence ?? 0.5) - (cf.valence ?? 0.5));
-        const acousticClose  = 1 - Math.abs((rf.acousticness ?? 0.5) - (cf.acousticness ?? 0.5));
-        const diffGenreBonus = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.25 : 0;
-        const sameEra        = Math.abs((r.year_original || 1980) - (centerRecord.year_original || 1980)) <= 15 ? 0.2 : 0;
-        s = energyClose * 0.4 + valenceDiff * 0.25 + acousticClose * 0.1 + diffGenreBonus + sameEra;
+        // Detour: same energy orbit (gate ±0.08), different mood/vibe.
+        // Reward valence CONTRAST (invert), proximity in other dims, genre divergence.
+        if (Math.abs(eDiff) > 0.08) return -1; // outside energy orbit → not a detour
+        const energyClose    = 1 - (Math.abs(eDiff) / 0.08); // 1.0 at 0 diff, 0 at 0.08
+        const valenceContrast = Math.abs((rf.valence ?? 0.5) - (cf.valence ?? 0.5)); // higher = better
+        const danceDiff      = Math.abs((rf.danceability ?? 0.5) - (cf.danceability ?? 0.5));
+        const acousticDiff   = Math.abs((rf.acousticness ?? 0.5) - (cf.acousticness ?? 0.5));
+        const diffGenreBonus = !getGenres(r).some(g => getGenres(centerRecord).includes(g)) ? 0.30 : 0;
+        const sameEra        = Math.abs((r.year_original || 1980) - (centerRecord.year_original || 1980)) <= 15 ? 0.15 : 0;
+        // Energy closeness keeps us in the same intensity zone;
+        // valence + dance contrast makes it feel like a real tangent.
+        s = energyClose * 0.35 + valenceContrast * 0.30 + danceDiff * 0.10 + acousticDiff * 0.05 + diffGenreBonus + sameEra;
       }
 
       // Recency penalty: played in last 7 days → 30% score
@@ -6137,7 +6178,11 @@ export default function VinylCrate() {
       const idx = Math.random() < 0.5 ? 0 : Math.floor(Math.random() * Math.min(pool.length, 3));
       const chosen = pool[idx];
       pickedKeys.add(getCanonicalKey(chosen));
-      return chosen;
+      return {
+        record: chosen,
+        explanation: buildExplanation(chosen, dir),
+        estimated: !hasRealFeatures(chosen),
+      };
     }
 
     return {
