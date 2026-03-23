@@ -7581,6 +7581,8 @@ export default function VinylCrate() {
                       }}
                       className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
                     >
+                      ✗ all
+                    </button>
                     <button
                       onClick={() => {
                         if (allExpanded) setExpandedHearts(new Set());
