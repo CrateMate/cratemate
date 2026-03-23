@@ -24,7 +24,11 @@ async function searchTrackUri(trackTitle: string, rawArtist: string): Promise<st
 
   const trySearch = async (q: string) => {
     const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[playlist/search] ${res.status} for query "${q}":`, body);
+      return null;
+    }
     const data = await res.json();
     return (data.tracks?.items || [])[0]?.uri ?? null;
   };
