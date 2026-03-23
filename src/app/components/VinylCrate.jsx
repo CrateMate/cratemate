@@ -5527,7 +5527,10 @@ export default function VinylCrate() {
     const favRecords = myRecords.filter(r => (r.favorite_tracks || []).length > 0 && r.discogs_id);
     for (const r of favRecords) {
       if (favTitles[r.id]) continue;
-      const needsResolve = (r.favorite_tracks || []).some(f => typeof f !== "object");
+      const needsResolve = (r.favorite_tracks || []).some(f => {
+        if (typeof f !== "object") return true;
+        return !f.title || f.title === f.key; // stored as object but title missing or just the position key
+      });
       if (!needsResolve) continue;
       fetch(`/api/discogs/release/${r.discogs_id}`)
         .then(res => res.ok ? res.json() : null)
@@ -7442,7 +7445,7 @@ export default function VinylCrate() {
             if (data.error === "insufficient_scope") {
               setSpotifyConnectedForPlaylists(false);
             } else if (data.error === "no_tracks_found") {
-              setExportResult({ exportError: "None of the selected tracks were found on Spotify.", notFound: data.notFound });
+              setExportResult({ exportError: "No tracks found on Spotify. Check the list below to see what was searched.", notFound: data.notFound, total: data.total });
             } else if (data.error && !data.playlistUrl) {
               setExportResult({ exportError: data.error, detail: data.detail });
             } else {
@@ -7689,9 +7692,16 @@ export default function VinylCrate() {
                   ) : exportResult ? (
                     <div className="py-2 space-y-1.5">
                       {exportResult.exportError ? (
-                        <div className="text-sm text-rose-400">
-                          Export failed ({exportResult.exportError}{exportResult.detail ? `: ${exportResult.detail}` : ""}).{" "}
-                          <button onClick={() => setExportResult(null)} className="underline text-stone-500">Dismiss</button>
+                        <div className="space-y-1.5">
+                          <div className="text-sm text-rose-400">
+                            {exportResult.exportError}{exportResult.detail ? ` (${exportResult.detail})` : ""}{" "}
+                            <button onClick={() => setExportResult(null)} className="underline text-stone-500">Dismiss</button>
+                          </div>
+                          {exportResult.notFound?.length > 0 && (
+                            <div className="text-xs text-stone-600 space-y-0.5 pl-1">
+                              {exportResult.notFound.map((t, i) => <div key={i}>{t}</div>)}
+                            </div>
+                          )}
                         </div>
                       ) : <>
                       <div className="text-sm text-stone-300">✓ Playlist created — {exportResult.matched} of {exportResult.total} tracks added</div>
