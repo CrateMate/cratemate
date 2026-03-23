@@ -5220,6 +5220,7 @@ export default function VinylCrate() {
   // Accumulate upward movement — prevents iOS rubber-band bounce from re-showing header
   const upScrollAccum = useRef(0);
   const SHOW_ACCUM = 24; // px of upward travel required before header re-appears
+  const [searchFocused, setSearchFocused] = useState(false);
   function handleTabScroll(e) {
     const y = e.currentTarget.scrollTop;
     const delta = y - lastScrollY.current;
@@ -5227,7 +5228,8 @@ export default function VinylCrate() {
     if (Math.abs(delta) < 4) return;
     if (delta > 0) {
       upScrollAccum.current = 0;
-      if (y > 40) setHeaderVisible(false);
+      // Only hide after a meaningful scroll — prevents rebound on short pages
+      if (y > 80) setHeaderVisible(false);
     } else {
       upScrollAccum.current += Math.abs(delta);
       if (upScrollAccum.current >= SHOW_ACCUM) {
@@ -5240,7 +5242,7 @@ export default function VinylCrate() {
     setHeaderVisible(true);
     lastScrollY.current = 0;
     upScrollAccum.current = 0;
-  }, [tab]);
+  }, [tab, page]); // reset on tab change AND page change
 
   const [isDiscoverable, setIsDiscoverable] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null);
@@ -6824,6 +6826,8 @@ export default function VinylCrate() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => { setSearchFocused(true); setHeaderVisible(false); }}
+              onBlur={() => { setSearchFocused(false); setHeaderVisible(true); }}
               placeholder="Search artist, title, genre, song..."
               className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60" style={{ backgroundColor: "var(--bg-input)" }}
             />
@@ -8742,11 +8746,11 @@ export default function VinylCrate() {
         />
       )}
 
-      {/* Compare overlay */}
+      {/* Compare overlay — derive records live from collection so for_sale updates reflect immediately */}
       {compareBase && (
         <CompareView
-          recordA={compareBase}
-          recordB={compareTarget}
+          recordA={collection?.find(r => r.id === compareBase.id) || compareBase}
+          recordB={compareTarget ? (collection?.find(r => r.id === compareTarget.id) || compareTarget) : null}
           featuresA={spotifyFeatures?.[compareBase.id] || null}
           featuresB={compareTarget ? (spotifyFeatures?.[compareTarget.id] || null) : null}
           playCountA={playCounts[compareBase.id] || 0}
