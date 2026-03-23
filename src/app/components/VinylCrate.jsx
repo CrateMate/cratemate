@@ -7866,12 +7866,22 @@ export default function VinylCrate() {
                 )}
 
                 {spotifyLinked === true && !spotifyRecsLoading && (
-                  <div className="px-4 py-2 border-t border-stone-800/40 flex justify-end">
+                  <div className="px-4 py-2 border-t border-stone-800/40 flex justify-between items-center">
                     <button
                       onClick={() => { setSpotifyLinked(null); setSpotifyRecs(null); }}
                       className="text-[10px] text-stone-700 hover:text-stone-500 transition-colors"
                     >
                       Refresh
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await fetch("/api/spotify/status", { method: "DELETE" });
+                        setSpotifyLinked(false);
+                        setSpotifyRecs(null);
+                      }}
+                      className="text-[10px] text-stone-700 hover:text-rose-500 transition-colors"
+                    >
+                      Disconnect Spotify
                     </button>
                   </div>
                 )}
