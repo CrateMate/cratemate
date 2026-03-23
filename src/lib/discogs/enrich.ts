@@ -630,7 +630,7 @@ export async function enrichArtistDates({ userId }: { userId: string }) {
     // Check shared cache first
     const { data: cached } = await supabase
       .from("artist_metadata")
-      .select("birth_year, birth_month, birth_day, death_year, death_month, death_day")
+      .select("artist_type, birth_year, birth_month, birth_day, death_year, death_month, death_day, members")
       .eq("artist_name", artistName)
       .single();
 
@@ -638,12 +638,14 @@ export async function enrichArtistDates({ userId }: { userId: string }) {
     if (cached) {
       cacheHits++;
       dates = {
+        artistType: cached.artist_type as "person" | "group" | "other" | null,
         birthYear:  cached.birth_year,
         birthMonth: cached.birth_month,
         birthDay:   cached.birth_day,
         deathYear:  cached.death_year,
         deathMonth: cached.death_month,
         deathDay:   cached.death_day,
+        members:    Array.isArray(cached.members) ? cached.members : [],
       };
     } else {
       // Cache miss — call MusicBrainz (includes 1.1s rate-limit delay)
@@ -653,24 +655,30 @@ export async function enrichArtistDates({ userId }: { userId: string }) {
       // (null values mean "looked up, not found" — avoids re-querying on next run)
       await supabase.from("artist_metadata").upsert({
         artist_name:  artistName,
+        artist_type:  dates.artistType,
         birth_year:   dates.birthYear,
         birth_month:  dates.birthMonth,
         birth_day:    dates.birthDay,
         death_year:   dates.deathYear,
         death_month:  dates.deathMonth,
         death_day:    dates.deathDay,
+        members:      dates.members.length > 0 ? dates.members : null,
         cached_at:    new Date().toISOString(),
       });
     }
 
-    // Copy result to all of this user's records with that artist name
+    // For groups: individual dates live in artist_metadata.members — don't flatten onto records.
+    // For persons: store birth/death directly on records for fast reco queries.
+    // Either way, set artist_birth_month sentinel (0 = enriched, data in artist_metadata)
+    // so this record isn't re-queried on the next enrichment run.
+    const isGroup = dates.artistType === "group";
     const patch: Record<string, unknown> = {
-      artist_birth_year:  dates.birthYear,
-      artist_birth_month: dates.birthMonth ?? 0, // 0 = "looked up, not found" — prevents re-querying
-      artist_birth_day:   dates.birthDay,
-      artist_death_year:  dates.deathYear,
-      artist_death_month: dates.deathMonth,
-      artist_death_day:   dates.deathDay,
+      artist_birth_month: isGroup ? 0 : (dates.birthMonth ?? 0),
+      artist_birth_year:  isGroup ? null : dates.birthYear,
+      artist_birth_day:   isGroup ? null : dates.birthDay,
+      artist_death_year:  isGroup ? null : dates.deathYear,
+      artist_death_month: isGroup ? null : dates.deathMonth,
+      artist_death_day:   isGroup ? null : dates.deathDay,
     };
 
     const { error: updateError } = await supabase
