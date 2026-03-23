@@ -17,6 +17,7 @@ export async function GET() {
     redirect_uri: redirectUri,
     state,
     scope: "user-top-read user-read-recently-played playlist-modify-public playlist-modify-private",
+    show_dialog: "true",
   });
 
   return NextResponse.redirect(`https://accounts.spotify.com/authorize?${params}`);

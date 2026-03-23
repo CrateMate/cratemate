@@ -7438,7 +7438,8 @@ export default function VinylCrate() {
         };
 
         return (
-          <div className="flex-1 overflow-y-auto flex flex-col" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+          <div className="flex-1 flex flex-col min-h-0" style={{ paddingBottom: nowPlaying ? 96 : 0 }}>
+            <div className="flex-1 overflow-y-auto" onScroll={handleTabScroll}>
             {!seenHints["hearts"] && (
               <HintBanner onDismiss={() => dismissHint("hearts")}>
                 Open a record, expand its tracklist, and tap ♥ next to any track to save it here.
@@ -7651,6 +7652,10 @@ export default function VinylCrate() {
                   })}
                 </div>
 
+              </>
+            )}
+            </div>
+            {heartedRecords.length > 0 && <>
                 {/* Export bar / result / reconnect prompt */}
                 <div className="shrink-0 px-4 pt-2 pb-1 border-t border-stone-800/40">
                   {spotifyConnectedForPlaylists === false ? (
@@ -7757,8 +7762,7 @@ export default function VinylCrate() {
                     </div>
                   </div>
                 )}
-              </>
-            )}
+              </>}
           </div>
         );
       })()}
