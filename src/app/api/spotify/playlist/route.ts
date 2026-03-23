@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAccessToken, spotifyGet } from "@/lib/spotify";
+import { getUserAccessToken } from "@/lib/spotify";
 
 type TrackInput = { artist: string; trackTitle: string };
 
@@ -18,12 +18,15 @@ function cleanTrackTitle(title: string): string {
   return title.replace(/\s*=\s*.+$/, "").trim();
 }
 
-async function searchTrackUri(trackTitle: string, rawArtist: string): Promise<string | null> {
+async function searchTrackUri(trackTitle: string, rawArtist: string, token: string): Promise<string | null> {
   const artist = cleanArtist(rawArtist);
   const title = cleanTrackTitle(trackTitle);
 
   const trySearch = async (q: string) => {
-    const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+    const res = await fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error(`[playlist/search] ${res.status} for query "${q}":`, body);
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
     const uris: string[] = [];
     const notFound: string[] = [];
     for (const track of tracks) {
-      const uri = await searchTrackUri(track.trackTitle, track.artist);
+      const uri = await searchTrackUri(track.trackTitle, track.artist, token);
       uri ? uris.push(uri) : notFound.push(`${cleanArtist(track.artist)} — ${cleanTrackTitle(track.trackTitle)}`);
       await sleep(200);
     }
