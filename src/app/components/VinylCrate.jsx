@@ -2849,14 +2849,6 @@ function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playC
         .slice(0, 40)
     : [];
 
-  const DIMS = [
-    { key: "energy",       label: "Energy" },
-    { key: "valence",      label: "Mood" },
-    { key: "danceability", label: "Dance" },
-    { key: "acousticness", label: "Acoustic" },
-    { key: "loudness",     label: "Loudness" },
-  ];
-
   function fmtLastPlayed(d) {
     if (!d) return null;
     const diff = Date.now() - new Date(d).getTime();
@@ -2980,55 +2972,117 @@ function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playC
             <RecordCol record={recordB} features={featuresB} playCount={playCountB} lastPlayed={lastPlayedB} side="B" />
           </div>
 
-          {/* Butterfly chart */}
-          <div className="mb-2">
-            <div className="text-stone-600 text-xs uppercase tracking-widest text-center mb-3">Sound Profile</div>
-            {DIMS.map(({ key, label }) => {
-              const fA = featuresA || estimateFeaturesFromRecord(recordA);
-              const fB = featuresB || estimateFeaturesFromRecord(recordB);
-              const vA = key === "loudness" ? (fA.loudness ?? 0.70) : (fA[key] ?? 0.5);
-              const vB = key === "loudness" ? (fB.loudness ?? 0.70) : (fB[key] ?? 0.5);
-              const pA = Math.round(vA * 100);
-              const pB = Math.round(vB * 100);
-              return (
-                <div key={key} className="flex items-center gap-2 mb-2.5">
-                  {/* Left bar (Record A) — grows left */}
-                  <div className="flex-1 flex justify-end">
-                    <div className="h-2 rounded-full" style={{ width: `${pA}%`, background: "#f59e0b80", maxWidth: "100%" }} />
-                  </div>
-                  {/* Centre label */}
-                  <div className="text-stone-600 shrink-0 text-center" style={{ fontSize: 9, width: 52 }}>{label}</div>
-                  {/* Right bar (Record B) — grows right */}
-                  <div className="flex-1 flex justify-start">
-                    <div className="h-2 rounded-full" style={{ width: `${pB}%`, background: "#2dd4bf80", maxWidth: "100%" }} />
-                  </div>
+          {/* Radar chart + pills */}
+          {(() => {
+            const fA = featuresA || estimateFeaturesFromRecord(recordA);
+            const fB = featuresB || estimateFeaturesFromRecord(recordB);
+
+            // 5 radar axes — order determines polygon shape (clockwise from top)
+            const axes = [
+              { label: "Energy",   vA: fA.energy ?? 0.5,       vB: fB.energy ?? 0.5 },
+              { label: "Mood",     vA: fA.valence ?? 0.5,      vB: fB.valence ?? 0.5 },
+              { label: "Dance",    vA: fA.danceability ?? 0.5, vB: fB.danceability ?? 0.5 },
+              { label: "Acoustic", vA: fA.acousticness ?? 0.5, vB: fB.acousticness ?? 0.5 },
+              { label: "Loud",     vA: fA.loudness ?? 0.70,    vB: fB.loudness ?? 0.70 },
+            ];
+            const N = axes.length;
+            const CX = 110; const CY = 110; const R = 72;
+            const labelR = R + 16;
+
+            function pt(i, v) {
+              const angle = -Math.PI / 2 + (2 * Math.PI / N) * i;
+              return [CX + v * R * Math.cos(angle), CY + v * R * Math.sin(angle)];
+            }
+            function polygon(vals, color) {
+              const pts = vals.map((v, i) => pt(i, v).join(",")).join(" ");
+              return <polygon points={pts} fill={color} fillOpacity={0.18} stroke={color} strokeWidth={1.5} strokeOpacity={0.7} />;
+            }
+
+            // Descriptor pills — only for records with real Spotify features
+            function getPills(f, hasReal) {
+              if (!hasReal) return [];
+              const p = [];
+              if (f.energy > 0.7) p.push("High Energy");
+              else if (f.energy < 0.4) p.push("Laid Back");
+              if (f.valence > 0.6) p.push("Feel Good");
+              else if (f.valence < 0.35) p.push("Melancholic");
+              if (f.danceability > 0.65) p.push("Danceable");
+              else if (f.danceability < 0.4) p.push("Headphone Music");
+              return p;
+            }
+            const pillsA = getPills(fA, !!featuresA);
+            const pillsB = getPills(fB, !!featuresB);
+
+            return (
+              <div className="mb-2">
+                <div className="text-stone-600 text-xs uppercase tracking-widest text-center mb-2">Sound Profile</div>
+
+                {/* SVG radar */}
+                <div className="flex justify-center">
+                  <svg width={220} height={220} viewBox="0 0 220 220">
+                    {/* Grid rings */}
+                    {[0.25, 0.5, 0.75, 1].map(t => (
+                      <polygon key={t}
+                        points={axes.map((_, i) => pt(i, t).join(",")).join(" ")}
+                        fill="none" stroke="#292524" strokeWidth={1}
+                      />
+                    ))}
+                    {/* Axis spokes */}
+                    {axes.map((_, i) => {
+                      const [x, y] = pt(i, 1);
+                      return <line key={i} x1={CX} y1={CY} x2={x} y2={y} stroke="#292524" strokeWidth={1} />;
+                    })}
+                    {/* Data polygons */}
+                    {polygon(axes.map(a => a.vA), "#f59e0b")}
+                    {polygon(axes.map(a => a.vB), "#2dd4bf")}
+                    {/* Axis labels */}
+                    {axes.map(({ label }, i) => {
+                      const angle = -Math.PI / 2 + (2 * Math.PI / N) * i;
+                      const lx = CX + labelR * Math.cos(angle);
+                      const ly = CY + labelR * Math.sin(angle);
+                      return (
+                        <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                          fill="#78716c" fontSize={8}>{label}</text>
+                      );
+                    })}
+                  </svg>
                 </div>
-              );
-            })}
-            {/* Tempo row — shown as raw numbers since BPM is more legible than normalised */}
-            {(() => {
-              const fA = featuresA || estimateFeaturesFromRecord(recordA);
-              const fB = featuresB || estimateFeaturesFromRecord(recordB);
-              return (
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-stone-800/40">
+
+                {/* Tempo + legend */}
+                <div className="flex items-center gap-2 mt-1 mb-3">
                   <div className="flex-1 text-right" style={{ fontSize: 10, color: "#f59e0b99" }}>{Math.round(fA.tempo || 120)} BPM</div>
                   <div className="text-stone-700 shrink-0 text-center" style={{ fontSize: 9, width: 52 }}>Tempo</div>
                   <div className="flex-1 text-left" style={{ fontSize: 10, color: "#2dd4bf99" }}>{Math.round(fB.tempo || 120)} BPM</div>
                 </div>
-              );
-            })()}
-            {/* Legend */}
-            <div className="flex justify-between mt-3">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ background: "#f59e0b" }} />
-                <span className="text-stone-500" style={{ fontSize: 9 }}>{recordA.title?.slice(0, 18)}</span>
+                <div className="flex justify-between mb-4">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "#f59e0b" }} />
+                    <span className="text-stone-500 truncate" style={{ fontSize: 9, maxWidth: 100 }}>{recordA.title}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-stone-500 truncate" style={{ fontSize: 9, maxWidth: 100 }}>{recordB.title}</span>
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: "#2dd4bf" }} />
+                  </div>
+                </div>
+
+                {/* Descriptor pills — only shown when real Spotify data exists */}
+                {(pillsA.length > 0 || pillsB.length > 0) && (
+                  <div className="flex gap-3 pt-3 border-t border-stone-800/40">
+                    <div className="flex-1 flex flex-wrap gap-1 justify-start">
+                      {pillsA.map(p => (
+                        <span key={p} style={{ fontSize: 8, padding: "2px 6px", borderRadius: 99, background: "rgba(245,158,11,0.1)", color: "#d97706", border: "1px solid rgba(245,158,11,0.25)" }}>{p}</span>
+                      ))}
+                    </div>
+                    <div className="flex-1 flex flex-wrap gap-1 justify-end">
+                      {pillsB.map(p => (
+                        <span key={p} style={{ fontSize: 8, padding: "2px 6px", borderRadius: 99, background: "rgba(45,212,191,0.1)", color: "#2dd4bf", border: "1px solid rgba(45,212,191,0.25)" }}>{p}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-stone-500" style={{ fontSize: 9 }}>{recordB.title?.slice(0, 18)}</span>
-                <div className="w-2 h-2 rounded-full" style={{ background: "#2dd4bf" }} />
-              </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
       )}
     </div>
