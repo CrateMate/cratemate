@@ -5207,6 +5207,18 @@ export default function VinylCrate() {
   const [heartsVisible, setHeartsVisible] = useState(20);
   const HEARTS_PAGE_SIZE = 20;
   const heartsSentinelRef = useRef(null);
+  const [heartsGenreFilter, setHeartsGenreFilter] = useState([]);
+  const [heartsYearFilter, setHeartsYearFilter] = useState([]);
+  const [heartsSort, setHeartsSort] = useState("artist");
+  const [heartsSortDir, setHeartsSortDir] = useState("asc");
+  const [heartsChecked, setHeartsChecked] = useState(null); // null = all checked; Set<"recordId-trackKey"> = explicit
+  const [exportingPlaylist, setExportingPlaylist] = useState(false);
+  const [playlistName, setPlaylistName] = useState("");
+  const [showPlaylistNameModal, setShowPlaylistNameModal] = useState(false);
+  const [exportResult, setExportResult] = useState(null);
+  const [playlistIsPublic, setPlaylistIsPublic] = useState(true);
+  const [spotifyConnectedForPlaylists, setSpotifyConnectedForPlaylists] = useState(null);
+  const [showNotFoundList, setShowNotFoundList] = useState(false);
 
   const [historyPage, setHistoryPage] = useState(1);
   const [historyInfiniteScroll, setHistoryInfiniteScroll] = useState(false);
@@ -7347,54 +7359,216 @@ export default function VinylCrate() {
         </div>
       )}
 
-      {tab === "hearts" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
-          {!seenHints["hearts"] && (
-            <HintBanner onDismiss={() => dismissHint("hearts")}>
-              Open a record, expand its tracklist, and tap ♥ next to any track to save it here.
-            </HintBanner>
-          )}
-          <div className="px-4">
-          {(() => {
-            const allFavRecords = myRecords
-              .filter((r) => (r.favorite_tracks || []).length > 0)
-              .sort((a, b) => (a.artist || "").localeCompare(b.artist || ""));
-            if (allFavRecords.length === 0) {
-              return (
-                <div className="text-center py-16">
-                  <div className="text-3xl mb-3 text-stone-700">♥</div>
-                  <div className="text-stone-600 text-sm">No favorite tracks yet.</div>
-                  <div className="text-stone-700 text-xs mt-1">Tap ♥ on a track in any record&apos;s tracklist.</div>
-                </div>
-              );
+      {tab === "hearts" && (() => {
+        // Derived data
+        const heartedRecords = myRecords
+          .filter(r => (r.favorite_tracks || []).length > 0)
+          .map(r => ({
+            ...r,
+            decade: Math.floor(((r.year_original || r.year_pressed) || 1975) / 10) * 10,
+            primaryGenre: (r.genre || [])[0] || "Unknown",
+            energy: spotifyFeatures?.[r.id]?.energy ?? null,
+          }));
+
+        const heartsGenreOptions = [...new Set(heartedRecords.flatMap(r => r.genre || []))].sort();
+        const heartsYearOptions = [...new Set(heartedRecords.map(r => r.year_original || r.year_pressed).filter(Boolean))].sort((a, b) => a - b);
+
+        const dir = heartsSortDir === "asc" ? 1 : -1;
+        const heartsFiltered = heartedRecords
+          .filter(r => heartsGenreFilter.length === 0 || (r.genre || []).some(g => heartsGenreFilter.includes(g)))
+          .filter(r => heartsYearFilter.length === 0 || heartsYearFilter.includes(r.year_original || r.year_pressed))
+          .sort((a, b) => {
+            if (heartsSort === "genre") return dir * a.primaryGenre.localeCompare(b.primaryGenre);
+            if (heartsSort === "year") return dir * ((a.year_original || a.year_pressed || 0) - (b.year_original || b.year_pressed || 0));
+            if (heartsSort === "energy") return dir * ((a.energy ?? -1) - (b.energy ?? -1));
+            return dir * (a.artist || "").localeCompare(b.artist || "");
+          });
+
+        const isTrackChecked = (recordId, trackKey) =>
+          heartsChecked === null || heartsChecked.has(`${recordId}-${trackKey}`);
+
+        // Total checked across ALL hearted records (not just visible)
+        const totalChecked = heartsChecked === null
+          ? heartedRecords.reduce((sum, r) => sum + (r.favorite_tracks || []).length, 0)
+          : heartsChecked.size;
+
+        const allExpanded = expandedHearts.size >= heartsFiltered.length && heartsFiltered.length > 0;
+
+        // Month/year default playlist name
+        const now = new Date();
+        const defaultPlaylistName = `CrateMate — ${now.toLocaleString("en-US", { month: "long" })} ${now.getFullYear()}`;
+
+        const handleExportClick = () => {
+          setPlaylistName(defaultPlaylistName);
+          setShowPlaylistNameModal(true);
+          setExportResult(null);
+          setShowNotFoundList(false);
+        };
+
+        const handleCreatePlaylist = async () => {
+          setExportingPlaylist(true);
+          setShowPlaylistNameModal(false);
+          const tracks = [];
+          for (const r of heartedRecords) {
+            for (const f of (r.favorite_tracks || [])) {
+              const { key, title } = normFav(f);
+              if (isTrackChecked(r.id, key)) {
+                const trackTitle = (title && title !== key) ? title : (favTitles[r.id]?.[key] || key);
+                tracks.push({ artist: r.artist, trackTitle });
+              }
             }
-            const heartsTotalPages = Math.ceil(allFavRecords.length / HEARTS_PAGE_SIZE);
-            const visibleFavRecords = heartsInfiniteScroll
-              ? allFavRecords.slice(0, heartsVisible)
-              : allFavRecords.slice((heartsPage - 1) * HEARTS_PAGE_SIZE, heartsPage * HEARTS_PAGE_SIZE);
-            const heartsHasMore = heartsInfiniteScroll && heartsVisible < allFavRecords.length;
-            const allExpanded = expandedHearts.size >= visibleFavRecords.length;
-            return (
+          }
+          try {
+            const res = await fetch("/api/spotify/playlist", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: playlistName, tracks, isPublic: playlistIsPublic }),
+            });
+            const data = await res.json();
+            if (data.error === "insufficient_scope") {
+              setSpotifyConnectedForPlaylists(false);
+            } else {
+              setExportResult(data);
+            }
+          } catch {
+            // network error — treat as disconnected
+            setSpotifyConnectedForPlaylists(false);
+          } finally {
+            setExportingPlaylist(false);
+          }
+        };
+
+        return (
+          <div className="flex-1 overflow-y-auto flex flex-col" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+            {!seenHints["hearts"] && (
+              <HintBanner onDismiss={() => dismissHint("hearts")}>
+                Open a record, expand its tracklist, and tap ♥ next to any track to save it here.
+              </HintBanner>
+            )}
+
+            {heartedRecords.length === 0 ? (
+              <div className="text-center py-16 px-4">
+                <div className="text-3xl mb-3 text-stone-700">♥</div>
+                <div className="text-stone-600 text-sm">No favorite tracks yet.</div>
+                <div className="text-stone-700 text-xs mt-1">Tap ♥ on a track in any record&apos;s tracklist.</div>
+              </div>
+            ) : (
               <>
-                <div className="flex items-center gap-2 mt-2 mb-3">
-                  <button
-                    onClick={() => {
-                      if (allExpanded) setExpandedHearts(new Set());
-                      else setExpandedHearts(new Set(visibleFavRecords.map(r => r.id)));
-                    }}
-                    className="text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
-                  >
-                    {allExpanded ? "− Collapse all" : "+ Expand all"}
-                  </button>
-                  <button
-                    onClick={() => { setHeartsInfiniteScroll(s => !s); setHeartsPage(1); setHeartsVisible(HEARTS_PAGE_SIZE); }}
-                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${heartsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-                  >
-                    {heartsInfiniteScroll ? "∞" : "p."}
-                  </button>
+                {/* Controls bar */}
+                <div className="px-4 pt-3 pb-1 space-y-2 border-b border-stone-800/40">
+                  {/* Genre pills */}
+                  {heartsGenreOptions.length > 0 && (
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      {heartsGenreOptions.map(g => (
+                        <button
+                          key={g}
+                          onClick={() => setHeartsGenreFilter(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g])}
+                          className={`shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${heartsGenreFilter.includes(g) ? "bg-amber-900/40 border-amber-700/50 text-amber-300" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Year pills */}
+                  {heartsYearOptions.length > 0 && (
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      {heartsYearOptions.map(y => (
+                        <button
+                          key={y}
+                          onClick={() => setHeartsYearFilter(prev => prev.includes(y) ? prev.filter(x => x !== y) : [...prev, y])}
+                          className={`shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${heartsYearFilter.includes(y) ? "bg-amber-900/40 border-amber-700/50 text-amber-300" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                        >
+                          {y}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Sort + select controls */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-stone-600 text-xs shrink-0">Sort:</span>
+                    {["artist", "genre", "year", "energy"].map(s => (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          if (heartsSort === s) {
+                            setHeartsSortDir(d => d === "asc" ? "desc" : "asc");
+                          } else {
+                            setHeartsSort(s);
+                            setHeartsSortDir("asc");
+                          }
+                        }}
+                        className={`shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors capitalize ${heartsSort === s ? "bg-amber-900/40 border-amber-700/50 text-amber-300" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                      >
+                        {s}{heartsSort === s ? (heartsSortDir === "asc" ? " ↑" : " ↓") : ""}
+                      </button>
+                    ))}
+                    <div className="flex-1" />
+                    <button
+                      onClick={() => {
+                        // Materialize all visible track keys as checked
+                        const visibleKeys = new Set(
+                          heartsFiltered.flatMap(r =>
+                            (r.favorite_tracks || []).map(f => `${r.id}-${normFav(f).key}`)
+                          )
+                        );
+                        if (heartsChecked === null) {
+                          // Start from all checked, add visible
+                          setHeartsChecked(visibleKeys);
+                        } else {
+                          const next = new Set(heartsChecked);
+                          for (const k of visibleKeys) next.add(k);
+                          setHeartsChecked(next);
+                        }
+                      }}
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+                    >
+                      ✓ all
+                    </button>
+                    <button
+                      onClick={() => {
+                        const visibleKeys = new Set(
+                          heartsFiltered.flatMap(r =>
+                            (r.favorite_tracks || []).map(f => `${r.id}-${normFav(f).key}`)
+                          )
+                        );
+                        if (heartsChecked === null) {
+                          // Materialize with all checked, then remove visible
+                          const allKeys = new Set(
+                            heartedRecords.flatMap(r =>
+                              (r.favorite_tracks || []).map(f => `${r.id}-${normFav(f).key}`)
+                            )
+                          );
+                          for (const k of visibleKeys) allKeys.delete(k);
+                          setHeartsChecked(allKeys);
+                        } else {
+                          const next = new Set(heartsChecked);
+                          for (const k of visibleKeys) next.delete(k);
+                          setHeartsChecked(next);
+                        }
+                      }}
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+                    >
+                      ✗ vis
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (allExpanded) setExpandedHearts(new Set());
+                        else setExpandedHearts(new Set(heartsFiltered.map(r => r.id)));
+                      }}
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+                    >
+                      {allExpanded ? "− all" : "+ all"}
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-0.5">
-                  {visibleFavRecords.map((r) => {
+
+                {/* Record list */}
+                <div className="px-4 space-y-0.5 pt-2 flex-1">
+                  {heartsFiltered.length === 0 && (
+                    <div className="text-center py-8 text-stone-600 text-sm">No records match these filters.</div>
+                  )}
+                  {heartsFiltered.map((r) => {
                     const isExpanded = expandedHearts.has(r.id);
                     const heartCount = (r.favorite_tracks || []).length;
                     return (
@@ -7420,7 +7594,7 @@ export default function VinylCrate() {
                           <span className={`text-stone-600 text-xs transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>›</span>
                         </div>
                         {isExpanded && (
-                          <div className="space-y-0.5 pl-[52px] pr-2 pb-2">
+                          <div className="space-y-0.5 pl-3 pr-2 pb-2">
                             {[...(r.favorite_tracks || [])].sort((a, b) => {
                               const ka = (typeof a === "object" ? a.key : a) || "";
                               const kb = (typeof b === "object" ? b.key : b) || "";
@@ -7428,8 +7602,32 @@ export default function VinylCrate() {
                             }).map((f) => {
                               const { key, title } = normFav(f);
                               const displayTitle = (title && title !== key) ? title : (favTitles[r.id]?.[key] || key);
+                              const checked = isTrackChecked(r.id, key);
                               return (
                                 <div key={key} className="flex items-center gap-2 py-0.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      const trackId = `${r.id}-${key}`;
+                                      if (heartsChecked === null) {
+                                        // Materialize all tracks, then toggle this one
+                                        const allKeys = new Set(
+                                          heartedRecords.flatMap(rec =>
+                                            (rec.favorite_tracks || []).map(ff => `${rec.id}-${normFav(ff).key}`)
+                                          )
+                                        );
+                                        allKeys.delete(trackId);
+                                        setHeartsChecked(allKeys);
+                                      } else {
+                                        const next = new Set(heartsChecked);
+                                        next.has(trackId) ? next.delete(trackId) : next.add(trackId);
+                                        setHeartsChecked(next);
+                                      }
+                                    }}
+                                    className="shrink-0 w-3.5 h-3.5 accent-amber-500 cursor-pointer"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
                                   <span className="text-stone-600 text-xs w-8 shrink-0">{key}</span>
                                   <span className="text-stone-300 text-sm flex-1 truncate">{displayTitle}</span>
                                   <button
@@ -7452,30 +7650,119 @@ export default function VinylCrate() {
                       </div>
                     );
                   })}
-                  {heartsInfiniteScroll ? (
-                    heartsHasMore && <div ref={heartsSentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>
-                  ) : (
-                    heartsTotalPages > 1 && (
-                      <div className="flex items-center justify-center gap-3 py-4">
-                        <button onClick={() => setHeartsPage(p => Math.max(1, p - 1))} disabled={heartsPage === 1}
-                          className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
-                          ← Prev
-                        </button>
-                        <span className="text-stone-600 text-xs">{heartsPage} / {heartsTotalPages}</span>
-                        <button onClick={() => setHeartsPage(p => Math.min(heartsTotalPages, p + 1))} disabled={heartsPage === heartsTotalPages}
-                          className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
-                          Next →
+                </div>
+
+                {/* Export bar / result / reconnect prompt */}
+                <div className="shrink-0 px-4 pt-2 pb-1 border-t border-stone-800/40">
+                  {spotifyConnectedForPlaylists === false ? (
+                    <div className="text-center py-2">
+                      <div className="text-stone-500 text-xs mb-2">Playlist export requires updated Spotify permissions.</div>
+                      <button
+                        onClick={() => { window.location.href = "/api/spotify/auth"; }}
+                        className="text-xs px-4 py-1.5 rounded-full border border-[#1DB954]/40 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 transition-colors"
+                      >
+                        Reconnect Spotify →
+                      </button>
+                    </div>
+                  ) : exportResult ? (
+                    <div className="py-2 space-y-1.5">
+                      <div className="text-sm text-stone-300">✓ Playlist created — {exportResult.matched} of {exportResult.total} tracks added</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <a
+                          href={exportResult.playlistUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs px-3 py-1.5 rounded-full border border-[#1DB954]/40 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 transition-colors"
+                        >
+                          Open in Spotify
+                        </a>
+                        {exportResult.notFound?.length > 0 && (
+                          <button
+                            onClick={() => setShowNotFoundList(s => !s)}
+                            className="text-xs px-3 py-1.5 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+                          >
+                            {exportResult.notFound.length} not found {showNotFoundList ? "▲" : "▾"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setExportResult(null); setShowNotFoundList(false); }}
+                          className="text-xs px-3 py-1.5 rounded-full border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+                        >
+                          Done
                         </button>
                       </div>
-                    )
+                      {showNotFoundList && exportResult.notFound?.length > 0 && (
+                        <div className="text-xs text-stone-600 space-y-0.5 pl-1 pt-1">
+                          {exportResult.notFound.map((t, i) => <div key={i}>{t}</div>)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      disabled={totalChecked === 0 || exportingPlaylist}
+                      onClick={handleExportClick}
+                      className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${totalChecked === 0 || exportingPlaylist ? "bg-stone-800/40 text-stone-600 cursor-not-allowed" : "bg-[#1DB954]/15 border border-[#1DB954]/30 text-[#1DB954] hover:bg-[#1DB954]/25"}`}
+                    >
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                      {exportingPlaylist ? "Creating playlist…" : `Export ${totalChecked} track${totalChecked !== 1 ? "s" : ""} to Spotify →`}
+                    </button>
                   )}
                 </div>
+
+                {/* Playlist name modal */}
+                {showPlaylistNameModal && (
+                  <div className="fixed inset-0 z-50 flex items-end" onClick={() => setShowPlaylistNameModal(false)}>
+                    <div
+                      className="w-full bg-stone-950 border-t border-stone-800 rounded-t-2xl px-6 pt-5 pb-8 space-y-4"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="text-stone-300 text-base font-medium">Name your playlist</div>
+                      <input
+                        type="text"
+                        value={playlistName}
+                        onChange={(e) => setPlaylistName(e.target.value)}
+                        placeholder={defaultPlaylistName}
+                        className="w-full bg-stone-900 border border-stone-700 rounded-xl px-4 py-3 text-sm text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-amber-700/60"
+                        autoFocus
+                      />
+                      <div className="flex items-center gap-3">
+                        <span className="text-stone-500 text-xs">Visibility:</span>
+                        <button
+                          onClick={() => setPlaylistIsPublic(true)}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${playlistIsPublic ? "bg-amber-900/40 border-amber-700/50 text-amber-300" : "border-stone-700 text-stone-500"}`}
+                        >
+                          Public · shareable
+                        </button>
+                        <button
+                          onClick={() => setPlaylistIsPublic(false)}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${!playlistIsPublic ? "bg-amber-900/40 border-amber-700/50 text-amber-300" : "border-stone-700 text-stone-500"}`}
+                        >
+                          Private
+                        </button>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setShowPlaylistNameModal(false)}
+                          className="flex-1 py-2.5 rounded-xl border border-stone-700 text-stone-500 text-sm hover:text-stone-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          disabled={!playlistName.trim()}
+                          onClick={handleCreatePlaylist}
+                          className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${playlistName.trim() ? "bg-[#1DB954]/15 border border-[#1DB954]/30 text-[#1DB954] hover:bg-[#1DB954]/25" : "bg-stone-800/40 text-stone-600 cursor-not-allowed border border-transparent"}`}
+                        >
+                          Create Playlist
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
-            );
-          })()}
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {tab === "reco" && (
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>

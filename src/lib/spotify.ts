@@ -89,6 +89,16 @@ export async function spotifyUserGet(path: string, userId: string): Promise<Resp
   });
 }
 
+export async function spotifyUserPost(path: string, userId: string, body: unknown): Promise<Response> {
+  const token = await getUserAccessToken(userId);
+  if (!token) throw new Error("Spotify not connected");
+  return fetch(`https://api.spotify.com/v1${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 // ---------- Album features (client credentials) ----------
 
 export type SpotifyFeatures = {
