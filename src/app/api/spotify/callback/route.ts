@@ -76,5 +76,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
-  return NextResponse.redirect(`${base}/?spotify=connected`);
+  return NextResponse.redirect(`${base}/?spotify=connected&tab=reco`);
 }

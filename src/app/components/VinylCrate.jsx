@@ -5550,9 +5550,8 @@ export default function VinylCrate() {
       setSpotifyLinked(null);
       setSpotifyRecs(null);
       setSpotifyExpanded(true);
-      // Clean up the URL without a page reload
-      const clean = window.location.pathname;
-      window.history.replaceState({}, "", clean);
+      if (params.get("tab") === "reco") setTab("reco");
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
