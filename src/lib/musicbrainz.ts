@@ -56,6 +56,44 @@ async function mbFetch(url: string): Promise<unknown> {
   return res.json();
 }
 
+type MbReleaseStub = {
+  title?: string;
+  date?: string;
+  score?: number;
+};
+
+/** Fetch the exact release date (day + month) for an album from MusicBrainz.
+ *  Guardrails:
+ *  - Score must be ≥ 90 (strict match)
+ *  - Year must match `knownYear` from Discogs (prevents remaster/edition swaps)
+ *  - Only returns day; never overwrites year or month from Discogs
+ *  Returns null fields if no confident match found. */
+export async function fetchReleaseDate(
+  artist: string,
+  title: string,
+  knownYear: number | null
+): Promise<{ day: number | null; month: number | null }> {
+  try {
+    const query = `release:"${title}" AND artist:"${artist}"`;
+    const data = await mbFetch(
+      `${MB_API}/release?query=${encodeURIComponent(query)}&limit=5&fmt=json`
+    ) as { releases?: MbReleaseStub[] };
+
+    for (const rel of data?.releases || []) {
+      if ((rel.score ?? 0) < 90) continue;
+      const parsed = parseMbDate(rel.date);
+      if (!parsed.year) continue;
+      // Year guard — MB year must match what Discogs already gave us
+      if (knownYear && parsed.year !== knownYear) continue;
+      if (!parsed.day) continue; // no day = no value for us
+      return { day: parsed.day, month: parsed.month };
+    }
+    return { day: null, month: null };
+  } catch {
+    return { day: null, month: null };
+  }
+}
+
 type MbArtistStub = {
   id: string;
   type?: string;

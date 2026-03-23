@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { enrichPage, enrichArtistDates } from "@/lib/discogs/enrich";
+import { enrichPage, enrichArtistDates, enrichReleaseDates } from "@/lib/discogs/enrich";
 
 type EnrichJobStatus = "pending" | "running" | "completed" | "failed";
 type EnrichJobRow = {
@@ -88,6 +88,50 @@ export async function runArtistEnrichJob(jobId: string) {
     }).eq("id", jobId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Artist enrichment failed";
+    await supabase.from(JOB_TABLE).update({
+      status: "failed",
+      error: message,
+      updated_at: new Date().toISOString(),
+    }).eq("id", jobId);
+  }
+}
+
+export async function createReleaseDateEnrichJob({ userId }: { userId: string }) {
+  const { data, error } = await supabase.from(JOB_TABLE).insert({
+    user_id: userId,
+    type: "release_dates",
+    mode: "full",
+    force: false,
+    batch_limit: 0,
+    batch_offset: 0,
+    status: "pending",
+    processed: 0,
+    updated: 0,
+    considered: 0,
+  }).select();
+  if (error) throw new Error(error.message || JSON.stringify(error));
+  return (data || [])[0] as EnrichJobRow;
+}
+
+export async function runReleaseDateEnrichJob(jobId: string) {
+  const { data: job } = await supabase.from(JOB_TABLE).select("*").eq("id", jobId).single();
+  if (!job) return;
+
+  await supabase.from(JOB_TABLE)
+    .update({ status: "running", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", jobId);
+
+  try {
+    const result = await enrichReleaseDates({ userId: job.user_id });
+    await supabase.from(JOB_TABLE).update({
+      status: "completed",
+      processed: result.processed,
+      updated: result.updated,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("id", jobId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Release date enrichment failed";
     await supabase.from(JOB_TABLE).update({
       status: "failed",
       error: message,

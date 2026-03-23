@@ -8,7 +8,7 @@ import {
   isItunesArtCacheFresh,
   itunesArtKey,
 } from "@/lib/discogs/cache";
-import { fetchArtistDates } from "@/lib/musicbrainz";
+import { fetchArtistDates, fetchReleaseDate } from "@/lib/musicbrainz";
 
 // Discogs allows 60 authenticated requests/min. We pace at ~40/min to stay safe.
 const RATE_DELAY_MS = 1500;
@@ -596,6 +596,63 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
     warning,
     mode,
   };
+}
+
+export async function enrichReleaseDates({ userId }: { userId: string }) {
+  // Fetch non-compilation records missing release_day (null = never checked via MusicBrainz)
+  const { data: records, error } = await supabase
+    .from("records")
+    .select("id, artist, title, year_original, release_month")
+    .eq("user_id", userId)
+    .not("is_compilation", "is", true)
+    .is("release_day", null)
+    .not("year_original", "is", null)
+    .not("artist", "is", null)
+    .not("title", "is", null);
+
+  if (error) throw new Error("Failed to load records for release date enrichment");
+
+  // Deduplicate by artist+title — same album with multiple pressings shares one MB lookup
+  const keyToGroup = new Map<string, { ids: number[]; artist: string; title: string; year: number | null; hasMonth: boolean }>();
+  for (const r of records || []) {
+    const key = artistTitleKey((r as { artist?: string }).artist || "", (r as { title?: string }).title || "");
+    if (!key) continue;
+    const existing = keyToGroup.get(key);
+    if (existing) {
+      existing.ids.push((r as { id: number }).id);
+    } else {
+      keyToGroup.set(key, {
+        ids: [(r as { id: number }).id],
+        artist: (r as { artist?: string }).artist || "",
+        title:  (r as { title?: string }).title  || "",
+        year:   (r as { year_original?: number | null }).year_original ?? null,
+        hasMonth: (r as { release_month?: number | null }).release_month != null,
+      });
+    }
+  }
+
+  let processed = 0;
+  let updated = 0;
+
+  for (const { ids, artist, title, year, hasMonth } of keyToGroup.values()) {
+    processed++;
+    const { day, month } = await fetchReleaseDate(artist, title, year);
+
+    // Always write release_day — 0 = "checked, not found" sentinel so we skip it next run
+    // Never overwrite existing Discogs release_month; only fill if currently null
+    const patch: Record<string, unknown> = { release_day: day ?? 0 };
+    if (!hasMonth && month != null) patch.release_month = month;
+
+    const { error: updateError } = await supabase
+      .from("records")
+      .update(patch)
+      .in("id", ids)
+      .eq("user_id", userId);
+
+    if (!updateError && day) updated += ids.length;
+  }
+
+  return { processed, updated };
 }
 
 export async function enrichArtistDates({ userId }: { userId: string }) {
