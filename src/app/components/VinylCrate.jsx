@@ -7444,10 +7444,23 @@ export default function VinylCrate() {
             try { data = await res.json(); } catch { data = { error: "parse_error" }; }
             if (data.error === "insufficient_scope") {
               setSpotifyConnectedForPlaylists(false);
+            } else if (data.error === "rate_limited") {
+              const seconds = data.retryAfter || 15;
+              setExportResult({ exportError: `Spotify is rate limited — try again in ${seconds}s`, retryAfter: seconds });
+              let t = seconds;
+              const interval = setInterval(() => {
+                t--;
+                if (t <= 0) {
+                  clearInterval(interval);
+                  setExportResult(null);
+                } else {
+                  setExportResult(prev => prev?.retryAfter != null ? { ...prev, exportError: `Spotify is rate limited — try again in ${t}s` } : prev);
+                }
+              }, 1000);
             } else if (data.error === "no_tracks_found") {
               setExportResult({ exportError: "No tracks found on Spotify. Check the list below to see what was searched.", notFound: data.notFound, total: data.total });
             } else if (data.error && !data.playlistUrl) {
-              setExportResult({ exportError: data.error, detail: data.detail });
+              setExportResult({ exportError: `Export failed (${data.error}${data.detail ? `: ${data.detail}` : ""})` });
             } else {
               setExportResult(data);
             }
