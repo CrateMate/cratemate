@@ -649,10 +649,10 @@ function condenseCondition(c) {
   return (c || "").split(" / ").map(condense).filter(Boolean).join(" / ") || null;
 }
 
-function ArtistTag({ artist, discogsId }) {
+function ArtistTag({ artist, discogsId, clickable = false }) {
   const cls = "bg-stone-800/60 text-stone-300 border-stone-700/50";
   const name = stripArtistNum(artist);
-  if (discogsId) {
+  if (clickable && discogsId) {
     return (
       <a
         href={`/artist/${discogsId}`}
@@ -1129,8 +1129,15 @@ function MarqueeTitle({ children, style }) {
     const outer = outerRef.current;
     const inner = innerRef.current;
     if (!outer || !inner) return;
-    const ov = inner.scrollWidth - outer.clientWidth;
-    setScrollAmt(ov > 4 ? ov : 0);
+    function measure() {
+      const ov = inner.scrollWidth - outer.clientWidth;
+      setScrollAmt(ov > 4 ? ov : 0);
+    }
+    measure();
+    // Re-measure when font loads or container resizes (fixes diacritic titles like "Habitaciones Extrañas")
+    const ro = new ResizeObserver(measure);
+    ro.observe(outer);
+    return () => ro.disconnect();
   }, [children]);
   return (
     <div ref={outerRef} style={{ overflow: 'hidden', ...style }}>
@@ -1187,7 +1194,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
           </div>
         ) : null}
         <div className="flex flex-wrap justify-end gap-0.5">
-          {getGenres(record).map((g) => (
+          {getGenres(record).slice(0, 2).map((g) => (
             <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
           ))}
         </div>
