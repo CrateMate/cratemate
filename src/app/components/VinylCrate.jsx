@@ -4682,6 +4682,7 @@ export default function VinylCrate() {
     () => { try { return localStorage.getItem("cratemate_hide_for_sale") === "1"; } catch { return false; } }
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [selected, setSelected] = useState(null);
   const [lastPlayed, setLastPlayed] = useState(null);
   const [reco, setReco] = useState(null);
@@ -4729,6 +4730,15 @@ export default function VinylCrate() {
   });
   useEffect(() => { try { localStorage.setItem("cratemate_hc_shape", honeycombShape); } catch {} }, [honeycombShape]);
   useEffect(() => { try { localStorage.setItem("cratemate_hide_for_sale", hideForSale ? "1" : "0"); } catch {} }, [hideForSale]);
+
+  // Service worker update banner
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handler = (e) => { if (e.data?.type === "SW_UPDATED") setShowUpdateBanner(true); };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, []);
+
   const [activeDecade, setActiveDecade] = useState(new Set());
   const [activeFormat, setActiveFormat] = useState(null);
   const [activeLabel, setActiveLabel] = useState(null);
@@ -8309,6 +8319,24 @@ export default function VinylCrate() {
             <span className="text-emerald-400 text-sm">✓</span>
             <span className="text-stone-300 text-sm truncate flex-1">Logged — {undoPending.record.title}</span>
             <button onClick={handleUndo} className="text-amber-400 text-xs hover:text-amber-300 shrink-0 transition-colors">Undo</button>
+          </div>
+        </div>
+      )}
+
+      {/* SW update banner */}
+      {showUpdateBanner && (
+        <div className="fixed top-0 left-0 right-0 z-[300] flex justify-center px-4 pt-3 pointer-events-none">
+          <div className="flex items-center gap-3 bg-stone-900 border border-stone-700/60 rounded-2xl px-4 py-2.5 shadow-2xl backdrop-blur-sm pointer-events-auto max-w-sm w-full">
+            <span className="text-amber-400 text-sm shrink-0">↑</span>
+            <span className="text-stone-300 text-sm flex-1">New version available</span>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-amber-400 text-xs hover:text-amber-300 transition-colors shrink-0 font-medium"
+            >Update</button>
+            <button
+              onClick={() => setShowUpdateBanner(false)}
+              className="text-stone-600 hover:text-stone-400 text-base leading-none shrink-0 transition-colors"
+            >×</button>
           </div>
         </div>
       )}
