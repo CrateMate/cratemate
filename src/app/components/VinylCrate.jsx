@@ -7387,10 +7387,9 @@ export default function VinylCrate() {
         const isTrackChecked = (recordId, trackKey) =>
           heartsChecked === null || heartsChecked.has(`${recordId}-${trackKey}`);
 
-        // Total checked across ALL hearted records (not just visible)
-        const totalChecked = heartsChecked === null
-          ? heartedRecords.reduce((sum, r) => sum + (r.favorite_tracks || []).length, 0)
-          : heartsChecked.size;
+        // Only count checked tracks from currently visible (filtered) records
+        const totalChecked = heartsFiltered.reduce((sum, r) =>
+          sum + (r.favorite_tracks || []).filter(f => isTrackChecked(r.id, normFav(f).key)).length, 0);
 
         const allExpanded = expandedHearts.size >= heartsFiltered.length && heartsFiltered.length > 0;
 
@@ -7409,7 +7408,7 @@ export default function VinylCrate() {
           setExportingPlaylist(true);
           setShowPlaylistNameModal(false);
           const tracks = [];
-          for (const r of heartedRecords) {
+          for (const r of heartsFiltered) {
             for (const f of (r.favorite_tracks || [])) {
               const { key, title } = normFav(f);
               if (isTrackChecked(r.id, key)) {
