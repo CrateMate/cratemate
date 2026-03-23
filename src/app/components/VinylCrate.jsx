@@ -4683,6 +4683,9 @@ export default function VinylCrate() {
   );
   const [showSettings, setShowSettings] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [userLocation, setUserLocation] = useState(null); // { city_name, latitude, longitude }
+  const [todayWeather, setTodayWeather] = useState(null); // { condition, label, mood, temperature_c, city_name }
+  const [citySearch, setCitySearch] = useState({ query: "", results: [], open: false, loading: false });
   const [selected, setSelected] = useState(null);
   const [lastPlayed, setLastPlayed] = useState(null);
   const [reco, setReco] = useState(null);
@@ -4737,6 +4740,19 @@ export default function VinylCrate() {
     const handler = (e) => { if (e.data?.type === "SW_UPDATED") setShowUpdateBanner(true); };
     navigator.serviceWorker.addEventListener("message", handler);
     return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, []);
+
+  // Load stored location + today's weather on mount
+  useEffect(() => {
+    fetch("/api/user/location")
+      .then(r => r.ok ? r.json() : null)
+      .then(loc => {
+        if (!loc?.city_name) return;
+        setUserLocation(loc);
+        return fetch("/api/weather").then(r => r.ok ? r.json() : null);
+      })
+      .then(w => { if (w && !w.error) setTodayWeather(w); })
+      .catch(() => {});
   }, []);
 
   const [activeDecade, setActiveDecade] = useState(new Set());
@@ -5089,6 +5105,33 @@ export default function VinylCrate() {
       clearTimeout(undoTimerRef.current);
       setUndoPending({ record, sessionId });
       undoTimerRef.current = setTimeout(() => setUndoPending(null), 4000);
+    } catch {}
+  }
+
+  // City search — debounced geocoding via Open-Meteo (no API key needed)
+  const citySearchTimer = useRef(null);
+  function handleCitySearchInput(query) {
+    setCitySearch(s => ({ ...s, query, open: true }));
+    clearTimeout(citySearchTimer.current);
+    if (!query.trim()) { setCitySearch(s => ({ ...s, results: [], loading: false })); return; }
+    setCitySearch(s => ({ ...s, loading: true }));
+    citySearchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=en&format=json`);
+        const data = await res.json();
+        setCitySearch(s => ({ ...s, results: data.results || [], loading: false }));
+      } catch { setCitySearch(s => ({ ...s, results: [], loading: false })); }
+    }, 350);
+  }
+
+  async function handleCitySelect(result) {
+    const loc = { city_name: `${result.name}, ${result.country}`, latitude: result.latitude, longitude: result.longitude };
+    setCitySearch({ query: "", results: [], open: false, loading: false });
+    setUserLocation(loc);
+    try {
+      await fetch("/api/user/location", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(loc) });
+      const w = await fetch("/api/weather").then(r => r.ok ? r.json() : null);
+      if (w && !w.error) setTodayWeather(w);
     } catch {}
   }
 
@@ -8305,6 +8348,58 @@ export default function VinylCrate() {
               >
                 <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${hideForSale ? "translate-x-5" : "translate-x-0.5"}`} />
               </button>
+            </div>
+
+            {/* Location setting */}
+            <div className="py-3.5 border-b border-stone-800/40">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-stone-200 text-sm">📍 Location</div>
+                  <div className="text-stone-600 text-xs mt-0.5">
+                    {userLocation?.city_name || "Not set — used for weather recommendations"}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCitySearch(s => ({ ...s, open: !s.open, query: "" }))}
+                  className="text-amber-500 text-xs hover:text-amber-400 transition-colors shrink-0 ml-4"
+                >
+                  {userLocation?.city_name ? "Change" : "Set"}
+                </button>
+              </div>
+              {citySearch.open && (
+                <div className="mt-3">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={citySearch.query}
+                    onChange={e => handleCitySearchInput(e.target.value)}
+                    placeholder="Search city..."
+                    className="w-full bg-stone-900 border border-stone-700/60 rounded-xl px-3 py-2 text-stone-200 text-sm placeholder-stone-600 outline-none focus:border-amber-700/60"
+                  />
+                  {citySearch.loading && (
+                    <div className="text-stone-600 text-xs mt-2 px-1">Searching...</div>
+                  )}
+                  {citySearch.results.length > 0 && (
+                    <div className="mt-1 rounded-xl border border-stone-800/60 overflow-hidden">
+                      {citySearch.results.map((r, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleCitySelect(r)}
+                          className="w-full text-left px-3 py-2.5 text-stone-300 text-sm hover:bg-stone-800/60 transition-colors border-b border-stone-800/40 last:border-0"
+                        >
+                          <span>{r.name}</span>
+                          <span className="text-stone-600 text-xs ml-2">{[r.admin1, r.country].filter(Boolean).join(", ")}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {todayWeather && userLocation?.city_name && !citySearch.open && (
+                <div className="mt-1.5 text-stone-600 text-xs">
+                  Now: {todayWeather.label} · {todayWeather.temperature_c}°C
+                </div>
+              )}
             </div>
           </div>
         </div>
