@@ -4742,6 +4742,36 @@ export default function VinylCrate() {
     return () => navigator.serviceWorker.removeEventListener("message", handler);
   }, []);
 
+  // Resume interrupted enrichment job on app open
+  useEffect(() => {
+    const saved = loadEnrichJobs();
+    if (!saved) return;
+    const { metaJobId, artistJobId } = saved;
+
+    // Fetch current status of both jobs before deciding whether to resume
+    Promise.all([
+      fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`).then(r => r.ok ? r.json() : null),
+      fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`).then(r => r.ok ? r.json() : null),
+    ]).then(([metaJob, artistJob]) => {
+      if (!metaJob) { clearEnrichJobs(); return; }
+      // Already done — just clear storage
+      if (metaJob.status === "completed" || metaJob.status === "failed") { clearEnrichJobs(); return; }
+
+      // Still running — resume polling and show progress
+      setEnrichLoading(true);
+      setImportResult(prev => ({ ...prev, stage: "enriching" }));
+      pollEnrichJobs(metaJobId, artistJobId, metaJob, artistJob, (progress) => {
+        setImportResult(prev => ({ ...prev, enrichProgress: progress }));
+      }).then((meta) => {
+        setImportResult(prev => ({ ...prev, meta, stage: "done" }));
+        refreshRecords();
+      }).catch(() => {
+        setImportResult(prev => ({ ...prev, stage: "done" }));
+      }).finally(() => setEnrichLoading(false));
+    }).catch(() => clearEnrichJobs());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load stored location + today's weather on mount
   useEffect(() => {
     fetch("/api/user/location")
@@ -5842,6 +5872,61 @@ export default function VinylCrate() {
     }
   }
 
+  const ENRICH_JOB_KEY = "cratemate_enrich_jobs";
+  const ENRICH_JOB_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  function saveEnrichJobs(metaJobId, artistJobId) {
+    try { localStorage.setItem(ENRICH_JOB_KEY, JSON.stringify({ metaJobId, artistJobId, startedAt: Date.now() })); } catch {}
+  }
+  function clearEnrichJobs() {
+    try { localStorage.removeItem(ENRICH_JOB_KEY); } catch {}
+  }
+  function loadEnrichJobs() {
+    try {
+      const raw = localStorage.getItem(ENRICH_JOB_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.metaJobId) return null;
+      if (Date.now() - (parsed.startedAt || 0) > ENRICH_JOB_MAX_AGE_MS) { clearEnrichJobs(); return null; }
+      return parsed;
+    } catch { return null; }
+  }
+
+  async function pollEnrichJobs(metaJobId, artistJobId, metaInitial, artistInitial, onProgress) {
+    // Poll metadata job until done
+    let metaLatest = metaInitial || { status: "running" };
+    while (metaLatest.status !== "completed" && metaLatest.status !== "failed") {
+      await new Promise((r) => setTimeout(r, 600));
+      const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`);
+      const data = await readJsonOrText(res);
+      if (res.ok) {
+        metaLatest = data;
+        if (onProgress && data.considered > 0) {
+          onProgress({ processed: data.processed || 0, considered: data.considered || 0 });
+        }
+      }
+    }
+
+    // Artist job polls independently — don't block metadata completion on it
+    let artistLatest = artistInitial || { status: "running" };
+    for (let i = 0; i < 200; i++) {
+      if (artistLatest.status === "completed" || artistLatest.status === "failed") break;
+      await new Promise((r) => setTimeout(r, 800));
+      const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`);
+      const data = await readJsonOrText(res);
+      if (res.ok) artistLatest = data;
+    }
+
+    clearEnrichJobs();
+    if (metaLatest.status === "failed") throw new Error(metaLatest.error || "Metadata job failed");
+
+    return {
+      updated: (metaLatest.updated || 0) + (artistLatest.updated || 0),
+      considered: metaLatest.considered || 0,
+      warning: metaLatest.warning || "",
+    };
+  }
+
   async function runEnrichAll(mode, onProgress) {
     // Start both jobs simultaneously — release metadata (Discogs) and artist dates (MusicBrainz)
     // are independent so they can run in parallel.
@@ -5859,37 +5944,10 @@ export default function VinylCrate() {
     if (!metaJobId) throw new Error("Missing metadata job id");
     if (!artistJobId) throw new Error("Missing artist job id");
 
-    // Poll metadata job until done — each GET advances one batch, no timeout
-    let metaLatest = metaData;
-    while (metaLatest.status !== "completed" && metaLatest.status !== "failed") {
-      await new Promise((r) => setTimeout(r, 600));
-      const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(metaJobId)}`);
-      const data = await readJsonOrText(res);
-      if (res.ok) {
-        metaLatest = data;
-        if (onProgress && data.considered > 0) {
-          onProgress({ processed: data.processed || 0, considered: data.considered || 0 });
-        }
-      }
-    }
+    // Persist job IDs so polling can resume if user backgrounds the app
+    saveEnrichJobs(metaJobId, artistJobId);
 
-    // Artist job polls independently — don't block metadata completion on it
-    let artistLatest = artistData;
-    for (let i = 0; i < 200; i++) {
-      if (artistLatest.status === "completed" || artistLatest.status === "failed") break;
-      await new Promise((r) => setTimeout(r, 800));
-      const res = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(artistJobId)}`);
-      const data = await readJsonOrText(res);
-      if (res.ok) artistLatest = data;
-    }
-
-    if (metaLatest.status === "failed") throw new Error(metaLatest.error || "Metadata job failed");
-
-    return {
-      updated: (metaLatest.updated || 0) + (artistLatest.updated || 0),
-      considered: metaLatest.considered || 0,
-      warning: metaLatest.warning || "",
-    };
+    return pollEnrichJobs(metaJobId, artistJobId, metaData, artistData, onProgress);
   }
 
   async function handleCleanupSeeded() {
