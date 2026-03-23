@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { spotifyUserGet } from "@/lib/spotify";
+import { DISCOGS_API, USER_AGENT } from "@/lib/discogs";
 
 type SpotifyTrack = {
   id: string;
@@ -145,12 +146,11 @@ export async function GET() {
   );
 
   // Build recs: albums not already in the crate
-  const recs = rankedAlbums
+  const recsBase = rankedAlbums
     .map((album) => {
       const cleanedTitle = cleanAlbumTitle(album.albumName);
       const matchKey = `${normalise(album.artist)}|${normalise(cleanedTitle)}`;
       const inCrate = collectionKeys.has(matchKey);
-      // Fallback: if artist is in crate but this specific album isn't, still surface it
       const artistInCrate = collectionArtists.has(normalise(album.artist));
       const onWantlist = wantlistKeys.has(matchKey);
 
@@ -168,5 +168,35 @@ export async function GET() {
     .filter((r) => !r.in_crate)
     .slice(0, 15);
 
-  return NextResponse.json({ recs, connected: true });
+  // Check Discogs vinyl availability in parallel — only show link when results exist
+  const discogsKey = process.env.DISCOGS_CONSUMER_KEY;
+  const discogsSecret = process.env.DISCOGS_CONSUMER_SECRET;
+
+  const recsWithDiscogs = await Promise.all(
+    recsBase.map(async (rec) => {
+      if (!discogsKey || !discogsSecret) return { ...rec, discogs_vinyl_url: null };
+      try {
+        const url = new URL(`${DISCOGS_API}/database/search`);
+        url.searchParams.set("artist", rec.artist);
+        url.searchParams.set("release_title", rec.album);
+        url.searchParams.set("format", "Vinyl");
+        url.searchParams.set("type", "release");
+        url.searchParams.set("per_page", "1");
+        url.searchParams.set("key", discogsKey);
+        url.searchParams.set("secret", discogsSecret);
+        const res = await fetch(url.toString(), { headers: { "User-Agent": USER_AGENT } });
+        if (!res.ok) return { ...rec, discogs_vinyl_url: null };
+        const data = await res.json();
+        const hasResults = (data.results?.length ?? 0) > 0;
+        const vinylUrl = hasResults
+          ? `https://www.discogs.com/search/?artist=${encodeURIComponent(rec.artist)}&q=${encodeURIComponent(rec.album)}&type=release&format=Vinyl`
+          : null;
+        return { ...rec, discogs_vinyl_url: vinylUrl };
+      } catch {
+        return { ...rec, discogs_vinyl_url: null };
+      }
+    })
+  );
+
+  return NextResponse.json({ recs: recsWithDiscogs, connected: true });
 }

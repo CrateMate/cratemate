@@ -8237,14 +8237,16 @@ export default function VinylCrate() {
                             )}
                           </div>
                         </div>
-                        <a
-                          href={`https://www.discogs.com/search/?artist=${encodeURIComponent(rec.artist)}&q=${encodeURIComponent(rec.album)}&type=release&format=Vinyl`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
-                        >
-                          Find vinyl ↗
-                        </a>
+                        {rec.discogs_vinyl_url && (
+                          <a
+                            href={rec.discogs_vinyl_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
+                          >
+                            Find vinyl ↗
+                          </a>
+                        )}
                       </div>
                     ))}
                   </div>
