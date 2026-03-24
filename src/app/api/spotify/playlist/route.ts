@@ -57,15 +57,22 @@ export async function POST(req: NextRequest) {
         const retryAfter = parseInt(res.headers.get("Retry-After") || "15");
         return { rateLimited: true, retryAfter } as const;
       }
-      if (!res.ok) { console.log("[playlist] search non-ok", res.status, q); return null; }
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.log("[playlist] search non-ok", res.status, q, body.slice(0, 200));
+        if (firstSearchStatus === null) firstSearchStatus = res.status;
+        return null;
+      }
       const data = await res.json();
       const uri = (data.tracks?.items || [])[0]?.uri as string ?? null;
+      if (firstSearchStatus === null) firstSearchStatus = res.status;
       console.log("[playlist] search", res.status, q, "→", uri ?? `no results (${data.tracks?.items?.length ?? 0} items)`);
       return uri;
     };
 
     const uris: string[] = [];
     const notFound: string[] = [];
+    let firstSearchStatus: number | null = null;
 
     for (const track of tracks) {
       const artist = cleanArtist(track.artist);
@@ -96,7 +103,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (uris.length === 0) {
-      return NextResponse.json({ error: "no_tracks_found", matched: 0, total: tracks.length, notFound }, { status: 422 });
+      return NextResponse.json({ error: "no_tracks_found", matched: 0, total: tracks.length, notFound, searchStatus: firstSearchStatus }, { status: 422 });
     }
 
     const createRes = await spotifyPost(

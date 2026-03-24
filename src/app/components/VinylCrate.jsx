@@ -7722,7 +7722,8 @@ export default function VinylCrate() {
                 }
               }, 1000);
             } else if (data.error === "no_tracks_found") {
-              setExportResult({ exportError: "No tracks found on Spotify. Check the list below to see what was searched.", notFound: data.notFound, total: data.total });
+              const hint = data.searchStatus && data.searchStatus !== 200 ? ` (Spotify search returned ${data.searchStatus} — try reconnecting Spotify)` : "";
+              setExportResult({ exportError: `No tracks found on Spotify${hint}. Check the list below to see what was searched.`, notFound: data.notFound, total: data.total });
             } else if (data.error && !data.playlistUrl) {
               setExportResult({ exportError: `Export failed (${data.error}${data.detail ? `: ${data.detail}` : ""})` });
             } else {
