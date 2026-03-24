@@ -405,10 +405,12 @@ async function fetchFeaturesByArtist(artist: string): Promise<SpotifyFeatures | 
 }
 
 export async function fetchAlbumFeatures(
-  artist: string,
+  rawArtist: string,
   title: string,
   tracklist?: TracklistItem[]
 ): Promise<SpotifyFeatures | null> {
+  // Strip Discogs numbering like "Chicago (2)" → "Chicago"
+  const artist = rawArtist.replace(/\s*\(\d+\)$/, "").trim();
   const tag = `[features] "${title}" — ${artist}`;
 
   // Tier 1: Match the whole album on Spotify
