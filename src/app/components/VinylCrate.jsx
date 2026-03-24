@@ -8741,19 +8741,42 @@ export default function VinylCrate() {
                     {!lastfmRecsLoading && lastfmRecs && lastfmRecs.length > 0 && (
                       <div className="divide-y divide-stone-800/40">
                         {lastfmRecs.map((artist) => (
-                          <div key={artist.name} className="flex items-center gap-3 px-4 py-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm text-amber-50 font-medium truncate">{artist.name}</div>
-                              <div className="text-[10px] text-stone-500 truncate mt-0.5">Similar to: {artist.similar_to.join(", ")}</div>
+                          <div key={artist.name} className="px-4 py-3">
+                            <div className="mb-2">
+                              <div className="text-xs font-semibold text-stone-300 truncate">{artist.name}</div>
+                              <div className="text-[10px] text-stone-600 truncate mt-0.5">Similar to: {artist.similar_to.join(", ")}</div>
                             </div>
-                            <a
-                              href={`https://www.discogs.com/search/?artist=${encodeURIComponent(artist.name)}&type=release&format=Vinyl`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
-                            >
-                              Search Discogs ↗
-                            </a>
+                            {artist.top_albums?.length > 0 ? (
+                              <div className="space-y-1.5 pl-2">
+                                {artist.top_albums.map((album) => (
+                                  <div key={album.name} className="flex items-center gap-2">
+                                    {album.image ? (
+                                      <img src={album.image} alt="" className="w-7 h-7 rounded object-cover shrink-0 bg-stone-800" />
+                                    ) : (
+                                      <div className="w-7 h-7 rounded bg-stone-800 shrink-0" />
+                                    )}
+                                    <div className="flex-1 min-w-0 text-[11px] text-stone-400 truncate">{album.name}</div>
+                                    <a
+                                      href={`https://www.discogs.com/search/?artist=${encodeURIComponent(artist.name)}&q=${encodeURIComponent(album.name)}&type=release&format=Vinyl`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
+                                    >
+                                      Find vinyl ↗
+                                    </a>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <a
+                                href={`https://www.discogs.com/search/?artist=${encodeURIComponent(artist.name)}&type=release&format=Vinyl`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-stone-600 hover:text-amber-400 transition-colors"
+                              >
+                                Search Discogs ↗
+                              </a>
+                            )}
                           </div>
                         ))}
                       </div>
