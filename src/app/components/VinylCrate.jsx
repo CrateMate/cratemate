@@ -6225,6 +6225,26 @@ export default function VinylCrate() {
     return score;
   }
 
+  /** Build a rich one-liner about a record for Claude context. */
+  function describeRecord(r) {
+    const year = r.year_original || r.year_pressed || "?";
+    const genres = (r.styles || r.genres || r.genre || "").replace(/,/g, ", ");
+    const plays = playCounts[r.id] || 0;
+    const f = spotifyFeatures[r.id];
+    let profile = "";
+    if (f) {
+      const tags = [];
+      if (f.energy > 0.7) tags.push("high-energy");
+      else if (f.energy < 0.35) tags.push("low-energy");
+      if (f.valence > 0.7) tags.push("upbeat mood");
+      else if (f.valence < 0.3) tags.push("melancholic");
+      if (f.danceability > 0.7) tags.push("danceable");
+      if (f.acousticness > 0.7) tags.push("acoustic");
+      if (tags.length) profile = ` [${tags.join(", ")}]`;
+    }
+    return `"${r.title}" by ${r.artist} (${year}, ${genres || "unknown genre"})${profile}${plays > 0 ? ` — played ${plays}×` : ""}`;
+  }
+
   const getReco = useCallback(
     async (type) => {
       setRecoLoading(true);
@@ -6258,7 +6278,7 @@ export default function VinylCrate() {
             const text = await callClaude(
               [{
                 role: "user",
-                content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: "${hook.record.title}" by ${hook.record.artist} (${hook.record.year_original || hook.record.year_pressed || "?"}, ${(() => { const g = hook.record.genres || hook.record.genre || ""; const s = hook.record.styles || ""; return s ? `${g}/${s}` : g; })()}).\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}`,
+                content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: ${describeRecord(hook.record)}.\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}`,
               }],
               80,
               SYSTEM
@@ -6296,7 +6316,7 @@ export default function VinylCrate() {
           const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
           const heuristicReason = `Chosen because it hasn't been played recently and fits the collection's sound.`;
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist}. The reason it was chosen: ${heuristicReason}. Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
+          const text = await callClaude([{ role: "user", content: `The record: ${describeRecord(picked)}.\n\nIt was chosen because it hasn't been played recently and fits the collection's sound. Write 1-2 warm casual sentences about why to put it on now — mention the genre or era if it helps.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 100, SYSTEM);
           const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
           let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
           if (Array.isArray(parsed)) parsed = parsed[0];
@@ -6334,7 +6354,7 @@ export default function VinylCrate() {
           const picked = scored[0]?.r || candidates[0];
           if (!picked) { setRecoError("Not enough records to suggest a next pick."); return; }
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist}. The reason it was chosen: it best matches the genre, era, and energy of the last played record ("${lastPlayed.title}" by ${lastPlayed.artist}). Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
+          const text = await callClaude([{ role: "user", content: `I just played: ${describeRecord(lastPlayed)}.\n\nFrom my collection, the best follow-up is: ${describeRecord(picked)}.\n\nIt was chosen because it matches the genre, era, and energy of what I just played. Write 1-2 warm casual sentences about the sonic connection between these two records and why to put it on next.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 120, SYSTEM);
           const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
           let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
           if (Array.isArray(parsed)) parsed = parsed[0];
@@ -6342,38 +6362,20 @@ export default function VinylCrate() {
           setReco({ record: picked, reason: parsed.reason, label: "Play Next" });
 
         } else { // mood
-          // Parse mood into target features and score
-          const moodLower = (mood || "").toLowerCase();
-          const moodTargets = {
-            refGenres: [],
-            refDecade: 0,
-            refFeatures: null,
-            allFeatures: spotifyFeatures,
-            recentlyPlayedIds: new Set(),
-          };
-          // Genre hints from mood string
-          const genreKeywords = ["jazz", "rock", "folk", "classical", "electronic", "soul", "blues", "pop", "hip-hop", "metal", "country", "reggae", "funk"];
-          const matchedGenre = genreKeywords.find(g => moodLower.includes(g));
-          if (matchedGenre) moodTargets.refGenres = [matchedGenre.charAt(0).toUpperCase() + matchedGenre.slice(1)];
-          // Energy/valence hints
-          const energetic = ["energetic", "upbeat", "hype", "party", "dance", "fast"].some(k => moodLower.includes(k));
-          const mellow = ["mellow", "chill", "relax", "calm", "slow", "quiet", "peaceful"].some(k => moodLower.includes(k));
-          const melancholic = ["sad", "melancholic", "somber", "dark", "moody"].some(k => moodLower.includes(k));
-          if (energetic || mellow || melancholic) {
-            moodTargets.refFeatures = {
-              energy: energetic ? 0.8 : mellow ? 0.3 : 0.5,
-              valence: melancholic ? 0.25 : energetic ? 0.7 : 0.5,
-              tempo: energetic ? 140 : mellow ? 80 : 110,
-            };
-          }
+          // Build a diverse shortlist of ~15 candidates for Claude to choose from
           const moodPool = dedupeByAlbum(activePool, playCounts);
-          const scored = moodPool.map(r => ({ r, s: scoreRecord(r, moodTargets) })).sort((a, b) => b.s - a.s);
-          const picked = scored[0]?.r || moodPool[Math.floor(Math.random() * moodPool.length)];
+          // Shuffle and pick a diverse sample (mix of genres/decades)
+          const shuffled = [...moodPool].sort(() => Math.random() - 0.5);
+          const shortlist = shuffled.slice(0, Math.min(15, shuffled.length));
+          const numbered = shortlist.map((r, i) => `${i + 1}. ${describeRecord(r)}`).join("\n");
+
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-          const text = await callClaude([{ role: "user", content: `The record is "${picked.title}" by ${picked.artist}. The reason it was chosen: best match for the mood "${mood}" based on genre, energy, and feel. Write 1-2 warm casual sentences about why to put it on now.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 80, SYSTEM);
+          const text = await callClaude([{ role: "user", content: `My mood right now: "${mood}"\n\nHere are some records from my collection:\n${numbered}\n\nPick the ONE record (by number) that best matches this mood. Consider genre, energy, era, and feel. Write 1-2 warm sentences about why this record fits the mood perfectly.\n\nRespond ONLY with JSON: {"pick": <number>, "reason":"..."}` }], 150, SYSTEM);
           const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
           let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
           if (Array.isArray(parsed)) parsed = parsed[0];
+          const pickIdx = (parsed?.pick ?? 1) - 1;
+          const picked = shortlist[Math.max(0, Math.min(pickIdx, shortlist.length - 1))] || shortlist[0];
           if (!parsed?.reason) throw new Error("bad-schema");
           setReco({ record: picked, reason: parsed.reason, label: "Mood Match" });
         }
