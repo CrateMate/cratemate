@@ -13,12 +13,30 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
-  // Decode userId from state
+  // Decode state: { nonce, userId }
   let userId: string;
+  let nonce: string;
   try {
-    userId = Buffer.from(state, "base64url").toString();
-    if (!userId) throw new Error("empty");
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString());
+    userId = parsed.userId;
+    nonce = parsed.nonce;
+    if (!userId || !nonce) throw new Error("missing fields");
   } catch {
+    return NextResponse.redirect(`${base}/?spotify=error`);
+  }
+
+  // Validate CSRF nonce against cookie
+  const cookies = new Map(
+    (request.headers.get("cookie") || "").split(";").map((c) => {
+      const [k, ...v] = c.trim().split("=");
+      return [k, v.join("=")] as [string, string];
+    }),
+  );
+  const expectedNonce = cookies.get("spotify_oauth_nonce");
+  const fromTab = cookies.get("spotify_oauth_from") || "reco";
+
+  if (!expectedNonce || expectedNonce !== nonce) {
+    console.error("[spotify/callback] CSRF nonce mismatch");
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
@@ -67,6 +85,7 @@ export async function GET(request: Request) {
     refresh_token,
     expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
     spotify_user_id: profile.id || null,
+    scope: scope || null,
     updated_at: new Date().toISOString(),
   });
 
@@ -75,5 +94,11 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
-  return NextResponse.redirect(`${base}/?spotify=connected&tab=reco`);
+  const response = NextResponse.redirect(`${base}/?spotify=connected&tab=${fromTab}`);
+
+  // Clear OAuth cookies
+  response.cookies.set("spotify_oauth_nonce", "", { maxAge: 0, path: "/api/spotify/callback" });
+  response.cookies.set("spotify_oauth_from", "", { maxAge: 0, path: "/api/spotify/callback" });
+
+  return response;
 }

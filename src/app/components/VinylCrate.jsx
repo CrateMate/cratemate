@@ -5759,14 +5759,16 @@ export default function VinylCrate() {
 
   useEffect(() => { setPage(1); setVisibleCount(PAGE_SIZE); }, [search, sortBy, sortDir, activeGenres, activeDecade, activeFormat, activeLabel]);
 
-  // If returning from Spotify OAuth, reset state so the status re-checks on next reco tab visit
+  // If returning from Spotify OAuth, reset state so the status re-checks on next tab visit
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("spotify") === "connected") {
       setSpotifyLinked(null);
+      setSpotifyConnectedForPlaylists(null);
       setSpotifyRecs(null);
       setSpotifyExpanded(true);
-      if (params.get("tab") === "reco") setTab("reco");
+      const returnTab = params.get("tab");
+      if (returnTab === "reco" || returnTab === "hearts") setTab(returnTab);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -5781,6 +5783,7 @@ export default function VinylCrate() {
         const status = statusRes.ok ? await statusRes.json() : null;
         const connected = !!status?.connected;
         setSpotifyLinked(connected);
+        setSpotifyConnectedForPlaylists(connected && status?.hasPlaylistScope !== false);
         if (!connected) setSpotifyExpanded(true);
         if (connected) {
           setSpotifyRecsLoading(true);
@@ -5791,6 +5794,7 @@ export default function VinylCrate() {
         }
       } catch {
         setSpotifyLinked(false);
+        setSpotifyConnectedForPlaylists(false);
         setSpotifyRecsLoading(false);
       }
     })();
@@ -7706,8 +7710,9 @@ export default function VinylCrate() {
             });
             let data;
             try { data = await res.json(); } catch { data = { error: "parse_error" }; }
-            if (data.error === "insufficient_scope") {
+            if (data.error === "no_access_token") {
               setSpotifyConnectedForPlaylists(false);
+              setExportResult(null);
             } else if (data.error === "rate_limited") {
               const seconds = data.retryAfter || 15;
               setExportResult({ exportError: `Spotify is rate limited — try again in ${seconds}s`, retryAfter: seconds });
@@ -7722,8 +7727,13 @@ export default function VinylCrate() {
                 }
               }, 1000);
             } else if (data.error === "no_tracks_found") {
-              const hint = data.searchStatus && data.searchStatus !== 200 ? ` (Spotify search returned ${data.searchStatus} — try reconnecting Spotify)` : "";
-              setExportResult({ exportError: `No tracks found on Spotify${hint}. Check the list below to see what was searched.`, notFound: data.notFound, total: data.total });
+              setExportResult({ exportError: "No tracks found on Spotify. Check the list below to see what was searched.", notFound: data.notFound, total: data.total });
+            } else if (data.error === "add_tracks_failed") {
+              const spotifyMsg = data.spotify_error?.error?.message || "";
+              setExportResult({ exportError: `Spotify rejected adding tracks (${data.spotify_status}${spotifyMsg ? `: ${spotifyMsg}` : ""}). The playlist was not created.`, notFound: data.notFound, total: data.total });
+            } else if (data.error === "create_failed") {
+              const spotifyMsg = data.spotify_error?.error?.message || "";
+              setExportResult({ exportError: `Spotify rejected playlist creation (${data.spotify_status}${spotifyMsg ? `: ${spotifyMsg}` : ""}).` });
             } else if (data.error && !data.playlistUrl) {
               setExportResult({ exportError: `Export failed (${data.error}${data.detail ? `: ${data.detail}` : ""})` });
             } else {
@@ -7961,7 +7971,7 @@ export default function VinylCrate() {
                     <div className="text-center py-2">
                       <div className="text-stone-500 text-xs mb-2">Playlist export requires updated Spotify permissions.</div>
                       <button
-                        onClick={() => { window.location.href = "/api/spotify/auth"; }}
+                        onClick={() => { window.location.href = "/api/spotify/auth?from=hearts"; }}
                         className="text-xs px-4 py-1.5 rounded-full border border-[#1DB954]/40 bg-[#1DB954]/10 text-[#1DB954] hover:bg-[#1DB954]/20 transition-colors"
                       >
                         Reconnect Spotify →
@@ -8015,14 +8025,19 @@ export default function VinylCrate() {
                       </>}
                     </div>
                   ) : (
-                    <button
-                      disabled={totalChecked === 0 || exportingPlaylist}
-                      onClick={handleExportClick}
-                      className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${totalChecked === 0 || exportingPlaylist ? "bg-stone-800/40 text-stone-600 cursor-not-allowed" : "bg-[#1DB954]/15 border border-[#1DB954]/30 text-[#1DB954] hover:bg-[#1DB954]/25"}`}
-                    >
-                      <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-                      {exportingPlaylist ? "Creating playlist…" : `Export ${totalChecked} track${totalChecked !== 1 ? "s" : ""} to Spotify →`}
-                    </button>
+                    <div className="space-y-1.5">
+                      {totalChecked > 100 && !exportingPlaylist && (
+                        <div className="text-xs text-amber-600/80 text-center">Large export — this may take a moment.</div>
+                      )}
+                      <button
+                        disabled={totalChecked === 0 || exportingPlaylist}
+                        onClick={handleExportClick}
+                        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${totalChecked === 0 || exportingPlaylist ? "bg-stone-800/40 text-stone-600 cursor-not-allowed" : "bg-[#1DB954]/15 border border-[#1DB954]/30 text-[#1DB954] hover:bg-[#1DB954]/25"}`}
+                      >
+                        <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                        {exportingPlaylist ? "Creating playlist…" : `Export ${totalChecked} track${totalChecked !== 1 ? "s" : ""} to Spotify →`}
+                      </button>
+                    </div>
                   )}
                 </div>
 

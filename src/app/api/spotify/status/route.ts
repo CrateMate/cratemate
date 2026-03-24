@@ -8,11 +8,20 @@ export async function GET() {
 
   const { data } = await supabase
     .from("spotify_user_tokens")
-    .select("spotify_user_id, updated_at")
+    .select("spotify_user_id, scope, updated_at")
     .eq("user_id", userId)
     .single();
 
-  return NextResponse.json({ connected: !!data, spotify_user_id: data?.spotify_user_id || null });
+  const scope = data?.scope || "";
+  const hasPlaylistScope =
+    scope.includes("playlist-modify-public") && scope.includes("playlist-modify-private");
+
+  return NextResponse.json({
+    connected: !!data,
+    spotify_user_id: data?.spotify_user_id || null,
+    scope: scope || null,
+    hasPlaylistScope,
+  });
 }
 
 export async function DELETE() {

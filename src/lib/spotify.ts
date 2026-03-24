@@ -99,6 +99,80 @@ export async function spotifyUserPost(path: string, userId: string, body: unknow
   });
 }
 
+export async function spotifyUserDelete(path: string, userId: string): Promise<Response> {
+  const token = await getUserAccessToken(userId);
+  if (!token) throw new Error("Spotify not connected");
+  return fetch(`https://api.spotify.com/v1${path}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** Authenticated Spotify request using a raw token (no userId lookup). */
+export async function spotifyUserReqWithToken(
+  method: string,
+  path: string,
+  token: string,
+  body?: unknown,
+): Promise<Response> {
+  return fetch(`https://api.spotify.com/v1${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+// ---------- Track matching ----------
+
+type SpotifyTrackItem = { uri: string; name: string; artists: Array<{ name: string }> };
+
+/** Score a Spotify track result against a query artist+title. Higher = better match. Returns 0 for no match. */
+export function scoreTrackMatch(
+  item: SpotifyTrackItem,
+  queryArtist: string,
+  queryTitle: string,
+): number {
+  const nTitle = normalise(queryTitle);
+  const nArtist = normalise(queryArtist);
+  const sTitle = normalise(item.name);
+  const sArtists = item.artists.map((a) => normalise(a.name));
+
+  // Title must at least partially match
+  const titleExact = sTitle === nTitle;
+  const titleContains = sTitle.includes(nTitle) || nTitle.includes(sTitle);
+  if (!titleContains) return 0;
+
+  // Artist matching
+  const artistExact = sArtists.some((a) => a === nArtist);
+  const artistContains = sArtists.some(
+    (a) => a.includes(nArtist) || nArtist.includes(a),
+  );
+
+  let score = 0;
+  if (titleExact) score += 10;
+  else if (titleContains) score += 5;
+  if (artistExact) score += 10;
+  else if (artistContains) score += 5;
+
+  return score;
+}
+
+/** Pick the best track from search results, or null if nothing scores above 0. */
+export function bestTrackMatch(
+  items: SpotifyTrackItem[],
+  queryArtist: string,
+  queryTitle: string,
+): string | null {
+  let best: { uri: string; score: number } | null = null;
+  for (const item of items) {
+    const score = scoreTrackMatch(item, queryArtist, queryTitle);
+    if (score > 0 && (!best || score > best.score)) {
+      best = { uri: item.uri, score };
+    }
+  }
+  return best?.uri ?? null;
+}
+
 // ---------- Album features (client credentials) ----------
 
 export type SpotifyFeatures = {
@@ -136,7 +210,7 @@ function cleanTitle(title: string): string {
 }
 
 /** Normalise a string for loose comparison */
-function normalise(s: string): string {
+export function normalise(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
