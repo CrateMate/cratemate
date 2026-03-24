@@ -6087,16 +6087,16 @@ export default function VinylCrate() {
     };
   }, [theme, personalTheme]);
 
-  const sorted = [...pool].sort((a, b) => {
+  const sorted = useMemo(() => [...pool].sort((a, b) => {
     let cmp = 0;
     if (sortBy === "year") cmp = (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999);
     else if (sortBy === "genre") cmp = (a.genres || a.genre || "").localeCompare(b.genres || b.genre || "");
     else if (sortBy === "hearts") cmp = (a.favorite_tracks || []).length - (b.favorite_tracks || []).length;
     else cmp = (a.artist || "").localeCompare(b.artist || "");
     return sortDir === "asc" ? cmp : -cmp;
-  });
+  }), [pool, sortBy, sortDir]);
 
-  const filtered = sorted.filter((r) => {
+  const filtered = useMemo(() => sorted.filter((r) => {
     const q = search.toLowerCase();
     const matchesSearch =
       !q ||
@@ -6111,7 +6111,7 @@ export default function VinylCrate() {
     const matchesFormat = !activeFormat || getFormat(r) === activeFormat;
     const matchesLabel = !activeLabel || (r.label || "").toLowerCase().includes(activeLabel.toLowerCase());
     return matchesSearch && matchesGenre && matchesStyle && matchesDecade && matchesFormat && matchesLabel;
-  });
+  }), [sorted, search, activeGenres, activeStyles, activeDecade, activeFormat, activeLabel]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pagedRecords = infiniteScroll
@@ -6957,7 +6957,17 @@ export default function VinylCrate() {
         <div style={{ fontFamily: "'Fraunces',serif", fontSize: 24 }} className="text-amber-100 mb-2">
           Loading your crate...
         </div>
-        {collectionError && <div className="text-red-500/70 text-sm mt-2">{collectionError}</div>}
+        {collectionError && (
+          <div className="text-center mt-2">
+            <div className="text-red-500/70 text-sm">{collectionError}</div>
+            <button
+              onClick={() => { setCollectionError(""); setCollection(null); refreshRecords(); }}
+              className="mt-3 px-4 py-2 rounded-xl text-xs border border-stone-700 text-stone-400 hover:text-stone-200 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -7122,7 +7132,7 @@ export default function VinylCrate() {
             <button
               key={id}
               onClick={() => { setTab(id); setSelected(null); }}
-              className={`flex-1 py-1 rounded-xl text-xs font-medium transition-all ${
+              className={`flex-1 min-h-[44px] flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
                 active
                   ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
                   : viewMode === "drift" ? "text-stone-600 hover:text-stone-400 bg-black/40" : "text-stone-500 hover:text-stone-300"
@@ -8715,7 +8725,11 @@ export default function VinylCrate() {
                 {statsSubTab === "listening" && (
                   <>
                     {totalPlays === 0 && (
-                      <div className="text-stone-600 text-sm text-center py-16">No plays logged yet.</div>
+                      <div className="text-center py-16 px-4">
+                        <div className="text-2xl mb-2 text-stone-700">▷</div>
+                        <div className="text-stone-600 text-sm">No plays logged yet.</div>
+                        <div className="text-stone-700 text-xs mt-1">Double-tap any record in your crate to log a play.</div>
+                      </div>
                     )}
 
                     {/* Identity labels */}
