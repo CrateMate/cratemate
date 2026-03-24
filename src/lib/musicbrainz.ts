@@ -52,6 +52,15 @@ const EMPTY: ArtistDates = {
 async function mbFetch(url: string, delayMs = RATE_DELAY_MS): Promise<unknown> {
   await new Promise((r) => setTimeout(r, delayMs));
   const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
+  if (res.status === 429) {
+    // Rate limited — wait for Retry-After then retry once
+    const retryAfter = parseInt(res.headers.get("Retry-After") || "5", 10);
+    console.warn(`[mb] 429 rate limited, retrying after ${retryAfter}s: ${url}`);
+    await new Promise((r) => setTimeout(r, retryAfter * 1000));
+    const retry = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
+    if (!retry.ok) throw new Error(`MusicBrainz ${retry.status} (retry): ${url}`);
+    return retry.json();
+  }
   if (!res.ok) throw new Error(`MusicBrainz ${res.status}: ${url}`);
   return res.json();
 }
@@ -177,10 +186,9 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
     }
 
     // Per-member full lookup — stubs don't include life-span reliably.
-    // Use a shorter delay (300ms) for member calls: MB's 1100ms is a conservative average
-    // guideline. One-time per-artist bursts of ~10 calls are well within acceptable use.
-    // Cap at 10 members; 10 × 300ms = ~3s, safely within Vercel Hobby's 10s limit.
-    const MEMBER_DELAY_MS = 300;
+    // 500ms strikes a balance: 10 members × 500ms = ~5s, within Vercel Hobby's 10s limit,
+    // while staying under MB's rate limit to avoid 429s.
+    const MEMBER_DELAY_MS = 500;
     const members: MemberDates[] = [];
     for (const stub of memberStubs.slice(0, 10)) {
       try {
