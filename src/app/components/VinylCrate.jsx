@@ -1531,7 +1531,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   ? "bg-rose-900/35 border-rose-700/50 text-rose-300 hover:bg-rose-900/50"
                   : "border-stone-800/40 text-stone-600 hover:text-stone-400 hover:border-stone-700/60"
               }`}
-            >{record.for_sale ? "✓ Remove" : "For Sale"}</button>
+            >{record.for_sale ? "Unlist" : "🏷 List"}</button>
           </div>
 
           {/* Collapsible tracklist */}
