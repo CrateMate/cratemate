@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
     const playlist = await createRes.json();
     const playlistId: string = playlist.id;
     const playlistUrl: string = playlist.external_urls?.spotify ?? `https://open.spotify.com/playlist/${playlistId}`;
+    console.log("[playlist] created", playlistId, "uris sample:", uris.slice(0, 2));
 
     for (let i = 0; i < uris.length; i += 100) {
       const addRes = await spotifyPost(`/playlists/${playlistId}/tracks`, token, { uris: uris.slice(i, i + 100) });
