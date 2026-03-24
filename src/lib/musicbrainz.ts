@@ -96,6 +96,7 @@ export async function fetchReleaseDate(
 
 type MbArtistStub = {
   id: string;
+  name?: string;
   type?: string;
   score?: number;
   "life-span"?: { begin?: string; end?: string };
@@ -114,18 +115,43 @@ type MbRelation = {
   };
 };
 
+function normaliseArtistName(s: string): string {
+  return s.toLowerCase().replace(/^the\s+/i, "").replace(/[^a-z0-9]/g, "");
+}
+
 export async function fetchArtistDates(artistName: string): Promise<ArtistDates> {
   try {
     // Step 1 — Search by name, take highest-confidence match.
-    const searchData = await mbFetch(
-      `${MB_API}/artist?query=artist:${encodeURIComponent(artistName)}&fmt=json`
-    ) as { artists?: MbArtistStub[] };
+    // Try the full name first; if nothing scores ≥85 also try without a leading "The".
+    const trySearch = async (query: string) => {
+      const data = await mbFetch(
+        `${MB_API}/artist?query=artist:${encodeURIComponent(query)}&fmt=json`
+      ) as { artists?: MbArtistStub[] };
+      return data?.artists || [];
+    };
 
-    const artists = searchData?.artists || [];
+    let artists = await trySearch(artistName);
+
+    // Fallback: strip leading "The " and retry (e.g. "The Cure" → "Cure")
+    const stripped = artistName.replace(/^the\s+/i, "").trim();
+    if (stripped !== artistName && (artists.length === 0 || (artists[0].score ?? 0) < 85)) {
+      const fallback = await trySearch(stripped);
+      if (fallback.length > 0 && (fallback[0].score ?? 0) > (artists[0]?.score ?? 0)) {
+        artists = fallback;
+      }
+    }
+
     if (!artists.length) return EMPTY;
 
-    const best = artists[0];
-    // MusicBrainz returns a 0–100 relevance score; skip poor matches.
+    // Name similarity check — confirm the top result actually matches before using it.
+    // Prevents tribute bands or unrelated artists with similar names from sneaking in.
+    const normQuery = normaliseArtistName(artistName);
+    const best = artists.find((a) => {
+      if ((a.score ?? 0) < 85) return false;
+      const normResult = normaliseArtistName(a.name || "");
+      return normResult.includes(normQuery) || normQuery.includes(normResult);
+    }) || artists[0];
+
     if ((best.score ?? 100) < 85) return EMPTY;
 
     const rawType = (best.type || "").toLowerCase();
