@@ -49,11 +49,29 @@ const EMPTY: ArtistDates = {
   members: [],
 };
 
+const TRANSIENT_CODES = new Set([429, 500, 502, 503, 504]);
+const MAX_RETRIES = 2;
+
+class MbTransientError extends Error {
+  constructor(status: number, url: string) {
+    super(`MusicBrainz transient ${status}: ${url}`);
+    this.name = "MbTransientError";
+  }
+}
+
 async function mbFetch(url: string, delayMs = RATE_DELAY_MS): Promise<unknown> {
-  await new Promise((r) => setTimeout(r, delayMs));
-  const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
-  if (!res.ok) throw new Error(`MusicBrainz ${res.status}: ${url}`);
-  return res.json();
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    await new Promise((r) => setTimeout(r, attempt === 0 ? delayMs : delayMs * (attempt + 1)));
+    const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
+    if (res.ok) return res.json();
+    if (TRANSIENT_CODES.has(res.status) && attempt < MAX_RETRIES) {
+      console.log(`[musicbrainz] ${res.status} on attempt ${attempt + 1}, retrying: ${url}`);
+      continue;
+    }
+    if (TRANSIENT_CODES.has(res.status)) throw new MbTransientError(res.status, url);
+    throw new Error(`MusicBrainz ${res.status}: ${url}`);
+  }
+  throw new Error(`MusicBrainz unreachable: ${url}`);
 }
 
 type MbReleaseStub = {
@@ -72,7 +90,7 @@ export async function fetchReleaseDate(
   artist: string,
   title: string,
   knownYear: number | null
-): Promise<{ day: number | null; month: number | null }> {
+): Promise<{ day: number | null; month: number | null; transient?: boolean }> {
   try {
     const query = `release:"${title}" AND artist:"${artist}"`;
     const data = await mbFetch(
@@ -89,7 +107,11 @@ export async function fetchReleaseDate(
       return { day: parsed.day, month: parsed.month };
     }
     return { day: null, month: null };
-  } catch {
+  } catch (e) {
+    if (e instanceof MbTransientError) {
+      console.log(`[musicbrainz] transient error fetching release date for "${title}" — will retry next enrichment`);
+      return { day: null, month: null, transient: true };
+    }
     return { day: null, month: null };
   }
 }
@@ -324,7 +346,11 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       deathYear:  groupDeath.year,  deathMonth: groupDeath.month,  deathDay:  groupDeath.day,
       members,
     };
-  } catch {
+  } catch (e) {
+    if (e instanceof MbTransientError) {
+      console.log(`[musicbrainz] transient error fetching artist dates for "${artistName}" — will retry next enrichment`);
+      return { ...EMPTY, transient: true } as ArtistDates & { transient: boolean };
+    }
     return EMPTY;
   }
 }

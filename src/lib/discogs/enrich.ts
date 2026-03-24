@@ -655,7 +655,7 @@ export async function enrichSingleRecord(
     !!r.artist &&
     !!r.title;
   // artist_birth_month === 0 is the "checked" sentinel (0 = group or not found) — skip
-  const needsMbArtist = !r.is_compilation && r.artist_birth_month == null && !!r.artist;
+  let needsMbArtist = !r.is_compilation && r.artist_birth_month == null && !!r.artist;
 
   const needsDiscogs = r.discogs_id != null && (needsThumb || needsYearFix || needsReleaseDateFix);
 
@@ -813,9 +813,12 @@ export async function enrichSingleRecord(
   if (needsMbReleaseDate) {
     // Random jitter so parallel calls (window neighbours) don't all hit MB at once
     await new Promise((res) => setTimeout(res, Math.random() * 1200));
-    const { day, month } = await fetchReleaseDate(r.artist!, r.title!, r.year_original ?? null);
-    patch.release_day = day ?? 0; // 0 = sentinel "checked, not found"
-    if (r.release_month == null && month != null) patch.release_month = month;
+    const mbRelease = await fetchReleaseDate(r.artist!, r.title!, r.year_original ?? null);
+    // Don't store sentinel on transient MB errors — leave null so next enrichment retries
+    if (!("transient" in mbRelease && mbRelease.transient)) {
+      patch.release_day = mbRelease.day ?? 0; // 0 = sentinel "checked, not found"
+      if (r.release_month == null && mbRelease.month != null) patch.release_month = mbRelease.month;
+    }
   }
 
   // ── MusicBrainz artist dates ──────────────────────────────────────────────
@@ -842,8 +845,9 @@ export async function enrichSingleRecord(
         await new Promise((res) => setTimeout(res, Math.random() * 1200));
       }
       dates = await fetchArtistDates(r.artist!);
-      // Only cache if MB returned real data — never overwrite good data with EMPTY
-      if (dates.artistType !== null) {
+      const isTransient = "transient" in dates && (dates as { transient?: boolean }).transient;
+      // Only cache if MB returned real data — never overwrite good data with EMPTY or transient failures
+      if (dates.artistType !== null && !isTransient) {
         await supabase.from("artist_metadata").upsert({
           artist_name: r.artist!,
           artist_type: dates.artistType,
@@ -853,16 +857,20 @@ export async function enrichSingleRecord(
           cached_at: new Date().toISOString(),
         });
       }
+      // On transient failure, skip writing artist fields to the record so next enrichment retries
+      if (isTransient) { needsMbArtist = false; }
     }
 
-    const isGroup = dates.artistType === "group";
-    const groupHasMembers = isGroup && dates.members.length > 0;
-    patch.artist_birth_month = isGroup ? (groupHasMembers ? 0 : null) : (dates.birthMonth ?? 0);
-    patch.artist_birth_year = isGroup ? null : dates.birthYear;
-    patch.artist_birth_day = isGroup ? null : dates.birthDay;
-    patch.artist_death_year = isGroup ? null : dates.deathYear;
-    patch.artist_death_month = isGroup ? null : dates.deathMonth;
-    patch.artist_death_day = isGroup ? null : dates.deathDay;
+    if (needsMbArtist) {
+      const isGroup = dates.artistType === "group";
+      const groupHasMembers = isGroup && dates.members.length > 0;
+      patch.artist_birth_month = isGroup ? (groupHasMembers ? 0 : null) : (dates.birthMonth ?? 0);
+      patch.artist_birth_year = isGroup ? null : dates.birthYear;
+      patch.artist_birth_day = isGroup ? null : dates.birthDay;
+      patch.artist_death_year = isGroup ? null : dates.deathYear;
+      patch.artist_death_month = isGroup ? null : dates.deathMonth;
+      patch.artist_death_day = isGroup ? null : dates.deathDay;
+    }
   }
 
   if (Object.keys(patch).length === 0) return { updated: false, skipped: true };
@@ -909,12 +917,15 @@ export async function enrichReleaseDates({ userId }: { userId: string }) {
 
   for (const { ids, artist, title, year, hasMonth } of keyToGroup.values()) {
     processed++;
-    const { day, month } = await fetchReleaseDate(artist, title, year);
+    const mbRelease = await fetchReleaseDate(artist, title, year);
+
+    // Skip storing sentinel on transient MB errors so next enrichment retries
+    if ("transient" in mbRelease && mbRelease.transient) continue;
 
     // Always write release_day — 0 = "checked, not found" sentinel so we skip it next run
     // Never overwrite existing Discogs release_month; only fill if currently null
-    const patch: Record<string, unknown> = { release_day: day ?? 0 };
-    if (!hasMonth && month != null) patch.release_month = month;
+    const patch: Record<string, unknown> = { release_day: mbRelease.day ?? 0 };
+    if (!hasMonth && mbRelease.month != null) patch.release_month = mbRelease.month;
 
     const { error: updateError } = await supabase
       .from("records")
@@ -922,7 +933,7 @@ export async function enrichReleaseDates({ userId }: { userId: string }) {
       .in("id", ids)
       .eq("user_id", userId);
 
-    if (!updateError && day) updated += ids.length;
+    if (!updateError && mbRelease.day) updated += ids.length;
   }
 
   return { processed, updated };
@@ -980,9 +991,10 @@ export async function enrichArtistDates({ userId }: { userId: string }) {
     } else {
       // Cache miss — call MusicBrainz (includes 1.1s rate-limit delay)
       dates = await fetchArtistDates(artistName);
+      const isTransient = "transient" in dates && (dates as { transient?: boolean }).transient;
 
-      // Only cache if MB returned real data — never overwrite good data with EMPTY
-      if (dates.artistType !== null) {
+      // Only cache if MB returned real data — never overwrite good data with EMPTY or transient failures
+      if (dates.artistType !== null && !isTransient) {
         await supabase.from("artist_metadata").upsert({
           artist_name:  artistName,
           artist_type:  dates.artistType,
@@ -996,6 +1008,8 @@ export async function enrichArtistDates({ userId }: { userId: string }) {
           cached_at:    new Date().toISOString(),
         });
       }
+      // Skip writing to records on transient failure so next enrichment retries
+      if (isTransient) continue;
     }
 
     // For groups: individual dates live in artist_metadata.members — don't flatten onto records.
