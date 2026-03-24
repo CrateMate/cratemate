@@ -5330,6 +5330,7 @@ export default function VinylCrate() {
   const [trailSearchOpen, setTrailSearchOpen] = useState(false);
   const [trailSearch, setTrailSearch] = useState("");
   const [spotifyFeatures, setSpotifyFeatures] = useState({}); // { [record_id]: features }
+  const initialFeaturesLoaded = useRef(false);
   const [spotifyAnalyzing, setSpotifyAnalyzing] = useState(false);
   const fetchingFeaturesRef = useRef(new Set()); // record IDs currently in-flight
 
@@ -5605,7 +5606,8 @@ export default function VinylCrate() {
         ])
       );
       setSpotifyFeatures(normalized);
-    }).catch(() => {});
+      initialFeaturesLoaded.current = true;
+    }).catch(() => { initialFeaturesLoaded.current = true; });
 
     fetch("/api/discogs/status")
       .then((r) => r.json())
@@ -5868,8 +5870,10 @@ export default function VinylCrate() {
     enrichmentAbort.current = false;
 
     async function runFeaturesQueue() {
-      // Wait 4s for the initial GET /api/spotify/features to settle
-      await new Promise(res => setTimeout(res, 4000));
+      // Wait for initial features GET to complete (polls every 200ms, max 6s)
+      for (let i = 0; i < 30 && !initialFeaturesLoaded.current; i++) {
+        await new Promise(res => setTimeout(res, 200));
+      }
       const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]);
       if (uncached.length === 0) return;
       setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
@@ -5895,7 +5899,11 @@ export default function VinylCrate() {
     if (!Array.isArray(collection) || collection.length === 0) return;
 
     async function runDiscogsQueue() {
-      await new Promise(res => setTimeout(res, 6000)); // start after features queue
+      // Wait for initial features load before starting (avoids competing API calls)
+      for (let i = 0; i < 30 && !initialFeaturesLoaded.current; i++) {
+        await new Promise(res => setTimeout(res, 200));
+      }
+      await new Promise(res => setTimeout(res, 500)); // brief pause after features settle
       const unresolved = collection.filter(r => r.artist && r.title && !r.discogs_id);
       if (unresolved.length === 0) return;
       setEnrichmentProgress(p => p ?? { done: 0, total: unresolved.length, type: "discogs" });
