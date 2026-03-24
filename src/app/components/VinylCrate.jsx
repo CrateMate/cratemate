@@ -1361,14 +1361,14 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const heroIsUpgraded = heroBase && heroHi && heroHi !== heroBase;
   const heroImage = heroBase ? (heroIsUpgraded ? `url(${heroHi}), url(${heroBase})` : `url(${heroBase})`) : "";
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80]">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200]">
       <button className="absolute inset-0" onClick={slideClose} aria-label="Close" />
       <div className="relative w-full max-w-md mx-auto h-full flex flex-col justify-end">
         <div
           className="bg-stone-950 border border-stone-800/80 border-b-0 rounded-t-3xl px-5 pt-5 overflow-y-auto"
           style={{
             maxHeight: "92vh",
-            paddingBottom: hasNowPlaying ? 84 : 28,
+            paddingBottom: 28,
             transform: (closing || !entered) ? "translateY(100%)" : "translateY(0)",
             transition: entered ? "transform 0.28s cubic-bezier(0.4, 0, 1, 1)" : "none",
           }}
@@ -1456,11 +1456,28 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   )}
                 </div>
               )}
-              {/* Genre pills — to the right of art */}
-              <div className="flex flex-wrap gap-1 mt-auto">
-                {getGenres(record).map((g) => (
-                  <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
-                ))}
+              {/* Genre pills + last played — pinned to bottom of art column */}
+              <div className="flex flex-col gap-1.5 mt-auto">
+                <div className="flex flex-wrap gap-1">
+                  {getGenres(record).map((g) => (
+                    <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+                  ))}
+                </div>
+                {lastPlayedDate && (
+                  <div className="text-stone-600 text-[11px]">
+                    Last played: {(() => {
+                      const diff = Date.now() - new Date(lastPlayedDate).getTime();
+                      const mins = Math.floor(diff / 60000);
+                      if (mins < 1) return "just now";
+                      if (mins < 60) return `${mins} min ago`;
+                      const hrs = Math.floor(mins / 60);
+                      if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
+                      const days = Math.floor(hrs / 24);
+                      if (days === 1) return "yesterday";
+                      return `${days} days ago`;
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1486,44 +1503,27 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             )}
           </div>
 
-          {/* Action buttons — Session primary, Compare + Mark Sale secondary */}
-          <div className="flex flex-col gap-2 mb-4">
+          {/* Action buttons — one row: Session (50%) | Compare (25%) | Mark for Sale (25%) */}
+          <div className="flex gap-2 mb-4">
             {!record.for_sale && (
               <button
                 onClick={() => { onEnterTrail?.(record); onClose(); }}
-                className="w-full py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-sm font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
+                className="w-1/2 py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-sm font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
               >⬡ Start Session</button>
             )}
             <button
               onClick={() => onCompare?.(record)}
-              className="w-full py-2 rounded-xl border border-stone-800/40 text-stone-500 text-xs font-medium hover:text-stone-300 hover:border-stone-700/60 transition-colors"
+              className={`${record.for_sale ? "w-1/2" : "w-1/4"} py-2 rounded-xl border border-stone-800/40 text-stone-500 text-xs font-medium hover:text-stone-300 hover:border-stone-700/60 transition-colors`}
             >⇄ Compare</button>
             <button
               onClick={() => onToggleForSale?.(record)}
-              className={`w-full py-2 rounded-xl border text-xs font-medium transition-colors ${
+              className={`${record.for_sale ? "w-1/2" : "w-1/4"} py-2 rounded-xl border text-xs font-medium transition-colors ${
                 record.for_sale
                   ? "bg-rose-900/35 border-rose-700/50 text-rose-300 hover:bg-rose-900/50"
                   : "border-stone-800/40 text-stone-600 hover:text-stone-400 hover:border-stone-700/60"
               }`}
-            >{record.for_sale ? "✓ For Sale — tap to remove" : "Mark for sale"}</button>
+            >{record.for_sale ? "✓ Remove" : "For Sale"}</button>
           </div>
-
-          {/* Last played */}
-          {lastPlayedDate && (
-            <div className="text-stone-600 text-xs text-center mb-3">
-              Last played: {(() => {
-                const diff = Date.now() - new Date(lastPlayedDate).getTime();
-                const mins = Math.floor(diff / 60000);
-                if (mins < 1) return "just now";
-                if (mins < 60) return `${mins} min ago`;
-                const hrs = Math.floor(mins / 60);
-                if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
-                const days = Math.floor(hrs / 24);
-                if (days === 1) return "yesterday";
-                return `${days} days ago`;
-              })()}
-            </div>
-          )}
 
           {/* Collapsible tracklist */}
           <button
