@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
 
     // ---------- Add tracks (batches of 100) ----------
     for (let i = 0; i < uniqueUris.length; i += 100) {
-      const addRes = await spotifyUserReqWithToken("POST", `/playlists/${playlistId}/tracks`, token, {
+      const addRes = await spotifyUserReqWithToken("POST", `/playlists/${playlistId}/items`, token, {
         uris: uniqueUris.slice(i, i + 100),
       });
       if (!addRes.ok) {
