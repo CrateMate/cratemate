@@ -55,16 +55,31 @@ export async function GET(request: Request) {
 
   const top = Array.from(aggregated.values()).sort((a, b) => b.score - a.score).slice(0, 15);
 
-  // Step 3: fetch top 3 albums for each similar artist in parallel
+  function cleanAlbumName(name: string) {
+    return name
+      .replace(/\s*[\[(].*?(remaster|remastered|deluxe|expanded|anniversary|edition|version|mono|stereo|bonus|limited|special)[^\])]*/gi, "")
+      .replace(/[\[( ]+$/g, "")
+      .trim();
+  }
+
+  // Step 3: fetch top albums for each similar artist, request more to allow dedup
   const withAlbums = await Promise.all(
     top.map(async (artist) => {
-      const data = await lastfmGet({ method: "artist.gettopalbums", artist: artist.name, limit: "3" }, apiKey);
-      const albums: { name: string; image: string | null }[] = (data?.topalbums?.album || [])
-        .filter((a: { name: string }) => a.name && a.name !== "(null)")
-        .map((a: { name: string; image: { "#text": string; size: string }[] }) => ({
-          name: a.name,
-          image: a.image?.find((i) => i.size === "medium")?.["#text"] || null,
-        }));
+      const data = await lastfmGet({ method: "artist.gettopalbums", artist: artist.name, limit: "10" }, apiKey);
+      const seen = new Set<string>();
+      const albums: { name: string; image: string | null }[] = [];
+      for (const a of (data?.topalbums?.album || [])) {
+        if (!a.name || a.name === "(null)") continue;
+        const clean = cleanAlbumName(a.name);
+        const key = clean.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        albums.push({
+          name: clean,
+          image: a.image?.find((i: { size: string }) => i.size === "medium")?.["#text"] || null,
+        });
+        if (albums.length === 3) break;
+      }
       return { ...artist, top_albums: albums };
     })
   );

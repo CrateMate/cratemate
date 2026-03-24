@@ -5844,19 +5844,20 @@ export default function VinylCrate() {
     const artistCounts = {};
     for (const r of myRecords) {
       if (r.is_compilation || !r.artist) continue;
-      artistCounts[r.artist] = (artistCounts[r.artist] || 0) + (playCounts[r.id] || 0);
+      const name = stripArtistNum(r.artist);
+      artistCounts[name] = (artistCounts[name] || 0) + (playCounts[r.id] || 0);
     }
     const topArtists = Object.entries(artistCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([name]) => name);
+      .map(([name]) => stripArtistNum(name));
     if (topArtists.length === 0) { setLastfmRecs([]); return; }
-    const ownedArtists = new Set(myRecords.map((r) => (r.artist || "").toLowerCase().trim()).filter(Boolean));
+    const ownedArtists = new Set(myRecords.map((r) => stripArtistNum(r.artist).toLowerCase()).filter(Boolean));
     setLastfmRecsLoading(true);
     fetch(`/api/lastfm/similar?artists=${encodeURIComponent(topArtists.join(","))}`)
       .then((r) => r.ok ? r.json() : { similar: [] })
       .then((data) => {
-        const filtered = (data.similar || []).filter((a) => !ownedArtists.has((a.name || "").toLowerCase().trim()));
+        const filtered = (data.similar || []).filter((a) => !ownedArtists.has(stripArtistNum(a.name).toLowerCase()));
         setLastfmRecs(filtered.slice(0, 15));
       })
       .catch(() => setLastfmRecs([]))
