@@ -842,14 +842,17 @@ export async function enrichSingleRecord(
         await new Promise((res) => setTimeout(res, Math.random() * 1200));
       }
       dates = await fetchArtistDates(r.artist!);
-      await supabase.from("artist_metadata").upsert({
-        artist_name: r.artist!,
-        artist_type: dates.artistType,
-        birth_year: dates.birthYear, birth_month: dates.birthMonth, birth_day: dates.birthDay,
-        death_year: dates.deathYear, death_month: dates.deathMonth, death_day: dates.deathDay,
-        members: dates.members.length > 0 ? dates.members : null,
-        cached_at: new Date().toISOString(),
-      });
+      // Only cache if MB returned real data — never overwrite good data with EMPTY
+      if (dates.artistType !== null) {
+        await supabase.from("artist_metadata").upsert({
+          artist_name: r.artist!,
+          artist_type: dates.artistType,
+          birth_year: dates.birthYear, birth_month: dates.birthMonth, birth_day: dates.birthDay,
+          death_year: dates.deathYear, death_month: dates.deathMonth, death_day: dates.deathDay,
+          members: dates.members.length > 0 ? dates.members : null,
+          cached_at: new Date().toISOString(),
+        });
+      }
     }
 
     const isGroup = dates.artistType === "group";
@@ -978,20 +981,21 @@ export async function enrichArtistDates({ userId }: { userId: string }) {
       // Cache miss — call MusicBrainz (includes 1.1s rate-limit delay)
       dates = await fetchArtistDates(artistName);
 
-      // Write to shared cache regardless of whether we found anything
-      // (null values mean "looked up, not found" — avoids re-querying on next run)
-      await supabase.from("artist_metadata").upsert({
-        artist_name:  artistName,
-        artist_type:  dates.artistType,
-        birth_year:   dates.birthYear,
-        birth_month:  dates.birthMonth,
-        birth_day:    dates.birthDay,
-        death_year:   dates.deathYear,
-        death_month:  dates.deathMonth,
-        death_day:    dates.deathDay,
-        members:      dates.members.length > 0 ? dates.members : null,
-        cached_at:    new Date().toISOString(),
-      });
+      // Only cache if MB returned real data — never overwrite good data with EMPTY
+      if (dates.artistType !== null) {
+        await supabase.from("artist_metadata").upsert({
+          artist_name:  artistName,
+          artist_type:  dates.artistType,
+          birth_year:   dates.birthYear,
+          birth_month:  dates.birthMonth,
+          birth_day:    dates.birthDay,
+          death_year:   dates.deathYear,
+          death_month:  dates.deathMonth,
+          death_day:    dates.deathDay,
+          members:      dates.members.length > 0 ? dates.members : null,
+          cached_at:    new Date().toISOString(),
+        });
+      }
     }
 
     // For groups: individual dates live in artist_metadata.members — don't flatten onto records.

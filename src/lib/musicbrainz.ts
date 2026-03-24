@@ -52,15 +52,6 @@ const EMPTY: ArtistDates = {
 async function mbFetch(url: string, delayMs = RATE_DELAY_MS): Promise<unknown> {
   await new Promise((r) => setTimeout(r, delayMs));
   const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
-  if (res.status === 429) {
-    // Rate limited — wait for Retry-After then retry once
-    const retryAfter = parseInt(res.headers.get("Retry-After") || "5", 10);
-    console.warn(`[mb] 429 rate limited, retrying after ${retryAfter}s: ${url}`);
-    await new Promise((r) => setTimeout(r, retryAfter * 1000));
-    const retry = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
-    if (!retry.ok) throw new Error(`MusicBrainz ${retry.status} (retry): ${url}`);
-    return retry.json();
-  }
   if (!res.ok) throw new Error(`MusicBrainz ${res.status}: ${url}`);
   return res.json();
 }
