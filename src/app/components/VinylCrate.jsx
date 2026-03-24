@@ -2068,6 +2068,72 @@ function packTileRows(tiles, totalUnits) {
   return rows;
 }
 
+function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStartY, lastTapTime, lastTapRecordId, singleTapTimer }) {
+  const tileSize = units * UNIT + (units - 1) * GAP;
+  const primaryGenre = getGenres(record)[0] || "";
+  const genreHex = getGenrePalette(primaryGenre).hex;
+
+  const raw = record.thumb || "";
+  const isUpload = isUserPhoto(raw);
+  const upgraded = isUpload ? "" : upgradeDiscogsThumb(raw);
+  const needsITunes = isUpload || !upgraded;
+
+  const [fallback, setFallback] = useState(() => _artCache.get(record.id) || null);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    if (!needsITunes && !imgError) return;
+    return _enqueueArt(record, (url) => {
+      if (url) { setFallback(url); setImgError(false); }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record.id, imgError]);
+
+  const artSrc = fallback || (imgError ? null : upgraded);
+
+  return (
+    <div
+      onClick={(e) => {
+        if (Math.abs(e.clientY - pointerStartY.current) > 10) return;
+        const now = Date.now();
+        if (now - lastTapTime.current < 300 && lastTapRecordId.current === record.id) {
+          clearTimeout(singleTapTimer.current);
+          lastTapTime.current = 0;
+          lastTapRecordId.current = null;
+          onDoubleTap?.(record);
+          return;
+        }
+        lastTapTime.current = now;
+        lastTapRecordId.current = record.id;
+        singleTapTimer.current = setTimeout(() => onSelect(record), 300);
+      }}
+      style={{
+        gridColumn: `span ${units}`,
+        gridRow: `span ${units}`,
+        position: "relative",
+        overflow: "hidden",
+        cursor: "pointer",
+        background: "#0c0b09",
+        touchAction: "pan-y",
+      }}
+    >
+      {artSrc ? (
+        <img
+          src={proxyArtUrl(artSrc) || artSrc}
+          alt=""
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div style={{ width: "100%", height: "100%", background: `${genreHex}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: tileSize * 0.3, opacity: 0.3 }}>◇</span>
+        </div>
+      )}
+      <div style={{ position: "absolute", top: 0, left: 0, width: Math.round(tileSize * 0.05), height: "100%", background: `${genreHex}55` }} />
+    </div>
+  );
+}
+
 export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   const containerRef = useRef(null); // outer scroll container
   const innerRef = useRef(null);     // inner grid (for width measurement)
@@ -2171,58 +2237,22 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
           alignContent: "start",
         }}
       >
-      {tiles.map(({ record, units, plays }) => {
-        const tileSize = units * UNIT + (units - 1) * GAP; // pixel size of this tile
-        const primaryGenre = getGenres(record)[0] || "";
-        const genreHex = getGenrePalette(primaryGenre).hex;
-        const artUrl = _artCache.get(record.id) || record.thumb || null;
-
-        return (
-          <div
-            key={record.id}
-            onClick={(e) => {
-              // Suppress tap if the pointer moved significantly (i.e. a scroll gesture)
-              if (Math.abs(e.clientY - pointerStartY.current) > 10) return;
-              const now = Date.now();
-              if (now - lastTapTime.current < 300 && lastTapRecordId.current === record.id) {
-                clearTimeout(singleTapTimer.current);
-                lastTapTime.current = 0;
-                lastTapRecordId.current = null;
-                onDoubleTap?.(record);
-                return;
-              }
-              lastTapTime.current = now;
-              lastTapRecordId.current = record.id;
-              singleTapTimer.current = setTimeout(() => onSelect(record), 300);
-            }}
-            style={{
-              gridColumn: `span ${units}`,
-              gridRow: `span ${units}`,
-              position: "relative",
-              overflow: "hidden",
-              cursor: "pointer",
-              background: "#0c0b09",
-              touchAction: "pan-y",
-            }}
-          >
-            {/* Art */}
-            {artUrl ? (
-              <img
-                src={artUrl}
-                alt=""
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-              />
-            ) : (
-              <div style={{ width: "100%", height: "100%", background: `${genreHex}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: tileSize * 0.3, opacity: 0.3 }}>◇</span>
-              </div>
-            )}
-
-            {/* Genre accent top-left bar */}
-            <div style={{ position: "absolute", top: 0, left: 0, width: Math.round(tileSize * 0.05), height: "100%", background: `${genreHex}55` }} />
-          </div>
-        );
-      })}
+      {tiles.map(({ record, units, plays }) => (
+        <TileItem
+          key={record.id}
+          record={record}
+          units={units}
+          plays={plays}
+          UNIT={UNIT}
+          GAP={GAP}
+          onSelect={onSelect}
+          onDoubleTap={onDoubleTap}
+          pointerStartY={pointerStartY}
+          lastTapTime={lastTapTime}
+          lastTapRecordId={lastTapRecordId}
+          singleTapTimer={singleTapTimer}
+        />
+      ))}
       </div>
     </div>
   );
@@ -6220,9 +6250,32 @@ export default function VinylCrate() {
       // Show final count
       await refreshRecords();
       setImportResult((prev) => ({ ...prev, stage: "enriching" }));
-
-      // Step 2 — Enrichment (metadata + artist dates)
       setEnrichLoading(true);
+
+      // Step 2a — Thumb-only pass: get covers in front of users fast before full enrichment.
+      // Each poll processes 2 records; we refresh the collection every 10 polls so art
+      // appears progressively. Full enrichment (step 2b) skips records that already have
+      // a good thumb, so no API calls are duplicated.
+      try {
+        const thumbRes = await fetch("/api/discogs/enrich/job?mode=thumb", { method: "POST" });
+        if (thumbRes.ok) {
+          const thumbData = await thumbRes.json();
+          const thumbJobId = thumbData.job_id;
+          if (thumbJobId) {
+            for (let i = 0; i < 600; i++) {
+              await new Promise((r) => setTimeout(r, 600));
+              const pollRes = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(thumbJobId)}`);
+              if (!pollRes.ok) break;
+              const data = await pollRes.json();
+              if (i % 10 === 9) refreshRecords(); // show covers as they arrive
+              if (data.status === "completed" || data.status === "failed") break;
+            }
+            refreshRecords(); // final refresh after thumb pass
+          }
+        }
+      } catch { /* non-blocking — full pass will still handle covers */ }
+
+      // Step 2b — Full enrichment (metadata + artist dates + release dates)
       runEnrichAll("full", (progress) => {
         setImportResult((prev) => ({ ...prev, enrichProgress: { ...progress, total: myRecords.length } }));
       })
