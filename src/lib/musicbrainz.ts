@@ -176,6 +176,16 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       });
     }
 
+    // Sort by tenure length descending so the most iconic/longest-standing members
+    // are fetched first. If we hit rate limits or timeout, the less significant
+    // members (shortest tenure) are the ones that fall off.
+    const currentYear = new Date().getFullYear();
+    memberStubs.sort((a, b) => {
+      const tenureA = (a.leftYear || currentYear) - (a.joinedYear || currentYear);
+      const tenureB = (b.leftYear || currentYear) - (b.joinedYear || currentYear);
+      return tenureB - tenureA;
+    });
+
     // Per-member full lookup — stubs don't include life-span reliably.
     // 500ms strikes a balance: 10 members × 500ms = ~5s, within Vercel Hobby's 10s limit,
     // while staying under MB's rate limit to avoid 429s.
