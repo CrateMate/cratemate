@@ -2534,10 +2534,9 @@ function StreamingButtons({ artist, title }) {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-col items-center gap-1 py-2.5 rounded-xl border border-stone-700/60 text-stone-400 hover:bg-white hover:text-stone-900 hover:border-white/80 transition-colors"
+            className="flex items-center justify-center py-2.5 rounded-xl border border-stone-700/60 text-stone-400 hover:bg-white hover:text-stone-900 hover:border-white/80 transition-colors"
           >
             {icon}
-            <span className="text-[10px]">{name}</span>
           </a>
         ))}
       </div>
