@@ -5719,7 +5719,8 @@ export default function VinylCrate() {
 
   // Load Spotify status + recs when Reco tab first opens
   useEffect(() => {
-    if (tab !== "reco" || spotifyLinked !== null) return;
+    if (tab !== "reco" && tab !== "wants" && tab !== "hearts") return;
+    if (spotifyLinked !== null) return;
     (async () => {
       try {
         const statusRes = await fetch("/api/spotify/status");
