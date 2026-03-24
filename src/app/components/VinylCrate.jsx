@@ -7710,7 +7710,7 @@ export default function VinylCrate() {
             });
             let data;
             try { data = await res.json(); } catch { data = { error: "parse_error" }; }
-            if (data.error === "no_access_token") {
+            if (data.error === "no_access_token" || data.error === "insufficient_scope") {
               setSpotifyConnectedForPlaylists(false);
               setExportResult(null);
             } else if (data.error === "rate_limited") {

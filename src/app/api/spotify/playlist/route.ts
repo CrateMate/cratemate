@@ -202,6 +202,9 @@ export async function POST(req: NextRequest) {
     if (!createRes.ok) {
       const errBody = await createRes.json().catch(() => ({}));
       console.error("[playlist] create failed:", createRes.status, JSON.stringify(errBody));
+      if (createRes.status === 403) {
+        return NextResponse.json({ error: "insufficient_scope" }, { status: 403 });
+      }
       return NextResponse.json({
         error: "create_failed",
         spotify_status: createRes.status,
@@ -222,6 +225,9 @@ export async function POST(req: NextRequest) {
         const errBody = await addRes.json().catch(() => ({}));
         console.error("[playlist] add tracks failed:", addRes.status, JSON.stringify(errBody));
         if (i === 0) await deletePlaylist(playlistId, token);
+        if (addRes.status === 403) {
+          return NextResponse.json({ error: "insufficient_scope" }, { status: 403 });
+        }
         return NextResponse.json({
           error: "add_tracks_failed",
           spotify_status: addRes.status,
