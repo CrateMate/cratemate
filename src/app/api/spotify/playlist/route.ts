@@ -130,7 +130,10 @@ export async function POST(req: NextRequest) {
       if (!addRes.ok) {
         const errBody = await addRes.json().catch(() => ({}));
         console.error("[playlist] add tracks failed:", addRes.status, JSON.stringify(errBody));
-        return NextResponse.json({ playlistUrl, matched: i, total: tracks.length, notFound, warning: "partial" });
+        if (addRes.status === 403) {
+          return NextResponse.json({ error: "insufficient_scope", playlistUrl }, { status: 403 });
+        }
+        return NextResponse.json({ playlistUrl, matched: i, total: tracks.length, notFound, warning: "partial", addTracksStatus: addRes.status });
       }
     }
 
