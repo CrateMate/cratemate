@@ -621,7 +621,7 @@ type DbRecordFull = DbRecord & {
  */
 export async function enrichSingleRecord(
   userId: string,
-  recordId: number
+  recordId: string
 ): Promise<{ updated: boolean; skipped: boolean }> {
   // Fetch the record with all enrichment-relevant fields
   const { data: record } = await supabase

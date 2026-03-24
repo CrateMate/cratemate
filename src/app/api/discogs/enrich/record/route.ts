@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!recordId) return NextResponse.json({ error: "Missing recordId" }, { status: 400 });
 
   try {
-    const result = await enrichSingleRecord(userId, Number(recordId));
+    const result = await enrichSingleRecord(userId, String(recordId));
     return NextResponse.json(result);
   } catch (err) {
     console.error("[enrich/record]", err);
