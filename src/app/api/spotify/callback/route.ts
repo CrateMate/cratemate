@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { createHmac } from "crypto";
 import { supabase } from "@/lib/supabase";
+
+const MAX_STATE_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -13,30 +16,32 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
-  // Decode state: { nonce, userId }
-  let userId: string;
-  let nonce: string;
-  try {
-    const parsed = JSON.parse(Buffer.from(state, "base64url").toString());
-    userId = parsed.userId;
-    nonce = parsed.nonce;
-    if (!userId || !nonce) throw new Error("missing fields");
-  } catch {
+  // Verify HMAC-signed state
+  const dotIdx = state.lastIndexOf(".");
+  if (dotIdx === -1) return NextResponse.redirect(`${base}/?spotify=error`);
+
+  const payload = state.slice(0, dotIdx);
+  const sig = state.slice(dotIdx + 1);
+  const expectedSig = createHmac("sha256", process.env.SPOTIFY_CLIENT_SECRET!).update(payload).digest("hex");
+
+  if (sig !== expectedSig) {
+    console.error("[spotify/callback] HMAC signature mismatch");
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
-  // Validate CSRF nonce against cookie
-  const cookies = new Map(
-    (request.headers.get("cookie") || "").split(";").map((c) => {
-      const [k, ...v] = c.trim().split("=");
-      return [k, v.join("=")] as [string, string];
-    }),
-  );
-  const expectedNonce = cookies.get("spotify_oauth_nonce");
-  const fromTab = cookies.get("spotify_oauth_from") || "reco";
-
-  if (!expectedNonce || expectedNonce !== nonce) {
-    console.error("[spotify/callback] CSRF nonce mismatch");
+  let userId: string;
+  let fromTab: string;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
+    userId = parsed.userId;
+    fromTab = parsed.from || "reco";
+    // Reject stale states
+    if (Date.now() - (parsed.ts || 0) > MAX_STATE_AGE_MS) {
+      console.error("[spotify/callback] state expired");
+      return NextResponse.redirect(`${base}/?spotify=error`);
+    }
+    if (!userId) throw new Error("missing userId");
+  } catch {
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
@@ -94,11 +99,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${base}/?spotify=error`);
   }
 
-  const response = NextResponse.redirect(`${base}/?spotify=connected&tab=${fromTab}`);
-
-  // Clear OAuth cookies
-  response.cookies.set("spotify_oauth_nonce", "", { maxAge: 0, path: "/api/spotify/callback" });
-  response.cookies.set("spotify_oauth_from", "", { maxAge: 0, path: "/api/spotify/callback" });
-
-  return response;
+  return NextResponse.redirect(`${base}/?spotify=connected&tab=${fromTab}`);
 }
