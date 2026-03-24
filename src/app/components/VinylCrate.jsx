@@ -5188,6 +5188,10 @@ export default function VinylCrate() {
   const [spotifyRecs, setSpotifyRecs] = useState(null);
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
   const [spotifyExpanded, setSpotifyExpanded] = useState(false);
+  const [wantsSubTab, setWantsSubTab] = useState("wantlist");
+  const [lastfmRecs, setLastfmRecs] = useState(null);
+  const [lastfmRecsLoading, setLastfmRecsLoading] = useState(false);
+  const [lastfmExpanded, setLastfmExpanded] = useState(true);
   const [recoFiltersExpanded, setRecoFiltersExpanded] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [seenHints, setSeenHints] = useState(() => {
@@ -5831,6 +5835,33 @@ export default function VinylCrate() {
       .then((data) => setWantlist(Array.isArray(data) ? data : []))
       .catch(() => setWantlist([]));
   }, [tab, wantlist]);
+
+  // Last.fm — fetch similar artists when Discover subtab first opens
+  useEffect(() => {
+    if (tab !== "wants" || wantsSubTab !== "discover" || lastfmRecs !== null) return;
+    if (myRecords.length === 0) return;
+    // Top 5 artists by total play count
+    const artistCounts = {};
+    for (const r of myRecords) {
+      if (r.is_compilation || !r.artist) continue;
+      artistCounts[r.artist] = (artistCounts[r.artist] || 0) + (playCounts[r.id] || 0);
+    }
+    const topArtists = Object.entries(artistCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name]) => name);
+    if (topArtists.length === 0) { setLastfmRecs([]); return; }
+    const ownedArtists = new Set(myRecords.map((r) => (r.artist || "").toLowerCase().trim()).filter(Boolean));
+    setLastfmRecsLoading(true);
+    fetch(`/api/lastfm/similar?artists=${encodeURIComponent(topArtists.join(","))}`)
+      .then((r) => r.ok ? r.json() : { similar: [] })
+      .then((data) => {
+        const filtered = (data.similar || []).filter((a) => !ownedArtists.has((a.name || "").toLowerCase().trim()));
+        setLastfmRecs(filtered.slice(0, 15));
+      })
+      .catch(() => setLastfmRecs([]))
+      .finally(() => setLastfmRecsLoading(false));
+  }, [tab, wantsSubTab, lastfmRecs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!infiniteScroll) return;
@@ -8543,121 +8574,206 @@ export default function VinylCrate() {
       )}
 
       {tab === "wants" && (
-        <WantlistTab
-          topSlot={spotifyLinked === true ? (
-            <div className="rounded-xl border border-stone-800/60 overflow-hidden mt-3">
-              <button
-                onClick={() => setSpotifyExpanded(e => !e)}
-                className={`w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors cursor-pointer ${spotifyExpanded ? "border-b border-stone-800/40" : ""}`}
-              >
-                <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-                <span className="text-xs text-stone-400 uppercase tracking-widest font-medium flex-1">From your Spotify</span>
-                <span className="flex items-center gap-1.5 text-[10px] text-stone-600">
-                  {spotifyRecs?.length > 0 && !spotifyExpanded && <span>{spotifyRecs.length} albums</span>}
-                  <span>{spotifyExpanded ? "▲" : "▼"}</span>
-                </span>
-              </button>
-              {spotifyExpanded && (
-                <>
-                  {spotifyLinked === true && spotifyRecsLoading && (
-                    <div className="px-4 py-4 text-stone-600 text-xs">Loading your listening history...</div>
-                  )}
-                  {spotifyLinked === true && !spotifyRecsLoading && spotifyRecs !== null && spotifyRecs.length === 0 && (
-                    <div className="px-4 py-4 text-stone-600 text-xs">All your top played albums are already in your crate.</div>
-                  )}
-                  {spotifyLinked === true && !spotifyRecsLoading && spotifyRecs && spotifyRecs.length > 0 && (
-                    <div className="divide-y divide-stone-800/40">
-                      {spotifyRecs.slice(0, 10).map((rec) => (
-                        <div key={`${rec.artist}|${rec.album}`} className="flex items-center gap-3 px-4 py-3">
-                          {rec.image ? (
-                            <img src={rec.image} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-stone-800" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg bg-stone-800 shrink-0 flex items-center justify-center text-stone-600 text-xs">◇</div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm text-amber-50 font-medium truncate">{rec.album}</div>
-                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                              <span className="text-[10px] text-stone-500 truncate">{rec.artist}{rec.year ? ` · ${rec.year}` : ""}</span>
-                              {rec.artist_in_crate && (
-                                <span className="text-[10px] text-amber-900/70">you have other {rec.artist} records</span>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Subtab pills */}
+          <div className="px-4 pt-2 pb-1 flex gap-2 shrink-0">
+            <button
+              onClick={() => setWantsSubTab("wantlist")}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${wantsSubTab === "wantlist" ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-500 hover:text-stone-300"}`}
+            >Wantlist</button>
+            <button
+              onClick={() => setWantsSubTab("discover")}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${wantsSubTab === "discover" ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-500 hover:text-stone-300"}`}
+            >Discover</button>
+          </div>
+
+          {wantsSubTab === "wantlist" && (
+            <WantlistTab
+              wantlist={wantlist}
+              wantlistImportJob={wantlistImportJob}
+              expandedMasters={expandedMasters}
+              setExpandedMasters={setExpandedMasters}
+              pushPermission={pushPermission}
+              pushSubscribed={pushSubscribed}
+              onSubscribePush={subscribeToPush}
+              priceThresholds={priceThresholds}
+              onSaveThreshold={savePriceThreshold}
+              onRemoveThreshold={removePriceThreshold}
+              nowPlaying={!!nowPlaying}
+              onScroll={handleTabScroll}
+              onStartImport={async () => {
+                if (!wantlist) {
+                  const res = await fetch("/api/discogs/wantlist");
+                  if (res.ok) setWantlist(await res.json());
+                }
+                const res = await fetch("/api/discogs/wantlist/import", { method: "POST" });
+                const data = await res.json();
+                setWantlistImportJob({ job_id: data.job_id, status: data.status, imported: 0, total: 0 });
+              }}
+              onRemove={async (releaseId) => {
+                await fetch("/api/discogs/wantlist", {
+                  method: "DELETE",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ release_id: releaseId }),
+                });
+                const res = await fetch("/api/discogs/wantlist");
+                if (res.ok) setWantlist(await res.json());
+              }}
+            />
+          )}
+
+          {wantsSubTab === "discover" && (
+            <div className="flex-1 overflow-y-auto px-4 space-y-3 pt-2" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+
+              {myRecords.length === 0 && (
+                <div className="text-center py-10 px-4">
+                  <div className="text-4xl mb-3">⬡</div>
+                  <div className="text-stone-300 text-sm font-medium mb-1">Your crate is empty</div>
+                  <div className="text-stone-600 text-xs">Import your Discogs collection to discover similar artists.</div>
+                </div>
+              )}
+
+              {/* Spotify section — green contour */}
+              {spotifyLinked === true && (
+                <div className="rounded-xl border border-green-600/40 overflow-hidden">
+                  <button
+                    onClick={() => setSpotifyExpanded(e => !e)}
+                    className={`w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors cursor-pointer ${spotifyExpanded ? "border-b border-stone-800/40" : ""}`}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                    <span className="text-xs text-stone-400 uppercase tracking-widest font-medium flex-1">From your Spotify</span>
+                    <span className="flex items-center gap-1.5 text-[10px] text-stone-600">
+                      {spotifyRecs?.length > 0 && !spotifyExpanded && <span>{spotifyRecs.length} albums</span>}
+                      <span>{spotifyExpanded ? "▲" : "▼"}</span>
+                    </span>
+                  </button>
+                  {spotifyExpanded && (
+                    <>
+                      {spotifyRecsLoading && (
+                        <div className="px-4 py-4 text-stone-600 text-xs">Loading your listening history...</div>
+                      )}
+                      {!spotifyRecsLoading && spotifyRecs !== null && spotifyRecs.length === 0 && (
+                        <div className="px-4 py-4 text-stone-600 text-xs">All your top played albums are already in your crate.</div>
+                      )}
+                      {!spotifyRecsLoading && spotifyRecs && spotifyRecs.length > 0 && (
+                        <div className="divide-y divide-stone-800/40">
+                          {spotifyRecs.slice(0, 10).map((rec) => (
+                            <div key={`${rec.artist}|${rec.album}`} className="flex items-center gap-3 px-4 py-3">
+                              {rec.image ? (
+                                <img src={rec.image} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 bg-stone-800" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-stone-800 shrink-0 flex items-center justify-center text-stone-600 text-xs">◇</div>
                               )}
-                              {rec.on_wantlist && (
-                                <span className="text-[10px] text-stone-500">◉ on wantlist</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm text-amber-50 font-medium truncate">{rec.album}</div>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  <span className="text-[10px] text-stone-500 truncate">{rec.artist}{rec.year ? ` · ${rec.year}` : ""}</span>
+                                  {rec.artist_in_crate && (
+                                    <span className="text-[10px] text-amber-900/70">you have other {rec.artist} records</span>
+                                  )}
+                                  {rec.on_wantlist && (
+                                    <span className="text-[10px] text-stone-500">◉ on wantlist</span>
+                                  )}
+                                </div>
+                              </div>
+                              {rec.discogs_vinyl_url && (
+                                <a
+                                  href={rec.discogs_vinyl_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
+                                >
+                                  Find vinyl ↗
+                                </a>
                               )}
                             </div>
+                          ))}
+                        </div>
+                      )}
+                      {!spotifyRecsLoading && (
+                        <div className="px-4 py-2 border-t border-stone-800/40">
+                          <div className="flex justify-between items-center">
+                            <button
+                              onClick={() => { setSpotifyLinked(null); setSpotifyRecs(null); }}
+                              className="text-[10px] text-stone-700 hover:text-stone-500 transition-colors"
+                            >
+                              Refresh
+                            </button>
+                            <button
+                              onClick={async () => {
+                                await fetch("/api/spotify/status", { method: "DELETE" });
+                                setSpotifyLinked(false);
+                                setSpotifyRecs(null);
+                              }}
+                              className="text-[10px] text-stone-700 hover:text-rose-500 transition-colors"
+                            >
+                              Disconnect Spotify
+                            </button>
                           </div>
-                          {rec.discogs_vinyl_url && (
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Last.fm section — red contour */}
+              <div className="rounded-xl border border-red-900/40 overflow-hidden">
+                <button
+                  onClick={() => setLastfmExpanded(e => !e)}
+                  className={`w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors cursor-pointer ${lastfmExpanded ? "border-b border-stone-800/40" : ""}`}
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="#D51007"><path d="M10.596 20.727l-.707-1.979s-1.22 1.345-2.993 1.345c-1.581 0-2.711-1.38-2.711-3.597 0-2.829 1.43-3.831 2.831-3.831 2.589 0 3.417 1.68 4.131 3.831l.709 2.299c.731 2.24 2.124 4.047 6.12 4.047 2.872 0 4.812-.882 4.812-3.212 0-1.876-1.072-2.843-3.062-3.308l-1.481-.332c-1.027-.235-1.334-.661-1.334-1.367 0-.806.64-1.278 1.679-1.278 1.133 0 1.738.423 1.833 1.432l2.344-.285c-.195-2.115-1.651-2.98-4.039-2.98-2.113 0-4.157.796-4.157 3.347 0 1.594.771 2.597 2.71 3.065l1.573.378c1.163.284 1.573.756 1.573 1.511 0 .899-.877 1.269-2.354 1.269-2.278 0-3.231-1.198-3.785-2.831l-.749-2.3c-.98-3.017-2.547-4.139-6.528-4.139-3.963 0-5.246 2.499-5.246 5.784 0 3.116 1.594 5.571 5.151 5.571 2.686 0 4.282-1.322 4.282-1.322z"/></svg>
+                  <span className="text-xs text-stone-400 uppercase tracking-widest font-medium flex-1">Sounds like your crate</span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-stone-600">
+                    {lastfmRecs?.length > 0 && !lastfmExpanded && <span>{lastfmRecs.length} artists</span>}
+                    <span>{lastfmExpanded ? "▲" : "▼"}</span>
+                  </span>
+                </button>
+                {lastfmExpanded && (
+                  <>
+                    {lastfmRecsLoading && (
+                      <div className="px-4 py-4 text-stone-600 text-xs">Finding similar artists...</div>
+                    )}
+                    {!lastfmRecsLoading && lastfmRecs !== null && lastfmRecs.length === 0 && (
+                      <div className="px-4 py-4 text-stone-600 text-xs">No new artists found — try adding more records to your crate.</div>
+                    )}
+                    {!lastfmRecsLoading && lastfmRecs && lastfmRecs.length > 0 && (
+                      <div className="divide-y divide-stone-800/40">
+                        {lastfmRecs.map((artist) => (
+                          <div key={artist.name} className="flex items-center gap-3 px-4 py-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-amber-50 font-medium truncate">{artist.name}</div>
+                              <div className="text-[10px] text-stone-500 truncate mt-0.5">Similar to: {artist.similar_to.join(", ")}</div>
+                            </div>
                             <a
-                              href={rec.discogs_vinyl_url}
+                              href={`https://www.discogs.com/search/?artist=${encodeURIComponent(artist.name)}&type=release&format=Vinyl`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="shrink-0 text-[10px] text-stone-600 hover:text-amber-400 transition-colors whitespace-nowrap"
                             >
-                              Find vinyl ↗
+                              Search Discogs ↗
                             </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {spotifyLinked === true && !spotifyRecsLoading && (
-                    <div className="px-4 py-2 border-t border-stone-800/40">
-                      <div className="flex justify-between items-center">
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!lastfmRecsLoading && lastfmRecs !== null && (
+                      <div className="px-4 py-2 border-t border-stone-800/40">
                         <button
-                          onClick={() => { setSpotifyLinked(null); setSpotifyRecs(null); }}
+                          onClick={() => setLastfmRecs(null)}
                           className="text-[10px] text-stone-700 hover:text-stone-500 transition-colors"
                         >
                           Refresh
                         </button>
-                        <button
-                          onClick={async () => {
-                            await fetch("/api/spotify/status", { method: "DELETE" });
-                            setSpotifyLinked(false);
-                            setSpotifyRecs(null);
-                          }}
-                          className="text-[10px] text-stone-700 hover:text-rose-500 transition-colors"
-                        >
-                          Disconnect Spotify
-                        </button>
                       </div>
-                    </div>
-                  )}
-                </>
-              )}
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          ) : null}
-          wantlist={wantlist}
-          wantlistImportJob={wantlistImportJob}
-          expandedMasters={expandedMasters}
-          setExpandedMasters={setExpandedMasters}
-          pushPermission={pushPermission}
-          pushSubscribed={pushSubscribed}
-          onSubscribePush={subscribeToPush}
-          priceThresholds={priceThresholds}
-          onSaveThreshold={savePriceThreshold}
-          onRemoveThreshold={removePriceThreshold}
-          nowPlaying={!!nowPlaying}
-          onScroll={handleTabScroll}
-          onStartImport={async () => {
-            if (!wantlist) {
-              // Load wantlist if not yet loaded
-              const res = await fetch("/api/discogs/wantlist");
-              if (res.ok) setWantlist(await res.json());
-            }
-            const res = await fetch("/api/discogs/wantlist/import", { method: "POST" });
-            const data = await res.json();
-            setWantlistImportJob({ job_id: data.job_id, status: data.status, imported: 0, total: 0 });
-          }}
-          onRemove={async (releaseId) => {
-            await fetch("/api/discogs/wantlist", {
-              method: "DELETE",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ release_id: releaseId }),
-            });
-            const res = await fetch("/api/discogs/wantlist");
-            if (res.ok) setWantlist(await res.json());
-          }}
-        />
+          )}
+        </div>
       )}
 
       {tab === "stats" && (
