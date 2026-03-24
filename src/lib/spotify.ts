@@ -315,9 +315,13 @@ export async function fetchAlbumFeatures(
   title: string,
   tracklist?: TracklistItem[]
 ): Promise<SpotifyFeatures | null> {
+  const tag = `[features] "${title}" — ${artist}`;
+
   // Tier 1: Match the whole album on Spotify
   const album = await searchAlbum(artist, title);
-  if (album) {
+  if (!album) {
+    console.log(`${tag} T1: no album found on Spotify`);
+  } else {
     const tracksRes = await spotifyGet(`/albums/${album.id}/tracks?limit=50`);
     if (tracksRes.ok) {
       const tracksData = await tracksRes.json();
@@ -326,19 +330,28 @@ export async function fetchAlbumFeatures(
         .filter(Boolean);
       if (trackIds.length > 0) {
         const valid = await reccoBeatsFeatures(trackIds);
+        console.log(`${tag} T1: album "${album.name}" found, ${trackIds.length} tracks → ReccoBeats returned ${valid.length}`);
         if (valid.length > 0) return avgFeatures(valid, "album");
+      } else {
+        console.log(`${tag} T1: album found but 0 track IDs`);
       }
+    } else {
+      console.log(`${tag} T1: album tracks fetch failed ${tracksRes.status}`);
     }
   }
 
   // Tier 2: Match individual tracks from the Discogs tracklist
   if (tracklist && tracklist.length > 0) {
     const byTracks = await fetchFeaturesByTracks(artist, tracklist);
+    console.log(`${tag} T2: ${byTracks ? "success" : "failed"}`);
     if (byTracks) return byTracks;
+  } else {
+    console.log(`${tag} T2: skipped (no tracklist)`);
   }
 
   // Tier 3: Artist top tracks on Spotify
   const byArtist = await fetchFeaturesByArtist(artist);
+  console.log(`${tag} T3: ${byArtist ? "success" : "failed"}`);
   if (byArtist) return byArtist;
 
   return null;
