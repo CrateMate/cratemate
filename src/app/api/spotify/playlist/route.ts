@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAccessToken, spotifyGet } from "@/lib/spotify";
+import { getUserAccessToken } from "@/lib/spotify";
 
 type TrackInput = { artist: string; trackTitle: string };
 
@@ -24,6 +24,12 @@ async function spotifyPost(path: string, token: string, body: unknown) {
   });
 }
 
+async function spotifyGetWithUserToken(path: string, token: string) {
+  return fetch(`https://api.spotify.com/v1${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
@@ -40,10 +46,13 @@ export async function POST(req: NextRequest) {
     const token = await getUserAccessToken(userId);
     if (!token) return NextResponse.json({ error: "no_access_token" }, { status: 400 });
 
-    // Use client-credentials token for search (same as sound profile) —
-    // user OAuth token is only needed for playlist creation/modification.
+    // Search with the same user token used for playlist creation/add so the
+    // found track URIs are valid in that user's Spotify market/catalog context.
     const searchTrack = async (q: string) => {
-      const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+      const res = await spotifyGetWithUserToken(
+        `/search?q=${encodeURIComponent(q)}&type=track&limit=5&market=from_token`,
+        token
+      );
       if (res.status === 429) {
         const retryAfter = parseInt(res.headers.get("Retry-After") || "15");
         return { rateLimited: true, retryAfter } as const;
@@ -78,7 +87,11 @@ export async function POST(req: NextRequest) {
         uri = r2 as string | null;
       }
 
-      uri ? uris.push(uri) : notFound.push(`${artist} — ${title}`);
+      if (uri) {
+        uris.push(uri);
+      } else {
+        notFound.push(`${artist} — ${title}`);
+      }
       await sleep(400);
     }
 

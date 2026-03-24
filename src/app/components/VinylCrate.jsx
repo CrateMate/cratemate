@@ -1214,12 +1214,24 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   const [favTracks, setFavTracks] = useState(record.favorite_tracks || []);
   const [tracklistOpen, setTracklistOpen] = useState(false);
   const [soundProfileOpen, setSoundProfileOpen] = useState(false);
+  const [listingPrice, setListingPrice] = useState(null);
   const artTapRef = useRef(0);
   // Hero image fallback chain: null = use heroHi, string = override src, false = all failed
   const [heroSrcOverride, setHeroSrcOverride] = useState(null);
   const [entered, setEntered] = useState(false);
   const [closing, setClosing] = useState(false);
   useEffect(() => { requestAnimationFrame(() => setEntered(true)); }, []);
+
+  // Fetch marketplace pricing when record is listed for sale
+  useEffect(() => {
+    if (!record.for_sale || !record.discogs_id) return;
+    setListingPrice(null);
+    fetch(`/api/discogs/wantlist/price/${record.discogs_id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.min_price != null || data?.lowest_listing != null) setListingPrice(data); })
+      .catch(() => {});
+  }, [record.for_sale, record.discogs_id]);
+
   function slideClose() {
     setClosing(true);
     setTimeout(onClose, 280);
@@ -1533,6 +1545,30 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               }`}
             >{record.for_sale ? "Unlist" : "🏷 List"}</button>
           </div>
+
+          {/* Marketplace price info — shown when listed for sale */}
+          {record.for_sale && (
+            <div className="mb-4 px-3 py-2 rounded-xl bg-stone-900/50 border border-stone-800/40 text-xs text-stone-500 flex flex-wrap gap-x-3 gap-y-1">
+              {listingPrice == null ? (
+                <span className="text-stone-600">Fetching market price…</span>
+              ) : (
+                <>
+                  {listingPrice.min_price != null && (
+                    <span>Suggested <span className="text-stone-300">${listingPrice.min_price.toFixed(2)}</span>{listingPrice.condition ? ` ${listingPrice.condition}` : ""}</span>
+                  )}
+                  {listingPrice.lowest_listing != null && (
+                    <span>Lowest <span className="text-stone-300">${listingPrice.lowest_listing.toFixed(2)}</span></span>
+                  )}
+                  {listingPrice.num_for_sale != null && (
+                    <span>{listingPrice.num_for_sale} for sale</span>
+                  )}
+                  {listingPrice.deal_pct != null && listingPrice.deal_pct > 0 && (
+                    <span className="text-emerald-500">{listingPrice.deal_pct}% below market</span>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Collapsible tracklist */}
           <button

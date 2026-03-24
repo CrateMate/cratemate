@@ -119,8 +119,44 @@ function normaliseArtistName(s: string): string {
   return s.toLowerCase().replace(/^the\s+/i, "").replace(/[^a-z0-9]/g, "");
 }
 
+/** Look up two co-equal collaborators individually and return as a synthetic group. */
+async function fetchCollabMembers(nameA: string, nameB: string): Promise<ArtistDates> {
+  // Run both lookups in parallel — they're independent
+  const [datesA, datesB] = await Promise.all([
+    fetchArtistDates(nameA),
+    fetchArtistDates(nameB),
+  ]);
+  const members: MemberDates[] = [];
+  for (const [name, d] of [[nameA, datesA], [nameB, datesB]] as [string, ArtistDates][]) {
+    if (d.artistType === "person") {
+      members.push({
+        name,
+        joinedYear: null,
+        leftYear: null,
+        birthYear: d.birthYear, birthMonth: d.birthMonth, birthDay: d.birthDay,
+        deathYear: d.deathYear, deathMonth: d.deathMonth, deathDay: d.deathDay,
+      });
+    }
+  }
+  if (members.length === 0) return EMPTY;
+  return {
+    artistType: "group",
+    birthYear: null, birthMonth: null, birthDay: null,
+    deathYear: null, deathMonth: null, deathDay: null,
+    members,
+  };
+}
+
 export async function fetchArtistDates(artistName: string): Promise<ArtistDates> {
   try {
+    // ── Pre-check: featured/credited-with suffix ──────────────────────────
+    // "Albert King With Stevie Ray Vaughan" or "Drake feat. Rihanna" →
+    // strip the suffix and resolve only the primary artist.
+    const featuredMatch = artistName.match(/^(.+?)\s+(?:feat(?:uring)?\.?|with)\s+\S/i);
+    if (featuredMatch) {
+      return fetchArtistDates(featuredMatch[1].trim());
+    }
+
     // Step 1 — Search by name, take highest-confidence match.
     // Try the full name first; if nothing scores ≥85 also try without a leading "The".
     const trySearch = async (query: string) => {
@@ -152,12 +188,27 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       return normResult.includes(normQuery) || normQuery.includes(normResult);
     }) || artists[0];
 
-    if ((best.score ?? 100) < 85) return EMPTY;
+    if ((best.score ?? 100) < 85) {
+      // No confident MB match — if the name looks like a co-equal collaboration
+      // (e.g. "Albert King and Stevie Ray Vaughan"), try looking up each part.
+      const andMatch = artistName.match(/^(.+?)\s+(?:and|&)\s+(.+)$/i);
+      if (andMatch) return fetchCollabMembers(andMatch[1].trim(), andMatch[2].trim());
+      return EMPTY;
+    }
 
     const rawType = (best.type || "").toLowerCase();
     const artistType: ArtistDates["artistType"] =
       rawType === "person" ? "person" :
       rawType === "group"  ? "group"  : "other";
+
+    // ── Person false-positive guard ───────────────────────────────────────
+    // "Albert King and Stevie Ray Vaughan" can match Stevie Ray Vaughan (person)
+    // because "stevierayvaughan" is a substring of "albertkingandstevierayvaughan".
+    // If MB gave us a person and the query looks like co-equal collaboration, split it.
+    if (artistType === "person") {
+      const andMatch = artistName.match(/^(.+?)\s+(?:and|&)\s+(.+)$/i);
+      if (andMatch) return fetchCollabMembers(andMatch[1].trim(), andMatch[2].trim());
+    }
 
     // Search stubs don't reliably include life-span — do a full lookup for persons.
     if (artistType !== "group") {
