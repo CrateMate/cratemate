@@ -2713,11 +2713,14 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       if (isSolo) {
         const when = dayLabel(pick.artist_birth_month, pick.artist_birth_day);
         const years = pick.artist_birth_year ? todayYear - pick.artist_birth_year : null;
+        const deceased = !!pick.artist_death_year;
         mainHookCandidates.push({
           type: "birthday",
           record: pick,
           fact: years
-            ? `${pick.artist} was born ${years} years ago — their birthday is ${when}.`
+            ? deceased
+              ? `${pick.artist} would have turned ${years} today (${when}). They passed in ${pick.artist_death_year}.`
+              : `${pick.artist} turns ${years} today — their birthday is ${when}.`
             : `${pick.artist}'s birthday is ${when}.`,
         });
       } else {
@@ -2726,11 +2729,14 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
         );
         const when = dayLabel(member.birth_month, member.birth_day);
         const years = member?.birth_year ? todayYear - member.birth_year : null;
+        const deceased = !!member?.death_year;
         mainHookCandidates.push({
           type: "birthday",
           record: pick,
           fact: years
-            ? `${member.name} of ${pick.artist} was born ${years} years ago — their birthday is ${when}.`
+            ? deceased
+              ? `${member.name} of ${pick.artist} would have turned ${years} today (${when}). They passed in ${member.death_year}.`
+              : `${member.name} of ${pick.artist} turns ${years} today — their birthday is ${when}.`
             : `${member.name} of ${pick.artist}'s birthday is ${when}.`,
         });
       }
