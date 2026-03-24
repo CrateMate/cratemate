@@ -8026,8 +8026,10 @@ export default function VinylCrate() {
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      {totalChecked > 100 && !exportingPlaylist && (
-                        <div className="text-xs text-amber-600/80 text-center">Large export — this may take a moment.</div>
+                      {totalChecked > 80 && !exportingPlaylist && (
+                        <div className="text-xs text-amber-600/80 text-center">
+                          Large export ({totalChecked} tracks) — this may take a moment.{totalChecked > 150 ? " Consider filtering to fewer tracks." : ""}
+                        </div>
                       )}
                       <button
                         disabled={totalChecked === 0 || exportingPlaylist}

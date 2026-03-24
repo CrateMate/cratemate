@@ -125,7 +125,7 @@ async function resolveTrack(
   return { notFound: `${track.artist} — ${track.trackTitle}` };
 }
 
-export const maxDuration = 120;
+export const maxDuration = 60; // Vercel Hobby ceiling
 
 export async function POST(req: NextRequest) {
   try {
