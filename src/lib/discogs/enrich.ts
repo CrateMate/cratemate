@@ -853,7 +853,8 @@ export async function enrichSingleRecord(
     }
 
     const isGroup = dates.artistType === "group";
-    patch.artist_birth_month = isGroup ? 0 : (dates.birthMonth ?? 0);
+    const groupHasMembers = isGroup && dates.members.length > 0;
+    patch.artist_birth_month = isGroup ? (groupHasMembers ? 0 : null) : (dates.birthMonth ?? 0);
     patch.artist_birth_year = isGroup ? null : dates.birthYear;
     patch.artist_birth_day = isGroup ? null : dates.birthDay;
     patch.artist_death_year = isGroup ? null : dates.deathYear;
@@ -995,11 +996,14 @@ export async function enrichArtistDates({ userId }: { userId: string }) {
 
     // For groups: individual dates live in artist_metadata.members — don't flatten onto records.
     // For persons: store birth/death directly on records for fast reco queries.
-    // Either way, set artist_birth_month sentinel (0 = enriched, data in artist_metadata)
-    // so this record isn't re-queried on the next enrichment run.
+    // Sentinel: artist_birth_month = 0 means "enriched, check artist_metadata".
+    // For groups we only write the sentinel when members were actually returned —
+    // if MB found the group but returned 0 members, leave artist_birth_month null
+    // so the next enrichment run retries rather than permanently skipping it.
     const isGroup = dates.artistType === "group";
+    const groupHasMembers = isGroup && dates.members.length > 0;
     const patch: Record<string, unknown> = {
-      artist_birth_month: isGroup ? 0 : (dates.birthMonth ?? 0),
+      artist_birth_month: isGroup ? (groupHasMembers ? 0 : null) : (dates.birthMonth ?? 0),
       artist_birth_year:  isGroup ? null : dates.birthYear,
       artist_birth_day:   isGroup ? null : dates.birthDay,
       artist_death_year:  isGroup ? null : dates.deathYear,
