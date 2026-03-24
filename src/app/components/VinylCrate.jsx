@@ -1448,37 +1448,40 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   {record.label.split(",")[0].trim()}
                 </MarqueeTitle>
               )}
-              {playCount > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
-                  {playCountThisYear > 0 && playCountThisYear < playCount && (
-                    <span className="text-stone-700 text-xs">· {playCountThisYear} this year</span>
+              {/* Genre pills — pinned to bottom of art column */}
+              <div className="flex flex-wrap gap-1 mt-auto">
+                {getGenres(record).map((g) => (
+                  <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+                ))}
+              </div>
+              {/* Play count + last played together */}
+              {(playCount > 0 || lastPlayedDate) && (
+                <div className="flex flex-col gap-0.5">
+                  {playCount > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-stone-600 text-xs">{playCount} {playCount === 1 ? "play" : "plays"}</span>
+                      {playCountThisYear > 0 && playCountThisYear < playCount && (
+                        <span className="text-stone-700 text-xs">· {playCountThisYear} this year</span>
+                      )}
+                    </div>
+                  )}
+                  {lastPlayedDate && (
+                    <div className="text-stone-600 text-[11px]">
+                      Last played: {(() => {
+                        const diff = Date.now() - new Date(lastPlayedDate).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 1) return "just now";
+                        if (mins < 60) return `${mins} min ago`;
+                        const hrs = Math.floor(mins / 60);
+                        if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
+                        const days = Math.floor(hrs / 24);
+                        if (days === 1) return "yesterday";
+                        return `${days} days ago`;
+                      })()}
+                    </div>
                   )}
                 </div>
               )}
-              {/* Genre pills + last played — pinned to bottom of art column */}
-              <div className="flex flex-col gap-1.5 mt-auto">
-                <div className="flex flex-wrap gap-1">
-                  {getGenres(record).map((g) => (
-                    <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
-                  ))}
-                </div>
-                {lastPlayedDate && (
-                  <div className="text-stone-600 text-[11px]">
-                    Last played: {(() => {
-                      const diff = Date.now() - new Date(lastPlayedDate).getTime();
-                      const mins = Math.floor(diff / 60000);
-                      if (mins < 1) return "just now";
-                      if (mins < 60) return `${mins} min ago`;
-                      const hrs = Math.floor(mins / 60);
-                      if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
-                      const days = Math.floor(hrs / 24);
-                      if (days === 1) return "yesterday";
-                      return `${days} days ago`;
-                    })()}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
