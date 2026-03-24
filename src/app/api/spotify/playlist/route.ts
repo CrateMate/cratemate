@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAccessToken } from "@/lib/spotify";
+import { getUserAccessToken, spotifyGet } from "@/lib/spotify";
 
 type TrackInput = { artist: string; trackTitle: string };
 
@@ -40,11 +40,10 @@ export async function POST(req: NextRequest) {
     const token = await getUserAccessToken(userId);
     if (!token) return NextResponse.json({ error: "no_access_token" }, { status: 400 });
 
+    // Use client-credentials token for search (same as sound profile) —
+    // user OAuth token is only needed for playlist creation/modification.
     const searchTrack = async (q: string) => {
-      const res = await fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
       if (res.status === 429) {
         const retryAfter = parseInt(res.headers.get("Retry-After") || "15");
         return { rateLimited: true, retryAfter } as const;
