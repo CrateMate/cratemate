@@ -221,14 +221,28 @@ function titleMatches(spotifyName: string, queryTitle: string): boolean {
   return sn.includes(qt) || qt.includes(sn);
 }
 
+/** Check if any album artist loosely matches the query artist */
+function artistMatches(album: SpotifyAlbum, queryArtist: string): boolean {
+  const qa = normalise(queryArtist);
+  return album.artists.some((a) => {
+    const sa = normalise(a.name);
+    return sa === qa || sa.includes(qa) || qa.includes(sa);
+  });
+}
+
 /** Pick the best album from a result set:
- *  1. Prefer albums whose name matches the query title
- *  2. Among those, prefer the earliest release year (original pressing)
+ *  1. Prefer albums whose artist AND title both match
+ *  2. Fall back to title-only matches
+ *  3. Among matches, prefer the earliest release year (original pressing)
  */
-function pickBestAlbum(albums: SpotifyAlbum[], queryTitle: string): SpotifyAlbum | null {
+function pickBestAlbum(albums: SpotifyAlbum[], queryTitle: string, queryArtist?: string): SpotifyAlbum | null {
   if (albums.length === 0) return null;
-  const matching = albums.filter((a) => titleMatches(a.name, queryTitle));
-  const pool = matching.length > 0 ? matching : albums;
+  const titleMatch = albums.filter((a) => titleMatches(a.name, queryTitle));
+  // For generic titles like "Greatest Hits", artist match is critical
+  const bothMatch = queryArtist
+    ? titleMatch.filter((a) => artistMatches(a, queryArtist))
+    : [];
+  const pool = bothMatch.length > 0 ? bothMatch : titleMatch.length > 0 ? titleMatch : albums;
   return pool.reduce((best, a) => {
     const bestYear = parseInt(best.release_date) || 9999;
     const aYear = parseInt(a.release_date) || 9999;
@@ -259,7 +273,7 @@ async function searchAlbum(artist: string, title: string): Promise<SpotifyAlbum 
     if (!res.ok) continue;
     const data = await res.json();
     const albums: SpotifyAlbum[] = data.albums?.items || [];
-    const pick = pickBestAlbum(albums, cleanedTitle);
+    const pick = pickBestAlbum(albums, cleanedTitle, artist);
     if (pick) return pick;
   }
 
@@ -360,13 +374,19 @@ async function fetchFeaturesByArtist(artist: string): Promise<SpotifyFeatures | 
     return null;
   }
 
-  const topRes = await spotifyGet(`/artists/${best.id}/top-tracks?market=US`);
-  if (!topRes.ok) return null;
-  const topData = await topRes.json();
-  const trackIds: string[] = (topData.tracks || [])
+  // Artist top-tracks endpoint removed Feb 2026. Use track search instead.
+  const trackSearchRes = await spotifyGet(
+    `/search?q=${encodeURIComponent(`artist:"${best.name}"`)}&type=track&limit=10`
+  );
+  if (!trackSearchRes.ok) return null;
+  const trackSearchData = await trackSearchRes.json();
+  const trackItems: Array<{ id: string; artists: Array<{ id: string }> }> =
+    trackSearchData.tracks?.items || [];
+  // Filter to tracks actually by this artist (search can return loose matches)
+  const trackIds: string[] = trackItems
+    .filter((t) => t.artists.some((a) => a.id === best.id))
     .slice(0, 10)
-    .map((t: { id: string }) => t.id)
-    .filter(Boolean);
+    .map((t) => t.id);
   if (trackIds.length === 0) return null;
 
   const valid = await reccoBeatsFeatures(trackIds);

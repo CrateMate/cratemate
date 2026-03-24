@@ -14,37 +14,41 @@ export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { record_id, artist, title } = await request.json().catch(() => ({}));
+  const { record_id, artist, title, force } = await request.json().catch(() => ({}));
   if (!record_id || !artist || !title) {
     return NextResponse.json({ error: "Missing record_id, artist, or title" }, { status: 400 });
   }
 
   // 1. Check per-record cache (spotify_features table)
-  const { data: cached } = await supabase
-    .from("spotify_features")
-    .select("*")
-    .eq("record_id", record_id)
-    .single();
+  if (!force) {
+    const { data: cached } = await supabase
+      .from("spotify_features")
+      .select("*")
+      .eq("record_id", record_id)
+      .single();
 
-  if (cached) return NextResponse.json(cached);
+    if (cached) return NextResponse.json(cached);
+  }
 
   // 2. Check shared features cache (spotify_features_cache) by artist|title key
   const cacheKey = spotifyFeaturesKey(artist, title);
-  const sharedCached = await getSpotifyFeaturesCache(cacheKey);
-  if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
-    // null-energy sentinel means all tiers failed for this title — skip API calls
-    if (sharedCached.energy == null) return NextResponse.json(null);
-    const row = {
-      record_id,
-      energy: sharedCached.energy,
-      valence: sharedCached.valence,
-      danceability: sharedCached.danceability,
-      acousticness: sharedCached.acousticness,
-      tempo: sharedCached.tempo,
-      loudness: sharedCached.loudness,
-    };
-    await supabase.from("spotify_features").upsert(row);
-    return NextResponse.json(row);
+  if (!force) {
+    const sharedCached = await getSpotifyFeaturesCache(cacheKey);
+    if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
+      // null-energy sentinel means all tiers failed for this title — skip API calls
+      if (sharedCached.energy == null) return NextResponse.json(null);
+      const row = {
+        record_id,
+        energy: sharedCached.energy,
+        valence: sharedCached.valence,
+        danceability: sharedCached.danceability,
+        acousticness: sharedCached.acousticness,
+        tempo: sharedCached.tempo,
+        loudness: sharedCached.loudness,
+      };
+      await supabase.from("spotify_features").upsert(row);
+      return NextResponse.json(row);
+    }
   }
 
   // 3. Look up the Discogs tracklist from the release cache — used for Tier 2 fallback
