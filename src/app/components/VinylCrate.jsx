@@ -5800,6 +5800,20 @@ export default function VinylCrate() {
     })();
   }, [tab, spotifyLinked]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Re-check Spotify scope when Hearts tab shows the reconnect prompt —
+  // catches the case where user reconnected but the initial status check already ran
+  useEffect(() => {
+    if (tab !== "hearts" || spotifyConnectedForPlaylists !== false) return;
+    fetch("/api/spotify/status")
+      .then((r) => r.ok ? r.json() : null)
+      .then((s) => {
+        if (s?.connected && s?.hasPlaylistScope) {
+          setSpotifyConnectedForPlaylists(true);
+        }
+      })
+      .catch(() => {});
+  }, [tab, spotifyConnectedForPlaylists]);
+
   // Feature 1 — Load wantlist when Wants tab is first opened
   useEffect(() => {
     if (tab !== "wants" || wantlist !== null) return;
