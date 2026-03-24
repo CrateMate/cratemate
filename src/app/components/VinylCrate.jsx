@@ -1476,7 +1476,13 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                         if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
                         const days = Math.floor(hrs / 24);
                         if (days === 1) return "yesterday";
-                        return `${days} days ago`;
+                        if (days < 7) return `${days} days ago`;
+                        const weeks = Math.floor(days / 7);
+                        if (weeks < 5) return `${weeks} week${weeks > 1 ? "s" : ""} ago`;
+                        const months = Math.floor(days / 30);
+                        if (months < 12) return `${months} month${months > 1 ? "s" : ""} ago`;
+                        const years = Math.floor(days / 365);
+                        return `${years} year${years > 1 ? "s" : ""} ago`;
                       })()}
                     </div>
                   )}
@@ -5607,7 +5613,13 @@ export default function VinylCrate() {
     const logged = new Date(loggedAt); logged.setHours(0, 0, 0, 0);
     const days = Math.round((today - logged) / 86400000);
     if (days === 1) return "Last played · yesterday";
-    return `Last played · ${days} days ago`;
+    if (days < 7) return `Last played · ${days} days ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `Last played · ${weeks} week${weeks > 1 ? "s" : ""} ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `Last played · ${months} month${months > 1 ? "s" : ""} ago`;
+    const years = Math.floor(days / 365);
+    return `Last played · ${years} year${years > 1 ? "s" : ""} ago`;
   }
 
   async function handleDoubleTap(record) {
