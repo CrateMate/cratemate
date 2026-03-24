@@ -132,25 +132,28 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       rawType === "person" ? "person" :
       rawType === "group"  ? "group"  : "other";
 
-    const lifeSpan = best["life-span"] || {};
-    const topBirth = parseMbDate(lifeSpan.begin);
-    const topDeath = parseMbDate(lifeSpan.end);
-
-    // For individuals (and edge cases like "other"), we're done — one API call.
+    // Search stubs don't reliably include life-span — do a full lookup for persons.
     if (artistType !== "group") {
+      const personData = await mbFetch(
+        `${MB_API}/artist/${best.id}?fmt=json`
+      ) as { "life-span"?: { begin?: string; end?: string } };
+      const ls = personData["life-span"] || {};
+      const birth = parseMbDate(ls.begin);
+      const death = parseMbDate(ls.end);
       return {
         artistType,
-        birthYear:  topBirth.year,  birthMonth: topBirth.month,  birthDay:  topBirth.day,
-        deathYear:  topDeath.year,  deathMonth: topDeath.month,  deathDay:  topDeath.day,
+        birthYear:  birth.year,  birthMonth: birth.month,  birthDay:  birth.day,
+        deathYear:  death.year,  deathMonth: death.month,  deathDay:  death.day,
         members: [],
       };
     }
 
-    // Step 2 — For groups, fetch member relations (one more call).
-    // The artist-rels include each member's own life-span so no per-member calls needed.
+    // Step 2 — For groups, fetch full artist record + member relations.
+    // The full lookup (not search stub) has the accurate life-span for the group
+    // itself, and artist-rels embeds each member's own life-span.
     const groupData = await mbFetch(
       `${MB_API}/artist/${best.id}?inc=artist-rels&fmt=json`
-    ) as { relations?: MbRelation[] };
+    ) as { "life-span"?: { begin?: string; end?: string }; relations?: MbRelation[] };
 
     const members: MemberDates[] = [];
     for (const rel of groupData?.relations || []) {
@@ -173,11 +176,15 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       });
     }
 
+    // Use formation/dissolution from the full lookup, not the search stub.
+    const groupLs = groupData["life-span"] || {};
+    const groupBirth = parseMbDate(groupLs.begin);
+    const groupDeath = parseMbDate(groupLs.end);
+
     return {
       artistType: "group",
-      // Store formation/dissolution on top-level fields for completeness.
-      birthYear:  topBirth.year,  birthMonth: topBirth.month,  birthDay:  topBirth.day,
-      deathYear:  topDeath.year,  deathMonth: topDeath.month,  deathDay:  topDeath.day,
+      birthYear:  groupBirth.year,  birthMonth: groupBirth.month,  birthDay:  groupBirth.day,
+      deathYear:  groupDeath.year,  deathMonth: groupDeath.month,  deathDay:  groupDeath.day,
       members,
     };
   } catch {
