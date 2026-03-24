@@ -2598,203 +2598,243 @@ function getSeason(month) {
   return "fall";
 }
 
-function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures = {}, artistMembers = {}) {
+function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures = {}, artistMembers = {}, todayWeather = null, playSessions = []) {
   const today = new Date();
   const todayMonth = today.getMonth() + 1;
   const todayDay   = today.getDate();
   const todayYear  = today.getFullYear();
   const todayDow   = today.getDay(); // 0=Sun … 6=Sat
-  const STALE_DAYS = 90;
-  const RECENT_DAYS = 30;
   const now = Date.now();
 
+  // Hooks 1a, 1b, 2: only skip if played in the last 2 days (today or yesterday)
+  const notPlayedVeryRecently = (r) => {
+    const last = lastPlayedDates[r.id];
+    if (!last) return true;
+    return (now - new Date(last).getTime()) / 86400000 >= 2;
+  };
+
+  // All other hooks: skip if played in the last 14 days
   const notRecentlyPlayed = (r) => {
     const last = lastPlayedDates[r.id];
     if (!last) return true;
-    return (now - new Date(last).getTime()) / (1000 * 60 * 60 * 24) >= RECENT_DAYS;
+    return (now - new Date(last).getTime()) / 86400000 >= 14;
   };
 
-  // Priority 1: Release anniversaries — month + milestone year only
-  const MILESTONE_YEARS = new Set([5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100]);
-  const anniversaryCandidates = myRecords.filter((r) => {
-    if (r.release_month !== todayMonth) return false;
-    const releaseYear = r.year_original || r.year_pressed;
-    if (!releaseYear) return false;
-    const age = todayYear - releaseYear;
-    return age > 0 && MILESTONE_YEARS.has(age);
-  });
-  if (anniversaryCandidates.length > 0) {
-    // Prefer larger milestones (50 beats 10)
-    anniversaryCandidates.sort((a, b) => {
-      const ageA = todayYear - (a.year_original || a.year_pressed);
-      const ageB = todayYear - (b.year_original || b.year_pressed);
-      return ageB - ageA;
-    });
-    const topAge = todayYear - (anniversaryCandidates[0].year_original || anniversaryCandidates[0].year_pressed);
-    const topTier = anniversaryCandidates.filter(r =>
-      todayYear - (r.year_original || r.year_pressed) === topAge
+  // ±1 day window helpers (handles month boundaries)
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const tomorrow  = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  function dayLabel(month, day) {
+    if (month === todayMonth && day === todayDay) return "today";
+    if (month === (yesterday.getMonth() + 1) && day === yesterday.getDate()) return "yesterday";
+    return "tomorrow";
+  }
+  function withinDayWindow(month, day) {
+    return (
+      (month === todayMonth && day === todayDay) ||
+      (month === (yesterday.getMonth() + 1) && day === yesterday.getDate()) ||
+      (month === (tomorrow.getMonth() + 1)  && day === tomorrow.getDate())
     );
-    const pick = topTier[Math.floor(Math.random() * topTier.length)];
-    const years = todayYear - (pick.year_original || pick.year_pressed);
-    return {
-      type: "anniversary",
-      record: pick,
-      fact: `"${pick.title}" by ${pick.artist} turns ${years} this month.`,
-    };
   }
 
-  // Priority 2a: Artist or band member born today
+  // ±7 day window for release anniversary (handles year boundaries)
+  function withinWeekWindow(releaseMonth, releaseDay) {
+    for (const yr of [todayYear - 1, todayYear, todayYear + 1]) {
+      const d = new Date(yr, releaseMonth - 1, releaseDay);
+      if (Math.abs(now - d.getTime()) / 86400000 <= 7) return true;
+    }
+    return false;
+  }
+
+  // ─── Priority 1a: Artist or band member birthday ±1 day ──────────────────
+  // Includes solo artists (from records.artist_birth_month/day) and band members
+  // (from artist_metadata.members, enriched via MusicBrainz).
   {
-    // Solo artist birthday
     const soloBirthday = myRecords.filter(
-      (r) => !r.is_compilation && r.artist_birth_month === todayMonth && r.artist_birth_day === todayDay
-    );
-    // Band member birthday
+      (r) => !r.is_compilation && withinDayWindow(r.artist_birth_month, r.artist_birth_day)
+    ).filter(notPlayedVeryRecently);
+
     const memberBirthday = myRecords.filter((r) => {
       const members = artistMembers[r.artist] || [];
-      return members.some((m) => m.birth_month === todayMonth && m.birth_day === todayDay);
-    });
+      return members.some((m) => withinDayWindow(m.birth_month, m.birth_day));
+    }).filter(notPlayedVeryRecently);
+
     const allBirthday = [...soloBirthday, ...memberBirthday];
     if (allBirthday.length > 0) {
       const pick = allBirthday[Math.floor(Math.random() * allBirthday.length)];
       const isSolo = soloBirthday.includes(pick);
       if (isSolo) {
+        const when = dayLabel(pick.artist_birth_month, pick.artist_birth_day);
         const years = pick.artist_birth_year ? todayYear - pick.artist_birth_year : null;
         return {
           type: "birthday",
           record: pick,
           fact: years
-            ? `${pick.artist} was born ${years} years ago today in ${pick.artist_birth_year}.`
-            : `${pick.artist} was born on this day.`,
+            ? `${pick.artist} was born ${years} years ago — their birthday is ${when}.`
+            : `${pick.artist}'s birthday is ${when}.`,
         };
       } else {
         const member = (artistMembers[pick.artist] || []).find(
-          (m) => m.birth_month === todayMonth && m.birth_day === todayDay
+          (m) => withinDayWindow(m.birth_month, m.birth_day)
         );
+        const when = dayLabel(member.birth_month, member.birth_day);
         const years = member?.birth_year ? todayYear - member.birth_year : null;
         return {
           type: "birthday",
           record: pick,
           fact: years
-            ? `${member.name} of ${pick.artist} was born ${years} years ago today in ${member.birth_year}.`
-            : `${member.name} of ${pick.artist} was born on this day.`,
+            ? `${member.name} of ${pick.artist} was born ${years} years ago — their birthday is ${when}.`
+            : `${member.name} of ${pick.artist}'s birthday is ${when}.`,
         };
       }
     }
   }
 
-  // Priority 2b: Artist or band member died today
+  // ─── Priority 1b: Artist or band member death anniversary ±1 day ─────────
+  // Same MusicBrainz member coverage as 1a.
   {
     const soloDeath = myRecords.filter(
-      (r) => !r.is_compilation && r.artist_death_month === todayMonth && r.artist_death_day === todayDay
-    );
+      (r) => !r.is_compilation && withinDayWindow(r.artist_death_month, r.artist_death_day)
+    ).filter(notPlayedVeryRecently);
+
     const memberDeath = myRecords.filter((r) => {
       const members = artistMembers[r.artist] || [];
-      return members.some((m) => m.death_month === todayMonth && m.death_day === todayDay);
-    });
+      return members.some((m) => withinDayWindow(m.death_month, m.death_day));
+    }).filter(notPlayedVeryRecently);
+
     const allDeath = [...soloDeath, ...memberDeath];
     if (allDeath.length > 0) {
       const pick = allDeath[Math.floor(Math.random() * allDeath.length)];
       const isSolo = soloDeath.includes(pick);
       if (isSolo) {
+        const when = dayLabel(pick.artist_death_month, pick.artist_death_day);
         const years = pick.artist_death_year ? todayYear - pick.artist_death_year : null;
         return {
           type: "death",
           record: pick,
           fact: years
-            ? `${pick.artist} passed away ${years} years ago today in ${pick.artist_death_year}.`
-            : `${pick.artist} passed away on this day.`,
+            ? `${pick.artist} passed away ${years} years ago — the anniversary is ${when}.`
+            : `${pick.artist}'s passing anniversary is ${when}.`,
         };
       } else {
         const member = (artistMembers[pick.artist] || []).find(
-          (m) => m.death_month === todayMonth && m.death_day === todayDay
+          (m) => withinDayWindow(m.death_month, m.death_day)
         );
+        const when = dayLabel(member.death_month, member.death_day);
         const years = member?.death_year ? todayYear - member.death_year : null;
         return {
           type: "death",
           record: pick,
           fact: years
-            ? `${member.name} of ${pick.artist} passed away ${years} years ago today in ${member.death_year}.`
-            : `${member.name} of ${pick.artist} passed away on this day.`,
+            ? `${member.name} of ${pick.artist} passed away ${years} years ago — the anniversary is ${when}.`
+            : `${member.name} of ${pick.artist}'s passing anniversary is ${when}.`,
         };
       }
     }
   }
 
-  // Priority 3: Round-year anniversary (5/10/25/50-year milestones — works for bands too)
+  // ─── Priority 2: Release anniversary ─────────────────────────────────────
+  // If release_day is known (MusicBrainz): ±7 days, any age ≥ 10 years.
+  // Fallback: release_month matches today's month + must be a milestone year (≥10).
   {
-    const milestoneRecords = myRecords
-      .filter((r) => {
-        const yr = r.year_original || r.year_pressed;
-        if (!yr) return false;
-        const age = todayYear - yr;
-        return age > 0 && age % 5 === 0;
-      })
-      .filter(notRecentlyPlayed);
+    const MILESTONE_YEARS = new Set([10, 15, 20, 25, 30, 40, 50, 60, 75, 100]);
 
-    if (milestoneRecords.length > 0) {
-      // Prefer larger milestones (50 > 25 > 10 > 5)
-      milestoneRecords.sort((a, b) => {
+    // Exact-day path (release_day known and not the sentinel 0)
+    const exactDay = myRecords.filter((r) => {
+      if (!r.release_day || r.release_day === 0) return false;
+      if (!r.release_month) return false;
+      const releaseYear = r.year_original || r.year_pressed;
+      if (!releaseYear || todayYear - releaseYear < 10) return false;
+      return withinWeekWindow(r.release_month, r.release_day);
+    }).filter(notPlayedVeryRecently);
+
+    if (exactDay.length > 0) {
+      // Prefer bigger anniversaries
+      exactDay.sort((a, b) => (b.year_original || b.year_pressed || 0) - (a.year_original || a.year_pressed || 0));
+      const pick = exactDay[Math.floor(Math.random() * Math.min(3, exactDay.length))];
+      const age = todayYear - (pick.year_original || pick.year_pressed);
+      return {
+        type: "anniversary",
+        record: pick,
+        fact: `"${pick.title}" by ${pick.artist} was released ${age} years ago this week.`,
+      };
+    }
+
+    // Month-only fallback (no release_day) — must be a milestone year
+    const monthMatch = myRecords.filter((r) => {
+      if (r.release_month !== todayMonth) return false;
+      const releaseYear = r.year_original || r.year_pressed;
+      if (!releaseYear) return false;
+      const age = todayYear - releaseYear;
+      return MILESTONE_YEARS.has(age);
+    }).filter(notPlayedVeryRecently);
+
+    if (monthMatch.length > 0) {
+      monthMatch.sort((a, b) => {
         const ageA = todayYear - (a.year_original || a.year_pressed);
         const ageB = todayYear - (b.year_original || b.year_pressed);
-        // Prefer multiples of 25, then 10, then 5
-        const scoreA = ageA % 25 === 0 ? 3 : ageA % 10 === 0 ? 2 : 1;
-        const scoreB = ageB % 25 === 0 ? 3 : ageB % 10 === 0 ? 2 : 1;
-        if (scoreB !== scoreA) return scoreB - scoreA;
-        return ageB - ageA; // bigger anniversary wins ties
+        return ageB - ageA;
       });
-      // Pick randomly from the top tier
-      const topScore = milestoneRecords[0];
-      const topAge = todayYear - (topScore.year_original || topScore.year_pressed);
-      const topTier = milestoneRecords.filter((r) => {
-        const age = todayYear - (r.year_original || r.year_pressed);
-        const scoreTop = topAge % 25 === 0 ? 3 : topAge % 10 === 0 ? 2 : 1;
-        const score = age % 25 === 0 ? 3 : age % 10 === 0 ? 2 : 1;
-        return score === scoreTop;
-      });
+      const topAge = todayYear - (monthMatch[0].year_original || monthMatch[0].year_pressed);
+      const topTier = monthMatch.filter(r => todayYear - (r.year_original || r.year_pressed) === topAge);
       const pick = topTier[Math.floor(Math.random() * topTier.length)];
       const age = todayYear - (pick.year_original || pick.year_pressed);
       return {
-        type: "milestone",
+        type: "anniversary",
         record: pick,
-        fact: `"${pick.title}" by ${pick.artist} turns ${age} this year — a milestone worth celebrating.`,
+        fact: `"${pick.title}" by ${pick.artist} turns ${age} this month.`,
       };
     }
   }
 
-  // Priority 4: Beloved-but-forgotten (played before, silent for 90+ days)
-  const staleCandidates = myRecords
-    .filter((r) => {
-      const last = lastPlayedDates[r.id];
-      if (!last) return false;
-      const daysSince = (now - new Date(last).getTime()) / (1000 * 60 * 60 * 24);
-      return daysSince >= STALE_DAYS;
-    })
-    .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0));
-
-  if (staleCandidates.length > 0) {
-    const pool = staleCandidates.slice(0, 10);
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    const daysSince = Math.floor((now - new Date(lastPlayedDates[pick.id]).getTime()) / (1000 * 60 * 60 * 24));
-    const plays = playCounts[pick.id] || 0;
-    return {
-      type: "stale",
-      record: pick,
-      fact: plays > 1
-        ? `You've played "${pick.title}" by ${pick.artist} ${plays} times, but not in ${daysSince} days.`
-        : `You haven't played "${pick.title}" by ${pick.artist} in ${daysSince} days.`,
+  // ─── Priority 3: Weather match ────────────────────────────────────────────
+  // Matches the current weather mood to audio features via Spotify data.
+  // Requires location to be set and at least 5 records with features.
+  {
+    const WEATHER_TARGETS = {
+      "upbeat":      { valence: 0.75, energy: 0.75, acousticness: 0.20 },
+      "crisp":       { valence: 0.60, energy: 0.65, acousticness: 0.30 },
+      "mellow":      { valence: 0.55, energy: 0.45, acousticness: 0.50 },
+      "atmospheric": { valence: 0.45, energy: 0.35, acousticness: 0.75 },
+      "melancholic": { valence: 0.30, energy: 0.35, acousticness: 0.65 },
+      "cozy":        { valence: 0.55, energy: 0.30, acousticness: 0.80 },
+      "intense":     { valence: 0.35, energy: 0.85, acousticness: 0.10 },
     };
+    const target = todayWeather?.mood ? WEATHER_TARGETS[todayWeather.mood] : null;
+    const featureCount = Object.keys(spotifyFeatures).length;
+    if (target && featureCount >= 5) {
+      const scored = myRecords
+        .filter(notRecentlyPlayed)
+        .map((r) => {
+          const f = spotifyFeatures[r.id];
+          if (!f) return null;
+          const score =
+            (1 - Math.abs(f.valence      - target.valence))      * 0.4 +
+            (1 - Math.abs(f.energy       - target.energy))       * 0.4 +
+            (1 - Math.abs(f.acousticness - target.acousticness)) * 0.2;
+          return { record: r, score };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score);
+
+      if (scored.length > 0) {
+        const pick = scored[Math.floor(Math.random() * Math.min(5, scored.length))].record;
+        const weatherLabel = todayWeather.label?.toLowerCase() || "today's weather";
+        return {
+          type: "weather",
+          record: pick,
+          fact: `"${pick.title}" by ${pick.artist} is a perfect match for the ${weatherLabel}.`,
+        };
+      }
+    }
   }
 
-  // Priority 5a: Day-of-week energy match via Spotify features (if we have enough data)
+  // ─── Priority 4: Day-of-week energy match ────────────────────────────────
   {
-    const featureEntries = Object.entries(spotifyFeatures);
-    if (featureEntries.length >= 5) {
-      // Target profiles by day
+    const featureCount = Object.keys(spotifyFeatures).length;
+    if (featureCount >= 5) {
       const isWeekend = todayDow === 0 || todayDow === 6;
-      const isFriday = todayDow === 5;
-      const isSunday = todayDow === 0;
-
+      const isFriday  = todayDow === 5;
+      const isSunday  = todayDow === 0;
       const scored = myRecords
         .filter(notRecentlyPlayed)
         .map((r) => {
@@ -2812,18 +2852,18 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
 
       if (scored.length > 0) {
         const pick = scored[Math.floor(Math.random() * Math.min(5, scored.length))].record;
-        const dayLabel = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][todayDow];
+        const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][todayDow];
         const vibeLabel = isFriday ? "high-energy Friday listen" : isSunday ? "relaxed Sunday listen" : isWeekend ? "weekend mood" : "mid-week listen";
         return {
           type: "vibe",
           record: pick,
-          fact: `"${pick.title}" by ${pick.artist} fits the ${dayLabel} ${vibeLabel} perfectly.`,
+          fact: `"${pick.title}" by ${pick.artist} fits the ${dayName} ${vibeLabel} perfectly.`,
         };
       }
     }
   }
 
-  // Priority 5b: Season-appropriate genre (works for everyone, no extra data needed)
+  // ─── Priority 5: Season-appropriate genre ────────────────────────────────
   {
     const season = getSeason(todayMonth);
     const preferredGenres = SEASON_GENRES[season];
@@ -2834,7 +2874,6 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
         const s = (r.style || "").toLowerCase();
         return preferredGenres.some((pg) => g.includes(pg.toLowerCase()) || s.includes(pg.toLowerCase()));
       });
-
     if (seasonal.length > 0) {
       const pool = [...seasonal].sort(() => Math.random() - 0.5).slice(0, 8);
       const pick = pool[Math.floor(Math.random() * pool.length)];
@@ -2847,16 +2886,87 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }
   }
 
-  // Priority 6: Never-played records
-  const neverPlayed = myRecords.filter((r) => !lastPlayedDates[r.id]);
-  if (neverPlayed.length > 0) {
-    const shuffled = [...neverPlayed].sort(() => Math.random() - 0.5);
-    const pick = shuffled[0];
-    return {
-      type: "unplayed",
-      record: pick,
-      fact: `"${pick.title}" by ${pick.artist} is sitting in your crate and you've never played it.`,
-    };
+  // ─── Priority 6: Played this day last year (±3 days) ─────────────────────
+  {
+    const lastYearToday = new Date(todayYear - 1, todayMonth - 1, todayDay);
+    const seenIds = new Set();
+    const playedLastYear = playSessions
+      .filter((s) => Math.abs(new Date(s.played_at) - lastYearToday) / 86400000 <= 3)
+      .map((s) => myRecords.find((r) => String(r.id) === String(s.record_id)))
+      .filter(Boolean)
+      .filter((r) => { if (seenIds.has(r.id)) return false; seenIds.add(r.id); return true; })
+      .filter(notRecentlyPlayed);
+
+    if (playedLastYear.length > 0) {
+      const pick = playedLastYear[Math.floor(Math.random() * playedLastYear.length)];
+      return {
+        type: "memory",
+        record: pick,
+        fact: `You played "${pick.title}" by ${pick.artist} around this time last year.`,
+      };
+    }
+  }
+
+  // ─── Priority 7: Round-year milestone (≥10 years, divisible by 5) ────────
+  {
+    const milestoneRecords = myRecords
+      .filter((r) => {
+        const yr = r.year_original || r.year_pressed;
+        if (!yr) return false;
+        const age = todayYear - yr;
+        return age >= 10 && age % 5 === 0;
+      })
+      .filter(notRecentlyPlayed);
+
+    if (milestoneRecords.length > 0) {
+      milestoneRecords.sort((a, b) => {
+        const ageA = todayYear - (a.year_original || a.year_pressed);
+        const ageB = todayYear - (b.year_original || b.year_pressed);
+        const scoreA = ageA % 25 === 0 ? 3 : ageA % 10 === 0 ? 2 : 1;
+        const scoreB = ageB % 25 === 0 ? 3 : ageB % 10 === 0 ? 2 : 1;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return ageB - ageA;
+      });
+      const topAge = todayYear - (milestoneRecords[0].year_original || milestoneRecords[0].year_pressed);
+      const topScoreVal = topAge % 25 === 0 ? 3 : topAge % 10 === 0 ? 2 : 1;
+      const topTier = milestoneRecords.filter((r) => {
+        const age = todayYear - (r.year_original || r.year_pressed);
+        const s = age % 25 === 0 ? 3 : age % 10 === 0 ? 2 : 1;
+        return s === topScoreVal;
+      });
+      const pick = topTier[Math.floor(Math.random() * topTier.length)];
+      const age = todayYear - (pick.year_original || pick.year_pressed);
+      return {
+        type: "milestone",
+        record: pick,
+        fact: `"${pick.title}" by ${pick.artist} turns ${age} this year — a milestone worth celebrating.`,
+      };
+    }
+  }
+
+  // ─── Priority 8: Beloved-but-forgotten (played before, silent 90+ days) ──
+  {
+    const staleCandidates = myRecords
+      .filter((r) => {
+        const last = lastPlayedDates[r.id];
+        if (!last) return false;
+        return (now - new Date(last).getTime()) / 86400000 >= 90;
+      })
+      .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0));
+
+    if (staleCandidates.length > 0) {
+      const pool = staleCandidates.slice(0, 10);
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      const daysSince = Math.floor((now - new Date(lastPlayedDates[pick.id]).getTime()) / 86400000);
+      const plays = playCounts[pick.id] || 0;
+      return {
+        type: "stale",
+        record: pick,
+        fact: plays > 1
+          ? `You've played "${pick.title}" by ${pick.artist} ${plays} times, but not in ${daysSince} days.`
+          : `You haven't played "${pick.title}" by ${pick.artist} in ${daysSince} days.`,
+      };
+    }
   }
 
   return null;
@@ -6066,7 +6176,7 @@ export default function VinylCrate() {
             });
             if (res.ok) artistMembers = await res.json();
           } catch {}
-          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers);
+          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers, todayWeather, playSessions);
           if (hook) {
             const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
             const text = await callClaude(
