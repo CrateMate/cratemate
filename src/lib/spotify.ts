@@ -369,8 +369,8 @@ async function fetchFeaturesByArtist(artist: string): Promise<SpotifyFeatures | 
     normalise(artist).includes(normalise(a.name))
   );
   if (!best) {
-    // Cache "not found" sentinel for 14 days so we don't hammer the API
-    await upsertSpotifyFeaturesCache(cacheKey, {}, 14);
+    // Cache "not found" sentinel for 90 days (matches success TTL)
+    await upsertSpotifyFeaturesCache(cacheKey, {}, 90);
     return null;
   }
 

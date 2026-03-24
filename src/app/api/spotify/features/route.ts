@@ -30,28 +30,7 @@ export async function POST(request: Request) {
     if (cached) return NextResponse.json(cached);
   }
 
-  // 2. Check shared features cache (spotify_features_cache) by artist|title key
-  const cacheKey = spotifyFeaturesKey(artist, title);
-  if (!force) {
-    const sharedCached = await getSpotifyFeaturesCache(cacheKey);
-    if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
-      // null-energy sentinel means all tiers failed for this title — skip API calls
-      if (sharedCached.energy == null) return NextResponse.json(null);
-      const row = {
-        record_id,
-        energy: sharedCached.energy,
-        valence: sharedCached.valence,
-        danceability: sharedCached.danceability,
-        acousticness: sharedCached.acousticness,
-        tempo: sharedCached.tempo,
-        loudness: sharedCached.loudness,
-      };
-      await supabase.from("spotify_features").upsert(row);
-      return NextResponse.json(row);
-    }
-  }
-
-  // 3. Look up the Discogs tracklist from the release cache — used for Tier 2 fallback
+  // 2. Look up the Discogs tracklist early — needed for Tier 2 and sentinel bypass
   let tracklist: TracklistItem[] | undefined;
   try {
     const { data: record } = await supabase
@@ -75,11 +54,37 @@ export async function POST(request: Request) {
     }
   } catch { /* tracklist lookup is best-effort */ }
 
+  // 3. Check shared features cache (spotify_features_cache) by artist|title key
+  const cacheKey = spotifyFeaturesKey(artist, title);
+  if (!force) {
+    const sharedCached = await getSpotifyFeaturesCache(cacheKey);
+    if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
+      if (sharedCached.energy == null) {
+        // "Not found" sentinel — but if a tracklist is now available that wasn't before,
+        // bypass the sentinel and re-attempt (Tier 2 might succeed now)
+        if (!tracklist || tracklist.length === 0) return NextResponse.json(null);
+        // Tracklist available — fall through to re-fetch
+      } else {
+        const row = {
+          record_id,
+          energy: sharedCached.energy,
+          valence: sharedCached.valence,
+          danceability: sharedCached.danceability,
+          acousticness: sharedCached.acousticness,
+          tempo: sharedCached.tempo,
+          loudness: sharedCached.loudness,
+        };
+        await supabase.from("spotify_features").upsert(row);
+        return NextResponse.json(row);
+      }
+    }
+  }
+
   // 4. Fetch features from Spotify → Tier 1 (album) → Tier 2 (tracks) → Tier 3 (artist)
   const features = await fetchAlbumFeatures(artist, title, tracklist).catch(() => null);
   if (!features) {
-    // Cache "not found" sentinel for 14 days so we don't re-attempt every time
-    await upsertSpotifyFeaturesCache(cacheKey, {}, 14);
+    // Cache "not found" sentinel for 90 days (matches success TTL)
+    await upsertSpotifyFeaturesCache(cacheKey, {}, 90);
     return NextResponse.json(null);
   }
 

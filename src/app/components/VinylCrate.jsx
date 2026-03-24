@@ -5867,12 +5867,14 @@ export default function VinylCrate() {
       if (uncached.length === 0) return;
       setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
       let done = 0;
-      for (const record of uncached) {
+      const CONCURRENCY = 2;
+      for (let i = 0; i < uncached.length; i += CONCURRENCY) {
         if (enrichmentAbort.current) break;
-        await fetchAndCacheFeatures(record);
-        done++;
-        setEnrichmentProgress({ done, total: uncached.length, type: "audio" });
-        await new Promise(res => setTimeout(res, 1500));
+        const batch = uncached.slice(i, i + CONCURRENCY);
+        await Promise.allSettled(batch.map(r => fetchAndCacheFeatures(r)));
+        done += batch.length;
+        setEnrichmentProgress({ done: Math.min(done, uncached.length), total: uncached.length, type: "audio" });
+        if (i + CONCURRENCY < uncached.length) await new Promise(res => setTimeout(res, 800));
       }
       setEnrichmentProgress(null);
     }
@@ -6473,6 +6475,8 @@ export default function VinylCrate() {
           try { localStorage.setItem("cratemate_last_synced", syncedAt); } catch {}
           setLastSyncedAt(syncedAt);
           refreshRecords();
+          // Re-trigger background audio features enrichment for newly imported records
+          enrichmentStarted.current = false;
         })
         .catch((enrichErr) => {
           console.error("Post-import enrich failed:", enrichErr);
@@ -9086,10 +9090,17 @@ export default function VinylCrate() {
                         <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
                         <div className="text-stone-600 text-xs">
                           {usingSpotify
-                            ? `${n} / ${myRecords.length} via Spotify · ${Math.round(tempo)} BPM`
-                            : `estimated · ${Math.round(tempo)} BPM avg`}
+                            ? `${Math.round(n / myRecords.length * 100)}% enriched (${n}/${myRecords.length}) · ${Math.round(tempo)} BPM`
+                            : `genre estimates · ${Math.round(tempo)} BPM avg`}
                         </div>
                       </div>
+                      {usingSpotify && n < myRecords.length && (
+                        <div className="mb-3">
+                          <div className="w-full bg-stone-800/50 rounded-full h-1.5 overflow-hidden">
+                            <div className="h-full bg-amber-700/50 rounded-full transition-all" style={{ width: `${Math.round(n / myRecords.length * 100)}%` }} />
+                          </div>
+                        </div>
+                      )}
                       <div className="space-y-2 mb-3">
                         {bars.map(({ label, value, color, hint }) => (
                           <div key={label} className="flex items-center gap-3">
