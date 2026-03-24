@@ -5291,7 +5291,7 @@ export default function VinylCrate() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recordId }),
     })
-      .then(r => r.json()).then(d => console.log("[enrich] result", key, d))
+      .then(r => r.json()).then(d => console.log("[enrich] result", key, JSON.stringify(d)))
       .catch(e => console.log("[enrich] error", key, e))
       .finally(() => enrichingRef.current.delete(key));
   }
