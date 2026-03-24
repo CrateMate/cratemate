@@ -5283,14 +5283,16 @@ export default function VinylCrate() {
   const enrichingRef = useRef(new Set()); // deduplicate in-flight calls
   function silentEnrich(recordId) {
     const key = String(recordId);
-    if (enrichingRef.current.has(key)) return;
+    if (enrichingRef.current.has(key)) { console.log("[enrich] skip (in-flight)", key); return; }
     enrichingRef.current.add(key);
+    console.log("[enrich] firing for", key);
     fetch("/api/discogs/enrich/record", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recordId }),
     })
-      .catch(() => {})
+      .then(r => r.json()).then(d => console.log("[enrich] result", key, d))
+      .catch(e => console.log("[enrich] error", key, e))
       .finally(() => enrichingRef.current.delete(key));
   }
 
@@ -6076,6 +6078,7 @@ export default function VinylCrate() {
   // plus up to 3 most-played records still missing basic metadata.
   // All calls are fire-and-forget — server checks what's actually missing.
   useEffect(() => {
+    console.log("[enrich] effect fired — selected:", selected?.id, "myRecords:", myRecords.length);
     if (!selected || !myRecords.length) return;
     const queue = [selected];
     const idx = sorted.findIndex(r => r.id === selected.id);
