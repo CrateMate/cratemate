@@ -177,8 +177,9 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
     }
 
     // Per-member full lookup — stubs don't include life-span reliably.
+    // Cap at 10 to stay within serverless timeout budgets (each call costs ~1.1s).
     const members: MemberDates[] = [];
-    for (const stub of memberStubs) {
+    for (const stub of memberStubs.slice(0, 10)) {
       try {
         const memberData = await mbFetch(
           `${MB_API}/artist/${stub.id}?fmt=json`
