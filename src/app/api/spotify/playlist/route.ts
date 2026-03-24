@@ -48,9 +48,11 @@ export async function POST(req: NextRequest) {
         const retryAfter = parseInt(res.headers.get("Retry-After") || "15");
         return { rateLimited: true, retryAfter } as const;
       }
-      if (!res.ok) return null;
+      if (!res.ok) { console.log("[playlist] search non-ok", res.status, q); return null; }
       const data = await res.json();
-      return (data.tracks?.items || [])[0]?.uri as string ?? null;
+      const uri = (data.tracks?.items || [])[0]?.uri as string ?? null;
+      console.log("[playlist] search", res.status, q, "→", uri ?? `no results (${data.tracks?.items?.length ?? 0} items)`);
+      return uri;
     };
 
     const uris: string[] = [];
