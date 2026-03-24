@@ -107,6 +107,7 @@ type MbRelation = {
   begin?: string;  // year member joined the band
   end?: string;    // year member left the band
   artist?: {
+    id?: string;
     name?: string;
     type?: string;
     "life-span"?: { begin?: string; end?: string };
@@ -155,25 +156,53 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       `${MB_API}/artist/${best.id}?inc=artist-rels&fmt=json`
     ) as { "life-span"?: { begin?: string; end?: string }; relations?: MbRelation[] };
 
-    const members: MemberDates[] = [];
+    // Collect member stubs first (no per-member fetch yet).
+    type MemberStub = { id: string; name: string; joinedYear: number | null; leftYear: number | null };
+    const memberStubs: MemberStub[] = [];
     for (const rel of groupData?.relations || []) {
       // "member of band" with direction "backward" = this person is a member of the group.
       if (rel.type !== "member of band" || rel.direction !== "backward") continue;
-      if (!rel.artist) continue;
+      if (!rel.artist?.id) continue;
       // Skip nested sub-groups (e.g. a supergroup as a member).
       if ((rel.artist.type || "").toLowerCase() !== "person") continue;
 
-      const birth  = parseMbDate(rel.artist["life-span"]?.begin);
-      const death  = parseMbDate(rel.artist["life-span"]?.end);
       const joined = parseMbDate(rel.begin);
       const left   = parseMbDate(rel.end);
-      members.push({
+      memberStubs.push({
+        id:         rel.artist.id,
         name:       rel.artist.name || "",
         joinedYear: joined.year,
         leftYear:   left.year,
-        birthYear:  birth.year,  birthMonth: birth.month,  birthDay:  birth.day,
-        deathYear:  death.year,  deathMonth: death.month,  deathDay:  death.day,
       });
+    }
+
+    // Per-member full lookup — stubs don't include life-span reliably.
+    const members: MemberDates[] = [];
+    for (const stub of memberStubs) {
+      try {
+        const memberData = await mbFetch(
+          `${MB_API}/artist/${stub.id}?fmt=json`
+        ) as { "life-span"?: { begin?: string; end?: string } };
+        const ls    = memberData["life-span"] || {};
+        const birth = parseMbDate(ls.begin);
+        const death = parseMbDate(ls.end);
+        members.push({
+          name:       stub.name,
+          joinedYear: stub.joinedYear,
+          leftYear:   stub.leftYear,
+          birthYear:  birth.year,  birthMonth: birth.month,  birthDay:  birth.day,
+          deathYear:  death.year,  deathMonth: death.month,  deathDay:  death.day,
+        });
+      } catch {
+        // Fall back to stub (all nulls) so the member still appears.
+        members.push({
+          name:       stub.name,
+          joinedYear: stub.joinedYear,
+          leftYear:   stub.leftYear,
+          birthYear:  null, birthMonth: null, birthDay:  null,
+          deathYear:  null, deathMonth: null, deathDay:  null,
+        });
+      }
     }
 
     // Use formation/dissolution from the full lookup, not the search stub.
