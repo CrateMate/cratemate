@@ -202,11 +202,28 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
       });
     }
 
+    // Deduplicate by artist ID — MusicBrainz creates a separate relation for each
+    // stint (e.g. left 1995, rejoined 1997), so members who rejoined appear multiple
+    // times. Merge into one entry: earliest joinedYear, latest leftYear.
+    const stubById = new Map<string, MemberStub>();
+    for (const stub of memberStubs) {
+      const existing = stubById.get(stub.id);
+      if (!existing) {
+        stubById.set(stub.id, { ...stub });
+      } else {
+        if (stub.joinedYear && (!existing.joinedYear || stub.joinedYear < existing.joinedYear))
+          existing.joinedYear = stub.joinedYear;
+        if (stub.leftYear && (!existing.leftYear || stub.leftYear > existing.leftYear))
+          existing.leftYear = stub.leftYear;
+      }
+    }
+    const dedupedStubs = Array.from(stubById.values());
+
     // Sort by tenure length descending so the most iconic/longest-standing members
     // are fetched first. If we hit rate limits or timeout, the less significant
     // members (shortest tenure) are the ones that fall off.
     const currentYear = new Date().getFullYear();
-    memberStubs.sort((a, b) => {
+    dedupedStubs.sort((a, b) => {
       const tenureA = (a.leftYear || currentYear) - (a.joinedYear || currentYear);
       const tenureB = (b.leftYear || currentYear) - (b.joinedYear || currentYear);
       return tenureB - tenureA;
@@ -217,7 +234,7 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
     // while staying under MB's rate limit to avoid 429s.
     const MEMBER_DELAY_MS = 500;
     const members: MemberDates[] = [];
-    for (const stub of memberStubs.slice(0, 10)) {
+    for (const stub of dedupedStubs.slice(0, 10)) {
       try {
         const memberData = await mbFetch(
           `${MB_API}/artist/${stub.id}?fmt=json`,
