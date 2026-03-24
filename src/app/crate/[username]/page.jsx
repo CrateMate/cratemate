@@ -6,9 +6,37 @@ export const revalidate = 60;
 
 export async function generateMetadata({ params }) {
   const { username } = await params;
+
+  // Grab a representative cover image for og:image
+  const { data: topRecord } = await supabase
+    .from("records")
+    .select("thumb")
+    .eq("user_id", (
+      await supabase.from("discogs_tokens").select("user_id").eq("discogs_username", username).limit(1)
+    ).data?.[0]?.user_id || "")
+    .eq("for_sale", false)
+    .not("thumb", "is", null)
+    .limit(1)
+    .single();
+
+  const ogImage = topRecord?.thumb || null;
+  const title = `${username}'s Crate — CrateMate`;
+  const description = `Browse ${username}'s vinyl collection on CrateMate`;
+
   return {
-    title: `${username}'s Crate — CrateMate`,
-    description: `Browse ${username}'s vinyl collection on CrateMate`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      ...(ogImage ? { images: [{ url: ogImage }] } : {}),
+    },
+    twitter: {
+      card: ogImage ? "summary_large_image" : "summary",
+      title,
+      description,
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
   };
 }
 

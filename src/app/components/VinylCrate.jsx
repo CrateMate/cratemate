@@ -462,6 +462,7 @@ export function CoverArt({ record, size = 64 }) {
         <img
           src={proxyArtUrl(src) || src}
           alt=""
+          loading="lazy"
           className="w-full h-full object-cover opacity-90"
           onError={() => setImgError(true)}
         />
