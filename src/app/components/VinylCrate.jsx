@@ -2645,9 +2645,13 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     return false;
   }
 
-  // ─── Priority 1a: Artist or band member birthday ±1 day ──────────────────
-  // Includes solo artists (from records.artist_birth_month/day) and band members
-  // (from artist_metadata.members, enriched via MusicBrainz).
+  // ─── Main hooks (1a, 1b, 2): collect all that fire, then pick randomly ──────
+  // Each hook builds a candidate result. At the end we pick one at random so
+  // birthday / death / release anniversary each get equal chance on days when
+  // more than one applies. If none fire, we fall through to the lower hooks.
+  const mainHookCandidates = [];
+
+  // ─── Hook 1a: Artist or band member birthday ±1 day ──────────────────────
   {
     const soloBirthday = myRecords.filter(
       (r) => !r.is_compilation && withinDayWindow(r.artist_birth_month, r.artist_birth_day)
@@ -2665,32 +2669,31 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       if (isSolo) {
         const when = dayLabel(pick.artist_birth_month, pick.artist_birth_day);
         const years = pick.artist_birth_year ? todayYear - pick.artist_birth_year : null;
-        return {
+        mainHookCandidates.push({
           type: "birthday",
           record: pick,
           fact: years
             ? `${pick.artist} was born ${years} years ago — their birthday is ${when}.`
             : `${pick.artist}'s birthday is ${when}.`,
-        };
+        });
       } else {
         const member = (artistMembers[pick.artist] || []).find(
           (m) => withinDayWindow(m.birth_month, m.birth_day)
         );
         const when = dayLabel(member.birth_month, member.birth_day);
         const years = member?.birth_year ? todayYear - member.birth_year : null;
-        return {
+        mainHookCandidates.push({
           type: "birthday",
           record: pick,
           fact: years
             ? `${member.name} of ${pick.artist} was born ${years} years ago — their birthday is ${when}.`
             : `${member.name} of ${pick.artist}'s birthday is ${when}.`,
-        };
+        });
       }
     }
   }
 
-  // ─── Priority 1b: Artist or band member death anniversary ±1 day ─────────
-  // Same MusicBrainz member coverage as 1a.
+  // ─── Hook 1b: Artist or band member death anniversary ±1 day ─────────────
   {
     const soloDeath = myRecords.filter(
       (r) => !r.is_compilation && withinDayWindow(r.artist_death_month, r.artist_death_day)
@@ -2708,37 +2711,34 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       if (isSolo) {
         const when = dayLabel(pick.artist_death_month, pick.artist_death_day);
         const years = pick.artist_death_year ? todayYear - pick.artist_death_year : null;
-        return {
+        mainHookCandidates.push({
           type: "death",
           record: pick,
           fact: years
             ? `${pick.artist} passed away ${years} years ago — the anniversary is ${when}.`
             : `${pick.artist}'s passing anniversary is ${when}.`,
-        };
+        });
       } else {
         const member = (artistMembers[pick.artist] || []).find(
           (m) => withinDayWindow(m.death_month, m.death_day)
         );
         const when = dayLabel(member.death_month, member.death_day);
         const years = member?.death_year ? todayYear - member.death_year : null;
-        return {
+        mainHookCandidates.push({
           type: "death",
           record: pick,
           fact: years
             ? `${member.name} of ${pick.artist} passed away ${years} years ago — the anniversary is ${when}.`
             : `${member.name} of ${pick.artist}'s passing anniversary is ${when}.`,
-        };
+        });
       }
     }
   }
 
-  // ─── Priority 2: Release anniversary ─────────────────────────────────────
-  // If release_day is known (MusicBrainz): ±7 days, any age ≥ 10 years.
-  // Fallback: release_month matches today's month + must be a milestone year (≥10).
+  // ─── Hook 2: Release anniversary ─────────────────────────────────────────
   {
     const MILESTONE_YEARS = new Set([10, 15, 20, 25, 30, 40, 50, 60, 75, 100]);
 
-    // Exact-day path (release_day known and not the sentinel 0)
     const exactDay = myRecords.filter((r) => {
       if (!r.release_day || r.release_day === 0) return false;
       if (!r.release_month) return false;
@@ -2748,42 +2748,46 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }).filter(notPlayedVeryRecently);
 
     if (exactDay.length > 0) {
-      // Prefer bigger anniversaries
       exactDay.sort((a, b) => (b.year_original || b.year_pressed || 0) - (a.year_original || a.year_pressed || 0));
       const pick = exactDay[Math.floor(Math.random() * Math.min(3, exactDay.length))];
       const age = todayYear - (pick.year_original || pick.year_pressed);
-      return {
+      mainHookCandidates.push({
         type: "anniversary",
         record: pick,
         fact: `"${pick.title}" by ${pick.artist} was released ${age} years ago this week.`,
-      };
-    }
-
-    // Month-only fallback (no release_day) — must be a milestone year
-    const monthMatch = myRecords.filter((r) => {
-      if (r.release_month !== todayMonth) return false;
-      const releaseYear = r.year_original || r.year_pressed;
-      if (!releaseYear) return false;
-      const age = todayYear - releaseYear;
-      return MILESTONE_YEARS.has(age);
-    }).filter(notPlayedVeryRecently);
-
-    if (monthMatch.length > 0) {
-      monthMatch.sort((a, b) => {
-        const ageA = todayYear - (a.year_original || a.year_pressed);
-        const ageB = todayYear - (b.year_original || b.year_pressed);
-        return ageB - ageA;
       });
-      const topAge = todayYear - (monthMatch[0].year_original || monthMatch[0].year_pressed);
-      const topTier = monthMatch.filter(r => todayYear - (r.year_original || r.year_pressed) === topAge);
-      const pick = topTier[Math.floor(Math.random() * topTier.length)];
-      const age = todayYear - (pick.year_original || pick.year_pressed);
-      return {
-        type: "anniversary",
-        record: pick,
-        fact: `"${pick.title}" by ${pick.artist} turns ${age} this month.`,
-      };
+    } else {
+      // Month-only fallback — must be a milestone year
+      const monthMatch = myRecords.filter((r) => {
+        if (r.release_month !== todayMonth) return false;
+        const releaseYear = r.year_original || r.year_pressed;
+        if (!releaseYear) return false;
+        const age = todayYear - releaseYear;
+        return MILESTONE_YEARS.has(age);
+      }).filter(notPlayedVeryRecently);
+
+      if (monthMatch.length > 0) {
+        monthMatch.sort((a, b) => {
+          const ageA = todayYear - (a.year_original || a.year_pressed);
+          const ageB = todayYear - (b.year_original || b.year_pressed);
+          return ageB - ageA;
+        });
+        const topAge = todayYear - (monthMatch[0].year_original || monthMatch[0].year_pressed);
+        const topTier = monthMatch.filter(r => todayYear - (r.year_original || r.year_pressed) === topAge);
+        const pick = topTier[Math.floor(Math.random() * topTier.length)];
+        const age = todayYear - (pick.year_original || pick.year_pressed);
+        mainHookCandidates.push({
+          type: "anniversary",
+          record: pick,
+          fact: `"${pick.title}" by ${pick.artist} turns ${age} this month.`,
+        });
+      }
     }
+  }
+
+  // Pick randomly from whichever main hooks fired
+  if (mainHookCandidates.length > 0) {
+    return mainHookCandidates[Math.floor(Math.random() * mainHookCandidates.length)];
   }
 
   // ─── Priority 3: Weather match ────────────────────────────────────────────
