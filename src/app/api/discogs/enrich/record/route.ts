@@ -4,8 +4,8 @@ import { enrichSingleRecord } from "@/lib/discogs/enrich";
 
 // Single-record enrichment — used by action-triggered lazy enrichment in the client.
 // Called fire-and-forget on: detail card open, play logged, track hearted.
-// Groups with many members can require 10+ sequential MusicBrainz calls (~1.1s each).
-export const maxDuration = 60;
+// Groups with many members require ~10 MusicBrainz calls at 300ms each (~3s).
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();

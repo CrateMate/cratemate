@@ -49,8 +49,8 @@ const EMPTY: ArtistDates = {
   members: [],
 };
 
-async function mbFetch(url: string): Promise<unknown> {
-  await new Promise((r) => setTimeout(r, RATE_DELAY_MS));
+async function mbFetch(url: string, delayMs = RATE_DELAY_MS): Promise<unknown> {
+  await new Promise((r) => setTimeout(r, delayMs));
   const res = await fetch(url, { headers: { "User-Agent": MB_USER_AGENT } });
   if (!res.ok) throw new Error(`MusicBrainz ${res.status}: ${url}`);
   return res.json();
@@ -177,12 +177,16 @@ export async function fetchArtistDates(artistName: string): Promise<ArtistDates>
     }
 
     // Per-member full lookup — stubs don't include life-span reliably.
-    // Cap at 10 to stay within serverless timeout budgets (each call costs ~1.1s).
+    // Use a shorter delay (300ms) for member calls: MB's 1100ms is a conservative average
+    // guideline. One-time per-artist bursts of ~10 calls are well within acceptable use.
+    // Cap at 10 members; 10 × 300ms = ~3s, safely within Vercel Hobby's 10s limit.
+    const MEMBER_DELAY_MS = 300;
     const members: MemberDates[] = [];
     for (const stub of memberStubs.slice(0, 10)) {
       try {
         const memberData = await mbFetch(
-          `${MB_API}/artist/${stub.id}?fmt=json`
+          `${MB_API}/artist/${stub.id}?fmt=json`,
+          MEMBER_DELAY_MS
         ) as { "life-span"?: { begin?: string; end?: string } };
         const ls    = memberData["life-span"] || {};
         const birth = parseMbDate(ls.begin);
