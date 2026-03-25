@@ -57,8 +57,7 @@ export async function GET(request: Request) {
 
   function cleanAlbumName(name: string) {
     return name
-      .replace(/\s*[\[(].*?(remaster|remastered|deluxe|expanded|anniversary|edition|version|mono|stereo|bonus|limited|special)[^\])]*/gi, "")
-      .replace(/[\[( ]+$/g, "")
+      .replace(/\s*[\[(][^\]()]*(?:remaster|remastered|deluxe|expanded|anniversary|edition|version|mono|stereo|bonus|limited|special)[^\]()]*[\])]/gi, "")
       .trim();
   }
 
