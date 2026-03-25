@@ -1151,36 +1151,20 @@ function MarqueeTitle({ children, style }) {
   );
 }
 
-function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, bpm, onLogPlay, onDoubleTap }) {
-  const lastTapTime = useRef(0);
-  const singleTapTimer = useRef(null);
+function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), playCount, bpm, onLogPlay }) {
   const originalYear = record.year_original || record.year_pressed;
   const pressedYear = record.year_pressed || null;
   const showPressed = originalYear && pressedYear && pressedYear !== originalYear;
 
-  useEffect(() => () => clearTimeout(singleTapTimer.current), []);
-
-  function handleTap() {
-    const now = Date.now();
-    if (now - lastTapTime.current < 300) {
-      clearTimeout(singleTapTimer.current);
-      lastTapTime.current = 0;
-      onDoubleTap?.(record);
-      return;
-    }
-    lastTapTime.current = now;
-    singleTapTimer.current = setTimeout(() => onClick(record), 300);
-  }
-
   return (
     <div
-      onClick={handleTap}
+      onClick={() => onClick(record)}
       className="flex items-center gap-3 px-2.5 py-2 rounded-xl cursor-pointer transition-all duration-150 hover:bg-white/[0.04] active:scale-[0.99] border border-transparent hover:border-white/[0.07]"
       style={{ touchAction: "manipulation" }}
     >
       <CoverArt record={record} size={52} />
       <div className="flex-1 min-w-0">
-        <MarqueeTitle style={{ fontFamily: "'Fraunces',serif", fontSize: 15, color: 'var(--text-heading)', lineHeight: 1.3 }}>
+        <MarqueeTitle style={{ fontFamily: "’Fraunces’,serif", fontSize: 15, color: ‘var(--text-heading)’, lineHeight: 1.3 }}>
           {record.title}
         </MarqueeTitle>
         <div className="flex items-center gap-1 flex-wrap mt-0.5">
@@ -1188,21 +1172,28 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
           {record.for_sale && <span className="text-xs text-rose-400/80">FOR SALE</span>}
         </div>
       </div>
-      <div className="flex flex-col items-end gap-1 shrink-0 ml-1">
-        {originalYear ? (
-          <div className="text-right leading-tight">
-            <div className="text-stone-500 text-xs">’{String(originalYear).slice(-2)}</div>
-            {showPressed && <div className="text-stone-700 text-[11px]">press {pressedYear}</div>}
+      <div className="flex items-center gap-2 shrink-0 ml-1">
+        <div className="flex flex-col items-end gap-1">
+          {originalYear ? (
+            <div className="text-right leading-tight">
+              <div className="text-stone-500 text-xs">’{String(originalYear).slice(-2)}</div>
+              {showPressed && <div className="text-stone-700 text-[11px]">press {pressedYear}</div>}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-0.5">
+            {getGenres(record).slice(0, 2).map((g) => (
+              <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+            ))}
           </div>
-        ) : null}
-        <div className="flex flex-wrap justify-end gap-0.5">
-          {getGenres(record).slice(0, 2).map((g) => (
-            <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
-          ))}
+          {playCount > 0 && (
+            <div className="text-stone-600 text-[11px]">· {playCount}</div>
+          )}
         </div>
-        {playCount > 0 && (
-          <div className="text-stone-600 text-[11px]">· {playCount}</div>
-        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onLogPlay?.(record.id); }}
+          className="w-7 h-7 rounded-full border border-stone-700/60 text-stone-600 hover:text-amber-400 hover:border-amber-800/50 transition-colors flex items-center justify-center shrink-0"
+          title="Log a play"
+        >⏺</button>
       </div>
     </div>
   );
@@ -1398,16 +1389,10 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             </svg>
           </button>
 
-          {/* Header: album art (double-tap to log) + metadata to the right */}
+          {/* Header: album art + metadata to the right */}
           <div className="flex gap-3 mb-4 items-start">
             <div
-              className="w-[252px] h-[252px] rounded-2xl overflow-hidden shrink-0 bg-stone-800 cursor-pointer select-none"
-              onClick={() => {
-                const now = Date.now();
-                if (now - artTapRef.current < 300) { onLogPlay?.(record.id); artTapRef.current = 0; }
-                else artTapRef.current = now;
-              }}
-              title="Double-tap to log a play"
+              className="w-[252px] h-[252px] rounded-2xl overflow-hidden shrink-0 bg-stone-800 select-none"
             >
               {heroSrcOverride !== false && (heroHi || itunesUrl || record.thumb) ? (
                 <img
@@ -1525,21 +1510,25 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             )}
           </div>
 
-          {/* Action buttons — one row: Session (50%) | Compare (25%) | Mark for Sale (25%) */}
+          {/* Action buttons — one row, all flex-1 */}
           <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => onLogPlay?.(record.id)}
+              className="flex-1 py-2 rounded-xl bg-amber-900/20 border border-amber-800/30 text-amber-400/80 text-xs font-medium hover:bg-amber-900/35 hover:text-amber-300 transition-colors"
+            >⏺ Log</button>
             {!record.for_sale && (
               <button
                 onClick={() => { onEnterTrail?.(record); onClose(); }}
-                className="w-1/2 py-2.5 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-sm font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
-              >⬡ Start Session</button>
+                className="flex-1 py-2 rounded-xl bg-teal-900/20 border border-teal-800/35 text-teal-400/80 text-xs font-medium hover:bg-teal-900/35 hover:text-teal-300 transition-colors"
+              >⬡ Session</button>
             )}
             <button
               onClick={() => onCompare?.(record)}
-              className={`${record.for_sale ? "w-1/2" : "w-1/4"} py-2 rounded-xl border border-stone-800/40 text-stone-500 text-xs font-medium hover:text-stone-300 hover:border-stone-700/60 transition-colors`}
+              className="flex-1 py-2 rounded-xl border border-stone-800/40 text-stone-500 text-xs font-medium hover:text-stone-300 hover:border-stone-700/60 transition-colors"
             >⇄ Compare</button>
             <button
               onClick={() => onToggleForSale?.(record)}
-              className={`${record.for_sale ? "w-1/2" : "w-1/4"} py-2 rounded-xl border text-xs font-medium transition-colors ${
+              className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-colors ${
                 record.for_sale
                   ? "bg-rose-900/35 border-rose-700/50 text-rose-300 hover:bg-rose-900/50"
                   : "border-stone-800/40 text-stone-600 hover:text-stone-400 hover:border-stone-700/60"
@@ -1711,9 +1700,8 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   const scaleRafRef = useRef(null);
   const cellsRef = useRef([]);
   const [scales, setScales] = useState({});
-  const hexLastTapTime = useRef(0);
-  const hexLastTapRecordId = useRef(null);
-  const hexSingleTapTimer = useRef(null);
+  const hexLongPressTimer = useRef(null);
+  const hexLongPressFired = useRef(false);
 
   // Screensaver (idle auto-pan) — state is lifted to parent VinylCrate
   const screensaverEnabledRef = useRef(screensaverEnabled);
@@ -1945,7 +1933,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
     const dy = pos.clientY - lastPos.current.y;
     lastPos.current = { x: pos.clientX, y: pos.clientY };
     moveDistance.current += Math.abs(dx) + Math.abs(dy);
-    if (moveDistance.current > 6) { clearTimeout(hexSingleTapTimer.current); }
+    if (moveDistance.current > 6) { clearTimeout(hexLongPressTimer.current); hexLongPressFired.current = false; }
     velocity.current = { x: dx, y: dy };
     const clamped = clampOffset(offsetRef.current.x + dx, offsetRef.current.y + dy);
     offsetRef.current = clamped;
@@ -1960,17 +1948,9 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
     if (!dragging.current) return;
     dragging.current = false;
     if (moveDistance.current < 6 && record) {
-      const now = Date.now();
-      if (now - hexLastTapTime.current < 300 && hexLastTapRecordId.current === record.id) {
-        clearTimeout(hexSingleTapTimer.current);
-        hexLastTapTime.current = 0;
-        hexLastTapRecordId.current = null;
-        onDoubleTap?.(record);
-      } else {
-        hexLastTapTime.current = now;
-        hexLastTapRecordId.current = record.id;
-        hexSingleTapTimer.current = setTimeout(() => onSelect(record), 300);
-      }
+      clearTimeout(hexLongPressTimer.current);
+      if (!hexLongPressFired.current) onSelect(record);
+      hexLongPressFired.current = false;
     } else {
       startMomentum();
     }
@@ -2025,6 +2005,8 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                 transition: "transform 150ms ease-out",
                 zIndex,
               }}
+              onMouseDown={() => { hexLongPressFired.current = false; hexLongPressTimer.current = setTimeout(() => { hexLongPressFired.current = true; onDoubleTap?.(record); }, 500); }}
+              onTouchStart={() => { hexLongPressFired.current = false; hexLongPressTimer.current = setTimeout(() => { hexLongPressFired.current = true; onDoubleTap?.(record); }, 500); }}
               onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
               onTouchEnd={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
             >
@@ -2114,7 +2096,9 @@ function packTileRows(tiles, totalUnits) {
   return rows;
 }
 
-function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStartY, lastTapTime, lastTapRecordId, singleTapTimer }) {
+function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStartY }) {
+  const tileLongPressTimer = useRef(null);
+  const tileLongPressFired = useRef(false);
   const tileSize = units * UNIT + (units - 1) * GAP;
   const primaryGenre = getGenres(record)[0] || "";
   const genreHex = getGenrePalette(primaryGenre).hex;
@@ -2139,20 +2123,16 @@ function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStar
 
   return (
     <div
-      onClick={(e) => {
-        if (Math.abs(e.clientY - pointerStartY.current) > 10) return;
-        const now = Date.now();
-        if (now - lastTapTime.current < 300 && lastTapRecordId.current === record.id) {
-          clearTimeout(singleTapTimer.current);
-          lastTapTime.current = 0;
-          lastTapRecordId.current = null;
-          onDoubleTap?.(record);
-          return;
-        }
-        lastTapTime.current = now;
-        lastTapRecordId.current = record.id;
-        singleTapTimer.current = setTimeout(() => onSelect(record), 300);
+      onPointerDown={() => {
+        tileLongPressFired.current = false;
+        tileLongPressTimer.current = setTimeout(() => { tileLongPressFired.current = true; onDoubleTap?.(record); }, 500);
       }}
+      onPointerUp={(e) => {
+        clearTimeout(tileLongPressTimer.current);
+        if (!tileLongPressFired.current && Math.abs(e.clientY - pointerStartY.current) <= 10) onSelect(record);
+        tileLongPressFired.current = false;
+      }}
+      onPointerLeave={() => { clearTimeout(tileLongPressTimer.current); tileLongPressFired.current = false; }}
       style={{
         gridColumn: `span ${units}`,
         gridRow: `span ${units}`,
@@ -2184,9 +2164,6 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   const containerRef = useRef(null); // outer scroll container
   const innerRef = useRef(null);     // inner grid (for width measurement)
   const [containerWidth, setContainerWidth] = useState(0);
-  const lastTapTime = useRef(0);
-  const lastTapRecordId = useRef(null);
-  const singleTapTimer = useRef(null);
   const pointerStartY = useRef(0);   // for drag-vs-tap guard
 
   // Idle screensaver auto-pan
@@ -2294,9 +2271,6 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
           onSelect={onSelect}
           onDoubleTap={onDoubleTap}
           pointerStartY={pointerStartY}
-          lastTapTime={lastTapTime}
-          lastTapRecordId={lastTapRecordId}
-          singleTapTimer={singleTapTimer}
         />
       ))}
       </div>
@@ -7202,7 +7176,7 @@ export default function VinylCrate() {
         <div className="flex-1 flex flex-col overflow-hidden relative">
           {!seenHints["crate_play"] && collection.length > 0 && collection.length <= 10 && (
             <HintBanner onDismiss={() => dismissHint("crate_play")}>
-              Double-tap any record to instantly log a play and start your streak.
+              Long-press any record or tap ⏺ in list view to log a play and start your streak.
             </HintBanner>
           )}
           {viewMode !== "drift" && (!selected || tab !== "crate") && <div className="px-4 space-y-2 mb-1">
@@ -8383,7 +8357,7 @@ export default function VinylCrate() {
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
-              Double-tap a record in your crate to log a play — your sessions and streak live here.
+              Long-press any record in visual views, tap ⏺ in list view, or use the Log button in the detail card to log a play.
             </HintBanner>
           )}
           <div className="px-4">
@@ -8877,7 +8851,7 @@ export default function VinylCrate() {
                       <div className="text-center py-16 px-4">
                         <div className="text-2xl mb-2 text-stone-700">▷</div>
                         <div className="text-stone-600 text-sm">No plays logged yet.</div>
-                        <div className="text-stone-700 text-xs mt-1">Double-tap any record in your crate to log a play.</div>
+                        <div className="text-stone-700 text-xs mt-1">Long-press any record to log a play.</div>
                       </div>
                     )}
 
@@ -9703,7 +9677,7 @@ export default function VinylCrate() {
 
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
 
-      {/* Undo toast — appears for 4s after a double-tap log */}
+      {/* Undo toast — appears for 4s after logging a play */}
       {undoPending && (
         <div className="fixed left-1/2 -translate-x-1/2 z-[200] shadow-2xl" style={{ minWidth: 260, bottom: nowPlaying ? 92 : 80 }}>
           <div className="bg-stone-950 border border-stone-700/60 rounded-2xl px-4 py-3 backdrop-blur-sm flex items-center gap-3">
