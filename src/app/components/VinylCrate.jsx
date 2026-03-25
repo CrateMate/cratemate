@@ -2667,11 +2667,11 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     );
   }
 
-  // ±7 day window for release anniversary (handles year boundaries)
-  function withinWeekWindow(releaseMonth, releaseDay) {
+  // ±3 day window for release anniversary (handles year boundaries)
+  function withinNarrowWindow(releaseMonth, releaseDay) {
     for (const yr of [todayYear - 1, todayYear, todayYear + 1]) {
       const d = new Date(yr, releaseMonth - 1, releaseDay);
-      if (Math.abs(now - d.getTime()) / 86400000 <= 7) return true;
+      if (Math.abs(now - d.getTime()) / 86400000 <= 3) return true;
     }
     return false;
   }
@@ -2781,7 +2781,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       if (!r.release_month) return false;
       const releaseYear = r.year_original || r.year_pressed;
       if (!releaseYear || todayYear - releaseYear < 10) return false;
-      return withinWeekWindow(r.release_month, r.release_day);
+      return withinNarrowWindow(r.release_month, r.release_day);
     }).filter(notPlayedVeryRecently);
 
     if (exactDay.length > 0) {
@@ -2791,16 +2791,19 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       mainHookCandidates.push({
         type: "anniversary",
         record: pick,
-        fact: `"${pick.title}" by ${pick.artist} was released ${age} years ago this week.`,
+        fact: `"${pick.title}" by ${pick.artist} was released ${age} years ago today.`,
       });
     } else {
-      // Month-only fallback — must be a milestone year
+      // Month-only fallback — must be a milestone year, ±7 days from the 1st
       const monthMatch = myRecords.filter((r) => {
-        if (r.release_month !== todayMonth) return false;
+        if (!r.release_month) return false;
         const releaseYear = r.year_original || r.year_pressed;
         if (!releaseYear) return false;
         const age = todayYear - releaseYear;
-        return MILESTONE_YEARS.has(age);
+        if (!MILESTONE_YEARS.has(age)) return false;
+        // Only fire in the first 7 days of the release month
+        if (r.release_month !== todayMonth) return false;
+        return todayDay <= 7;
       }).filter(notPlayedVeryRecently);
 
       if (monthMatch.length > 0) {
