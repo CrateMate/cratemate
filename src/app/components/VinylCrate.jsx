@@ -4381,9 +4381,9 @@ async function generateCollectionDNA(stats, username) {
     const recs = (artistRecords || []).slice(0, 3);
     artistThumbsMap[artist] = [];
     for (const rec of recs) {
-      const idx = thumbPromises.length;
+      const localIdx = artistThumbsMap[artist].length;
       thumbPromises.push(
-        (rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null)).then(img => ({ artist, idx: artistThumbsMap[artist].length, img }))
+        (rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null)).then(img => ({ artist, idx: localIdx, img }))
       );
       artistThumbsMap[artist].push(null); // placeholder
     }
@@ -4484,6 +4484,58 @@ async function generateCollectionDNA(stats, username) {
     });
 
     curY += THUMB + 60;
+  }
+
+  // ── SOUND PROFILE ─────────────────────────────────────────────────────────
+  if (stats.audioProfile && curY < H - 300) {
+    curY += 16;
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('SOUND PROFILE', TX, curY);
+    curY += 44;
+
+    const { energy, valence, danceability, acousticness, tempo } = stats.audioProfile;
+    const bars = [
+      { label: 'Energy', value: energy, color: 'rgba(217,119,6,0.7)' },
+      { label: 'Mood', value: valence, color: 'rgba(225,29,72,0.6)' },
+      { label: 'Dance', value: danceability, color: 'rgba(5,150,105,0.6)' },
+      { label: 'Acoustic', value: acousticness, color: 'rgba(120,113,108,0.7)' },
+    ];
+    const barMaxW = W - TX * 2 - 160;
+    for (const { label, value, color } of bars) {
+      const v = Math.min(1, Math.max(0, value));
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = `400 26px "DM Sans", sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText(label, TX, curY);
+      // Track bg
+      ctx.save();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      canvasRoundRect(ctx, TX + 160, curY - 18, barMaxW, 20, 10); ctx.fill();
+      // Fill
+      ctx.fillStyle = color;
+      canvasRoundRect(ctx, TX + 160, curY - 18, Math.max(8, v * barMaxW), 20, 10); ctx.fill();
+      ctx.restore();
+      // Value %
+      ctx.fillStyle = 'rgba(255,255,255,0.50)';
+      ctx.font = `400 22px "DM Sans", sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(v * 100)}%`, W - TX, curY);
+      curY += 40;
+    }
+    // BPM
+    if (tempo) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = `400 26px "DM Sans", sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText('Avg BPM', TX, curY);
+      ctx.fillStyle = 'rgba(255,255,255,0.50)';
+      ctx.textAlign = 'right';
+      ctx.font = `400 26px "DM Sans", sans-serif`;
+      ctx.fillText(`${Math.round(tempo)}`, W - TX, curY);
+    }
   }
 
   drawCardFooter(ctx, W, H, logoImg, username);
@@ -9515,7 +9567,7 @@ export default function VinylCrate() {
                             .slice(0, 4)
                             .map(r => ({ id: r.id, title: r.title, artist: r.artist, thumb: r.thumb, heartCount: (r.favorite_tracks || []).length }));
                           const avg = (key) => spotifyData.reduce((s, f) => s + (f[key] || 0), 0) / (spotifyData.length || 1);
-                          const audioProfile = spotifyData.length > 0 ? { energy: avg("energy"), valence: avg("valence"), danceability: avg("danceability") } : null;
+                          const audioProfile = spotifyData.length > 0 ? { energy: avg("energy"), valence: avg("valence"), danceability: avg("danceability"), acousticness: avg("acousticness"), tempo: avg("tempo") } : null;
                           const stats = {
                             topGenres: topGenresList,
                             topDecades: topDecadesList,
