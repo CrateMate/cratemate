@@ -2825,12 +2825,10 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }
   }
 
-  // Pick randomly from whichever main hooks fired
-  if (mainHookCandidates.length > 0) {
-    return mainHookCandidates[Math.floor(Math.random() * mainHookCandidates.length)];
-  }
+  // ─── Collect strong hooks: main candidates + recent vibe match ────────────
+  const strongHooks = [...mainHookCandidates];
 
-  // ─── Priority 3: Recent vibe match (Last.fm) ──────────────────────────────
+  // Priority 3: Recent vibe match (Last.fm)
   // Uses recently-played artists as seeds to find a similar record in-collection
   // not played in 14+ days. Fires for all users (no Spotify required).
   if (lastfmVibeData?.map?.size > 0) {
@@ -2848,15 +2846,18 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       const pool = candidates.slice(0, 5);
       const { record } = pool[Math.floor(Math.random() * pool.length)];
       const seedNames = (lastfmVibeData.seeds || []).slice(0, 2).join(" and ");
-      return {
+      strongHooks.push({
         type: "recent_vibe",
         record,
         fact: seedNames
           ? `"${record.title}" by ${record.artist} is in the same sonic neighborhood as ${seedNames}, which you've been spinning lately.`
           : `"${record.title}" by ${record.artist} sounds like what you've been playing lately.`,
-      };
+      });
     }
   }
+
+  // Return all strong hooks (up to 4) — caller caches and serves probabilistically
+  if (strongHooks.length > 0) return strongHooks.slice(0, 4);
 
   // ─── Priority 4: Weather match ────────────────────────────────────────────
   // Matches the current weather mood to audio features via Spotify data.
@@ -2891,11 +2892,11 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       if (scored.length > 0) {
         const pick = scored[Math.floor(Math.random() * Math.min(5, scored.length))].record;
         const weatherLabel = todayWeather.label?.toLowerCase() || "today's weather";
-        return {
+        return [{
           type: "weather",
           record: pick,
           fact: `"${pick.title}" by ${pick.artist} is a perfect match for the ${weatherLabel}.`,
-        };
+        }];
       }
     }
   }
@@ -2926,11 +2927,11 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
         const pick = scored[Math.floor(Math.random() * Math.min(5, scored.length))].record;
         const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][todayDow];
         const vibeLabel = isFriday ? "high-energy Friday listen" : isSunday ? "relaxed Sunday listen" : isWeekend ? "weekend mood" : "mid-week listen";
-        return {
+        return [{
           type: "vibe",
           record: pick,
           fact: `"${pick.title}" by ${pick.artist} fits the ${dayName} ${vibeLabel} perfectly.`,
-        };
+        }];
       }
     }
   }
@@ -2950,11 +2951,11 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       const pool = [...seasonal].sort(() => Math.random() - 0.5).slice(0, 8);
       const pick = pool[Math.floor(Math.random() * pool.length)];
       const seasonLabel = season.charAt(0).toUpperCase() + season.slice(1);
-      return {
+      return [{
         type: "seasonal",
         record: pick,
         fact: `"${pick.title}" by ${pick.artist} has exactly the kind of sound that fits a ${seasonLabel} day.`,
-      };
+      }];
     }
   }
 
@@ -2971,11 +2972,11 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
 
     if (playedLastYear.length > 0) {
       const pick = playedLastYear[Math.floor(Math.random() * playedLastYear.length)];
-      return {
+      return [{
         type: "memory",
         record: pick,
         fact: `You played "${pick.title}" by ${pick.artist} around this time last year.`,
-      };
+      }];
     }
   }
 
@@ -3008,11 +3009,11 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       });
       const pick = topTier[Math.floor(Math.random() * topTier.length)];
       const age = todayYear - (pick.year_original || pick.year_pressed);
-      return {
+      return [{
         type: "milestone",
         record: pick,
         fact: `"${pick.title}" by ${pick.artist} turns ${age} this year — a milestone worth celebrating.`,
-      };
+      }];
     }
   }
 
@@ -3031,17 +3032,17 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
       const pick = pool[Math.floor(Math.random() * pool.length)];
       const daysSince = Math.floor((now - new Date(lastPlayedDates[pick.id]).getTime()) / 86400000);
       const plays = playCounts[pick.id] || 0;
-      return {
+      return [{
         type: "stale",
         record: pick,
         fact: plays > 1
           ? `You've played "${pick.title}" by ${pick.artist} ${plays} times, but not in ${daysSince} days.`
           : `You haven't played "${pick.title}" by ${pick.artist} in ${daysSince} days.`,
-      };
+      }];
     }
   }
 
-  return null;
+  return [];
 }
 
 // ─── CompareView ────────────────────────────────────────────────────────────
@@ -6337,7 +6338,42 @@ export default function VinylCrate() {
         });
         const activePool = recoFilteredRecords.length > 0 ? recoFilteredRecords : myRecords;
         if (type === "daily") {
-          // Try cultural/birthday hook first
+          const DAILY_CACHE_KEY = "cratemate_daily_picks";
+          const todayStr = new Date().toISOString().slice(0, 10);
+
+          // ── Check localStorage cache first ──
+          try {
+            const raw = localStorage.getItem(DAILY_CACHE_KEY);
+            if (raw) {
+              const cached = JSON.parse(raw);
+              if (cached.date === todayStr && Array.isArray(cached.picks)) {
+                const valid = cached.picks
+                  .map((p) => ({ ...p, record: myRecords.find((r) => String(r.id) === String(p.recordId)) }))
+                  .filter((p) => p.record);
+                if (valid.length > 0) {
+                  const pick = valid[Math.floor(Math.random() * valid.length)];
+                  setReco({ record: pick.record, reason: pick.reason, label: "Today's Pick" });
+                  return;
+                }
+              }
+            }
+          } catch {}
+
+          // ── No cache — run full pipeline ──
+          const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
+
+          async function generateHookReason(hook) {
+            const text = await callClaude(
+              [{ role: "user", content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: ${describeRecord(hook.record)}.\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}` }],
+              80, SYSTEM
+            );
+            const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+            let parsed;
+            try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+            if (Array.isArray(parsed)) parsed = parsed[0];
+            return parsed?.reason || hook.fact;
+          }
+
           let artistMembers = {};
           try {
             const uniqueArtists = [...new Set(myRecords.filter(r => !r.is_compilation).map(r => r.artist).filter(Boolean))];
@@ -6348,7 +6384,7 @@ export default function VinylCrate() {
             });
             if (res.ok) artistMembers = await res.json();
           } catch {}
-          // Fetch Last.fm vibe data based on recently-played artists
+
           let lastfmVibeData = null;
           try {
             const recentArtists = [...new Set(
@@ -6368,31 +6404,23 @@ export default function VinylCrate() {
               }
             }
           } catch {}
-          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers, todayWeather, playSessions, lastfmVibeData);
-          if (hook) {
-            const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-            const text = await callClaude(
-              [{
-                role: "user",
-                content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: ${describeRecord(hook.record)}.\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}`,
-              }],
-              80,
-              SYSTEM
-            );
-            const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
-            let parsed;
-            try { parsed = JSON.parse(stripped); } catch {
-              const m = stripped.match(/\{[\s\S]*\}/);
-              if (!m) throw new Error("no-json");
-              try { parsed = JSON.parse(m[0]); } catch { throw new Error("no-json"); }
-            }
-            if (Array.isArray(parsed)) parsed = parsed[0];
-            if (!parsed || typeof parsed.reason !== "string") throw new Error("bad-schema");
-            setReco({ record: hook.record, reason: parsed.reason, label: "Today's Pick" });
+
+          const hooks = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers, todayWeather, playSessions, lastfmVibeData);
+
+          if (hooks.length > 0) {
+            // Generate Claude reasons for all hooks in parallel
+            const picks = await Promise.all(hooks.map(async (hook) => {
+              const reason = await generateHookReason(hook);
+              return { recordId: hook.record.id, reason, hookType: hook.type };
+            }));
+            try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks })); } catch {}
+            const chosen = picks[Math.floor(Math.random() * picks.length)];
+            const record = myRecords.find((r) => String(r.id) === String(chosen.recordId));
+            setReco({ record, reason: chosen.reason, label: "Today's Pick" });
             return;
           }
 
-          // No hook — heuristic: score against recently played, exclude last 7 days
+          // No hooks — heuristic fallback (cache single result)
           const recentIds = new Set(
             Object.entries(lastPlayedDates)
               .filter(([, d]) => (Date.now() - new Date(d).getTime()) < 7 * 86400000)
@@ -6410,13 +6438,12 @@ export default function VinylCrate() {
           const deduped = dedupeByAlbum(activePool, playCounts);
           const scored = (pool.length ? pool : deduped).map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
-          const heuristicReason = `Chosen because it hasn't been played recently and fits the collection's sound.`;
-          const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
           const text = await callClaude([{ role: "user", content: `The record: ${describeRecord(picked)}.\n\nIt was chosen because it hasn't been played recently and fits the collection's sound. Write 1-2 warm casual sentences about why to put it on now — mention the genre or era if it helps.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 100, SYSTEM);
           const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
           let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
           if (Array.isArray(parsed)) parsed = parsed[0];
           if (!parsed?.reason) throw new Error("bad-schema");
+          try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks: [{ recordId: picked.id, reason: parsed.reason, hookType: "heuristic" }] })); } catch {}
           setReco({ record: picked, reason: parsed.reason, label: "Today's Pick" });
 
         } else if (type === "random") {
