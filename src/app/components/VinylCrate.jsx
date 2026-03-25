@@ -8123,13 +8123,15 @@ export default function VinylCrate() {
                           {honeycombSortDir === "asc" ? "↑" : "↓"}
                         </button>
                         <div className="w-px self-stretch bg-white/10" />
-                        {/* Shapes */}
-                        <button onClick={() => setHoneycombShape("honeycomb")}
-                          className={`px-2 py-1.5 transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "hover:text-stone-200"}`}>⬡</button>
-                        <button onClick={() => setHoneycombShape("grid")}
-                          className={`px-2 py-1.5 transition-colors ${honeycombShape === "grid" ? "text-amber-300" : "hover:text-stone-200"}`}>⊞</button>
-                        <button onClick={() => setHoneycombShape("tiles")}
-                          className={`px-2 py-1.5 transition-colors ${honeycombShape === "tiles" ? "text-amber-300" : "hover:text-stone-200"}`}>▦</button>
+                        {/* Shape — single cycle button */}
+                        <button
+                          onClick={() => {
+                            const order = ["honeycomb", "grid", "tiles"];
+                            setHoneycombShape(order[(order.indexOf(honeycombShape) + 1) % order.length]);
+                          }}
+                          className="px-2.5 py-1.5 text-amber-300 transition-colors"
+                          title={honeycombShape === "honeycomb" ? "Honeycomb" : honeycombShape === "grid" ? "Grid" : "Tiles"}
+                        >{{ honeycomb: "⬡", grid: "⊞", tiles: "▦" }[honeycombShape]}</button>
                         <div className="w-px self-stretch bg-white/10" />
                         {/* Zoom */}
                         <button
