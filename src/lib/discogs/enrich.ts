@@ -649,13 +649,13 @@ export async function enrichSingleRecord(
   const needsReleaseDateFix = r.release_month == null;
   // release_day === 0 is the "checked, not found" sentinel — skip
   const needsMbReleaseDate =
-    !r.is_compilation &&
     r.release_day == null &&
     r.year_original != null &&
     !!r.artist &&
     !!r.title;
   // artist_birth_month === 0 is the "checked" sentinel (0 = group or not found) — skip
-  let needsMbArtist = !r.is_compilation && r.artist_birth_month == null && !!r.artist;
+  const isVA = /^various(\s+artists?)?$/i.test((r.artist || "").trim());
+  let needsMbArtist = !isVA && r.artist_birth_month == null && !!r.artist;
 
   const needsDiscogs = r.discogs_id != null && (needsThumb || needsYearFix || needsReleaseDateFix);
 
@@ -940,14 +940,14 @@ export async function enrichReleaseDates({ userId }: { userId: string }) {
 }
 
 export async function enrichArtistDates({ userId }: { userId: string }) {
-  // Fetch user's non-compilation records missing artist birth month
+  // Fetch user's records missing artist birth month (skip Various Artists, not all compilations)
   const { data: records, error } = await supabase
     .from("records")
     .select("id, artist, artist_birth_month")
     .eq("user_id", userId)
-    .not("is_compilation", "is", true)
     .is("artist_birth_month", null)
-    .not("artist", "is", null);
+    .not("artist", "is", null)
+    .not("artist", "ilike", "various%");
 
   if (error) throw new Error("Failed to load records for artist enrichment");
 

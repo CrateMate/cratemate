@@ -2684,8 +2684,9 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
 
   // ─── Hook 1a: Artist or band member birthday ±1 day ──────────────────────
   {
+    const isVA = (a) => /^various(\s+artists?)?$/i.test((a || "").trim());
     const soloBirthday = myRecords.filter(
-      (r) => !r.is_compilation && withinDayWindow(r.artist_birth_month, r.artist_birth_day)
+      (r) => !isVA(r.artist) && withinDayWindow(r.artist_birth_month, r.artist_birth_day)
     ).filter(notPlayedVeryRecently);
 
     const memberBirthday = myRecords.filter((r) => {
@@ -2733,7 +2734,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
   // ─── Hook 1b: Artist or band member death anniversary ±1 day ─────────────
   {
     const soloDeath = myRecords.filter(
-      (r) => !r.is_compilation && withinDayWindow(r.artist_death_month, r.artist_death_day)
+      (r) => !isVA(r.artist) && withinDayWindow(r.artist_death_month, r.artist_death_day)
     ).filter(notPlayedVeryRecently);
 
     const memberDeath = myRecords.filter((r) => {
