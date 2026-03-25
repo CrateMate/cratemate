@@ -6364,17 +6364,19 @@ export default function VinylCrate() {
 
   // Background duration enrichment: fetch tracklist from Discogs cache and compute album duration
   const durationRunningRef = useRef(false);
+  const durationAbortRef = useRef(false);
   useEffect(() => {
     if (!Array.isArray(collection) || collection.length === 0) return;
     if (durationRunningRef.current) return;
     const needsDuration = collection.filter(r => r.discogs_id && !r.duration_secs);
     if (needsDuration.length === 0) return;
     durationRunningRef.current = true;
+    durationAbortRef.current = false;
 
     (async () => {
       await new Promise(res => setTimeout(res, 10000));
       for (const record of needsDuration) {
-        if (enrichmentAbort.current) break;
+        if (durationAbortRef.current) break;
         try {
           const res = await fetch(`/api/discogs/release/${record.discogs_id}`);
           if (res.status === 429) {
