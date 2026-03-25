@@ -2280,20 +2280,21 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   );
 }
 
-function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
+function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLogPlay, onSelect }) {
   if (!reco) return null;
   const { record, reason, label } = reco;
   return (
     <div className="rounded-2xl border border-stone-700/60 bg-stone-900/80 p-5 relative">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold uppercase tracking-widest text-amber-700">{label}</span>
-        <button onClick={onClose} className="text-stone-600 hover:text-stone-300 text-xl leading-none">
-          ×
-        </button>
+        <button onClick={onClose} className="text-stone-600 hover:text-stone-300 text-xl leading-none">×</button>
       </div>
-      <div className="flex items-center gap-4 mb-3">
+      <div
+        className="flex items-center gap-4 mb-3 cursor-pointer"
+        onClick={() => onSelect?.(record)}
+      >
         <CoverArt record={record} size={70} />
-        <div>
+        <div className="flex-1 min-w-0">
           <div
             style={{ fontFamily: "'Fraunces',serif", fontSize: 21 }}
             className="text-amber-50 font-semibold leading-tight"
@@ -2301,19 +2302,28 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set() }) {
             {record.title}
           </div>
           <div className="text-stone-400 text-sm">{record.artist}</div>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             {(record.year_original || record.year_pressed) && (
               <span className="text-stone-500 text-xs">{record.year_original || record.year_pressed}</span>
             )}
             {getGenres(record).map((g) => (
-              <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
+              <GenreTag key={g} genre={g} onClick={(g) => { onGenreClick?.(g); }} active={activeGenres.has(g)} />
             ))}
           </div>
         </div>
       </div>
       {reason && (
-        <div className="border-t border-white/[0.06] pt-3 text-stone-300 text-sm leading-relaxed italic">{reason}</div>
+        <div className="border-t border-white/[0.06] pt-3 pb-3 text-stone-300 text-sm leading-relaxed italic">{reason}</div>
       )}
+      <div className="flex items-center justify-end border-t border-white/[0.06] pt-3">
+        <button
+          onClick={() => onLogPlay?.(record.id)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-900/20 border border-amber-800/30 text-amber-400/80 text-xs font-medium hover:bg-amber-900/35 hover:text-amber-300 transition-colors"
+        >
+          <svg viewBox="0 0 8 10" fill="currentColor" className="w-2 h-2.5 shrink-0"><path d="M0 0L8 5L0 10z"/></svg>
+          Log play
+        </button>
+      </div>
     </div>
   );
 }
@@ -6355,7 +6365,7 @@ export default function VinylCrate() {
           setReco({ record: picked, reason: parsed.reason, label: "Today's Pick" });
 
         } else if (type === "random") {
-          // Weighted random: less-played records get higher weight. No Claude — instant result.
+          // Weighted random: less-played records get higher weight.
           const randomPool = dedupeByAlbum(activePool, playCounts);
           const weights = randomPool.map(r => 1 / ((playCounts[r.id] || 0) + 1));
           const total = weights.reduce((a, b) => a + b, 0);
@@ -6366,9 +6376,9 @@ export default function VinylCrate() {
             if (rand <= 0) { picked = randomPool[i]; break; }
           }
           const plays = playCounts[picked.id] || 0;
-          const reason = plays === 0
-            ? "You haven't played this one yet — time to fix that."
-            : `Played ${plays} time${plays > 1 ? "s" : ""}. The wheel landed here.`;
+          const SYSTEM = "You are a passionate music obsessive. Write exactly ONE casual sentence (under 20 words) about why to spin this record right now. Be specific to the artist, era, or sound — not generic. Return plain text only, no quotes.";
+          const prompt = `The wheel landed on: ${describeRecord(picked)}.${plays === 0 ? " Never played." : ` Played ${plays} time${plays > 1 ? "s" : ""}.`}`;
+          const reason = (await callClaude([{ role: "user", content: prompt }], 80, SYSTEM)).trim();
           setReco({ record: picked, reason, label: "Random Pick" });
 
         } else if (type === "next") {
@@ -8388,7 +8398,7 @@ export default function VinylCrate() {
           )}
           {recoError && <div className="text-red-500/70 text-sm text-center py-3">{recoError}</div>}
           {reco && !recoLoading && (
-            <RecoCard reco={reco} onClose={() => setReco(null)} onGenreClick={toggleGenre} activeGenres={activeGenres} />
+            <RecoCard reco={reco} onClose={() => setReco(null)} onGenreClick={toggleGenre} activeGenres={activeGenres} onLogPlay={handleLogPlay} onSelect={setSelected} />
           )}
           </div>
         </div>
