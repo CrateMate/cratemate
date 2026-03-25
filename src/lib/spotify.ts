@@ -175,6 +175,17 @@ export function bestTrackMatch(
 
 // ---------- Album features (client credentials) ----------
 
+export type TrackFeature = {
+  title: string;
+  position?: string;
+  energy: number;
+  tempo: number;
+  valence: number;
+  danceability: number;
+  acousticness: number;
+  loudness: number;
+};
+
 export type SpotifyFeatures = {
   energy: number;
   tempo: number;
@@ -184,6 +195,7 @@ export type SpotifyFeatures = {
   loudness: number;
   track_count: number;
   source?: "album" | "tracks" | "artist"; // which tier resolved the features
+  track_features?: TrackFeature[];
 };
 
 export type TracklistItem = {
@@ -303,6 +315,22 @@ async function reccoBeatsFeatures(trackIds: string[]): Promise<RawFeature[]> {
   return ((data.content || []) as (RawFeature | null)[]).filter(Boolean) as RawFeature[];
 }
 
+function buildTrackFeatures(
+  rawFeatures: RawFeature[],
+  trackNames: { title: string; position?: string }[]
+): TrackFeature[] {
+  return rawFeatures.map((f, i) => ({
+    title: trackNames[i]?.title || `Track ${i + 1}`,
+    position: trackNames[i]?.position,
+    energy: f.energy,
+    tempo: f.tempo,
+    valence: f.valence,
+    danceability: f.danceability,
+    acousticness: f.acousticness,
+    loudness: f.loudness,
+  }));
+}
+
 // Tier 2: search for individual tracks from the Discogs tracklist on Spotify,
 // then average their features. Needs ≥2 track matches to be considered valid.
 async function fetchFeaturesByTracks(
@@ -316,6 +344,7 @@ async function fetchFeaturesByTracks(
   if (candidates.length < 2) return null;
 
   const spotifyIds: string[] = [];
+  const matchedTracks: { title: string; position?: string }[] = [];
   for (const track of candidates) {
     const q = `track:${cleanTitle(track.title)} artist:${artist}`;
     const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=3`);
@@ -326,13 +355,18 @@ async function fetchFeaturesByTracks(
       normalise(t.name).includes(normalise(track.title)) ||
       normalise(track.title).includes(normalise(t.name))
     );
-    if (best) spotifyIds.push(best.id);
+    if (best) {
+      spotifyIds.push(best.id);
+      matchedTracks.push({ title: track.title, position: track.position });
+    }
   }
 
   if (spotifyIds.length < 2) return null;
   const valid = await reccoBeatsFeatures(spotifyIds);
   if (valid.length < 2) return null;
-  return avgFeatures(valid, "tracks");
+  const result = avgFeatures(valid, "tracks");
+  result.track_features = buildTrackFeatures(valid, matchedTracks);
+  return result;
 }
 
 // Tier 3: find the artist on Spotify and average their top tracks.
@@ -421,13 +455,17 @@ export async function fetchAlbumFeatures(
     const tracksRes = await spotifyGet(`/albums/${album.id}/tracks?limit=50`);
     if (tracksRes.ok) {
       const tracksData = await tracksRes.json();
-      const trackIds: string[] = (tracksData.items || [])
-        .map((t: { id: string }) => t.id)
-        .filter(Boolean);
+      const spotifyTracks: { id: string; name: string; track_number: number }[] = (tracksData.items || []).filter((t: { id: string }) => t.id);
+      const trackIds = spotifyTracks.map((t) => t.id);
       if (trackIds.length > 0) {
         const valid = await reccoBeatsFeatures(trackIds);
         console.log(`${tag} T1: album "${album.name}" found, ${trackIds.length} tracks → ReccoBeats returned ${valid.length}`);
-        if (valid.length > 0) return avgFeatures(valid, "album");
+        if (valid.length > 0) {
+          const trackNames = spotifyTracks.map((t) => ({ title: t.name, position: String(t.track_number) }));
+          const result = avgFeatures(valid, "album");
+          result.track_features = buildTrackFeatures(valid, trackNames);
+          return result;
+        }
       } else {
         console.log(`${tag} T1: album found but 0 track IDs`);
       }

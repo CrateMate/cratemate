@@ -89,9 +89,9 @@ export async function POST(request: Request) {
     return NextResponse.json(null);
   }
 
-  // `source` is a client-side label only — strip it before writing to DB
-  const { source, ...dbFields } = features;
-  const row = { record_id, ...dbFields };
+  // `source` and `track_features` handled separately
+  const { source, track_features, ...dbFields } = features;
+  const row = { record_id, ...dbFields, ...(track_features ? { track_features } : {}) };
   await supabase.from("spotify_features").upsert(row);
 
   // Store in shared features cache (without source)
