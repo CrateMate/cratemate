@@ -6363,17 +6363,24 @@ export default function VinylCrate() {
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Background duration enrichment: fetch tracklist from Discogs cache and compute album duration
+  const durationRunningRef = useRef(false);
   useEffect(() => {
     if (!Array.isArray(collection) || collection.length === 0) return;
+    if (durationRunningRef.current) return;
+    const needsDuration = collection.filter(r => r.discogs_id && !r.duration_secs);
+    if (needsDuration.length === 0) return;
+    durationRunningRef.current = true;
 
-    async function runDurationQueue() {
-      await new Promise(res => setTimeout(res, 10000)); // start after Discogs resolution queue
-      const needsDuration = collection.filter(r => r.discogs_id && !r.duration_secs);
-      if (needsDuration.length === 0) return;
+    (async () => {
+      await new Promise(res => setTimeout(res, 10000));
       for (const record of needsDuration) {
         if (enrichmentAbort.current) break;
         try {
           const res = await fetch(`/api/discogs/release/${record.discogs_id}`);
+          if (res.status === 429) {
+            await new Promise(r => setTimeout(r, 5000));
+            continue;
+          }
           if (res.ok) {
             const data = await res.json();
             const secs = parseDurationSecs(data.tracklist);
@@ -6386,12 +6393,13 @@ export default function VinylCrate() {
               setCollection(prev => Array.isArray(prev) ? prev.map(r => r.id === record.id ? { ...r, duration_secs: secs } : r) : prev);
             }
           }
-        } catch {}
-        await new Promise(res => setTimeout(res, 1500));
+        } catch (err) {
+          console.error(`[duration] Failed for ${record.title}:`, err);
+        }
+        await new Promise(res => setTimeout(res, 800));
       }
-    }
-
-    runDurationQueue();
+      durationRunningRef.current = false;
+    })();
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Feature 4 — Online/offline detection
