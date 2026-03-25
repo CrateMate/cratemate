@@ -5397,6 +5397,10 @@ export default function VinylCrate() {
   const [expandedSessions, setExpandedSessions] = useState(new Set());
   const [trailSavePrompt, setTrailSavePrompt] = useState(false);
   const [trailSaving, setTrailSaving] = useState(false);
+  const [trailAlreadyLoggedIds, setTrailAlreadyLoggedIds] = useState(new Set());
+  const [bannerPreviewDirection, setBannerPreviewDirection] = useState(null);
+  const [sessionToast, setSessionToast] = useState(null); // { recordId, record }
+  const sessionToastTimerRef = useRef(null);
 
 
   const [expandedHearts, setExpandedHearts] = useState(new Set());
@@ -6806,13 +6810,15 @@ export default function VinylCrate() {
     };
   }
 
-  async function enterTrail(record) {
+  async function enterTrail(record, seedAlreadyLogged = false) {
     setTrailCenter(record);
     setTrailHistory([record]);
     setTrailSuggestions(null);
     setTrailSearch("");
     setTrailSearchOpen(false);
     setTrailError("");
+    setTrailAlreadyLoggedIds(seedAlreadyLogged ? new Set([String(record.id)]) : new Set());
+    setBannerPreviewDirection(null);
     setTrailActive(true);
     setTrailLoading(true);
     try {
@@ -6868,19 +6874,26 @@ export default function VinylCrate() {
     setTrailSavePrompt(false);
     setTrailActive(false);
     setTrailSearchOpen(false);
+    setTrailAlreadyLoggedIds(new Set());
+    setTrailCenter(null);
+    setTrailHistory([]);
+    setTrailSuggestions(null);
   }
 
   async function saveTrailSession() {
     setTrailSaving(true);
     try {
       for (const record of trailHistory) {
-        await logPlay(record.id);
+        if (!trailAlreadyLoggedIds.has(String(record.id))) {
+          await logPlay(record.id);
+        }
       }
     } finally {
       setTrailSaving(false);
       setTrailSavePrompt(false);
       setTrailActive(false);
       setTrailSearchOpen(false);
+      setTrailAlreadyLoggedIds(new Set());
     }
   }
 
@@ -6944,6 +6957,26 @@ export default function VinylCrate() {
     // Silently enrich the played record — user interest signal
     silentEnrich(recordId);
     return sessionId;
+  }
+
+  async function handleLogPlay(recordId) {
+    await logPlay(recordId);
+    if (!trailCenter) return;
+    const msSinceLast = nowPlaying ? Date.now() - new Date(nowPlaying.loggedAt).getTime() : Infinity;
+    if (msSinceLast > SESSION_GAP_MS) {
+      // Stale session — clear trail silently
+      setTrailActive(false);
+      setTrailCenter(null);
+      setTrailHistory([]);
+      setTrailSuggestions(null);
+      setTrailAlreadyLoggedIds(new Set());
+    } else {
+      // Live session — show toast
+      const record = (collection || []).find(r => String(r.id) === String(recordId));
+      if (sessionToastTimerRef.current) clearTimeout(sessionToastTimerRef.current);
+      setSessionToast({ recordId, record });
+      sessionToastTimerRef.current = setTimeout(() => setSessionToast(null), 5000);
+    }
   }
 
   async function undoLogPlay(recordId) {
@@ -7415,7 +7448,7 @@ export default function VinylCrate() {
                   setSelected(rec);
                   if (!rec.for_sale) setLastPlayed(rec);
                 }}
-                onLogPlay={logPlay}
+                onLogPlay={handleLogPlay}
                 onDoubleTap={handleDoubleTap}
                 screensaverEnabled={screensaverEnabled}
                 onToggleScreensaver={() => {
@@ -7654,7 +7687,7 @@ export default function VinylCrate() {
                   activeGenres={activeGenres}
                   playCount={playCounts[r.id] || 0}
                   bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
-                  onLogPlay={logPlay}
+                  onLogPlay={handleLogPlay}
                   onDoubleTap={handleDoubleTap}
                 />
               ))}
@@ -7692,7 +7725,7 @@ export default function VinylCrate() {
                       activeGenres={activeGenres}
                       playCount={playCounts[r.id] || 0}
                       bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
-                      onLogPlay={logPlay}
+                      onLogPlay={handleLogPlay}
                       onDoubleTap={handleDoubleTap}
                     />
                   ))}
@@ -9547,7 +9580,7 @@ export default function VinylCrate() {
           activeGenres={activeGenres}
           onToggleForSale={toggleForSale}
           onDelete={handleDelete}
-          onLogPlay={logPlay}
+          onLogPlay={handleLogPlay}
           onEnrich={silentEnrich}
           onEnterTrail={(rec) => { enterTrail(rec); setSelected(null); }}
           onCompare={(rec) => { setCompareBase(rec); setCompareTarget(null); setSelected(null); }}
@@ -9714,6 +9747,49 @@ export default function VinylCrate() {
         </div>
       )}
 
+      {/* Preview backdrop — dismisses direction preview on outside tap */}
+      {bannerPreviewDirection && (
+        <div className="fixed inset-0 z-[185]" onClick={() => setBannerPreviewDirection(null)} />
+      )}
+
+      {/* Session toast — add to session or start fresh when logging while trail active */}
+      {sessionToast && (
+        <div className="fixed top-0 left-0 right-0 z-[500] flex justify-center">
+          <div className="bg-stone-900/98 border border-stone-700/60 rounded-2xl mx-4 mt-3 px-3 py-2.5 flex items-center gap-2.5 max-w-sm w-full shadow-xl backdrop-blur-md">
+            <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+              {sessionToast.record?.thumb
+                ? <img src={proxyArtUrl(upgradeDiscogsThumb(sessionToast.record.thumb) || sessionToast.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                : <div className="w-full h-full bg-stone-700" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-amber-50 text-xs font-medium truncate">{sessionToast.record?.title || "This record"}</div>
+              <div className="text-stone-500 text-[10px]">Add to your session?</div>
+            </div>
+            <button
+              onClick={() => {
+                navigateTrail(sessionToast.record);
+                setTrailAlreadyLoggedIds(prev => new Set([...prev, String(sessionToast.recordId)]));
+                if (sessionToastTimerRef.current) clearTimeout(sessionToastTimerRef.current);
+                setSessionToast(null);
+              }}
+              className="text-amber-400 text-xs font-medium shrink-0 px-2 py-1 rounded-lg hover:bg-amber-900/30 transition-colors"
+            >Add</button>
+            <button
+              onClick={() => {
+                enterTrail(sessionToast.record, true);
+                if (sessionToastTimerRef.current) clearTimeout(sessionToastTimerRef.current);
+                setSessionToast(null);
+              }}
+              className="text-stone-400 text-xs shrink-0 px-2 py-1 rounded-lg hover:bg-stone-800/50 transition-colors"
+            >Start fresh</button>
+            <button
+              onClick={() => { if (sessionToastTimerRef.current) clearTimeout(sessionToastTimerRef.current); setSessionToast(null); }}
+              className="text-stone-600 hover:text-stone-400 text-base leading-none shrink-0 transition-colors"
+            >×</button>
+          </div>
+        </div>
+      )}
+
       {/* Now Playing banner */}
       {nowPlaying && viewMode !== "drift" && (
         <div
@@ -9745,7 +9821,34 @@ export default function VinylCrate() {
                   <>
                     {trailSuggestions && !trailLoading && (
                       hasSpotifyFeatures ? (
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="relative flex items-center gap-1 shrink-0">
+                          {bannerPreviewDirection && (() => {
+                            const prev = trailSuggestions[bannerPreviewDirection];
+                            if (!prev) return null;
+                            const dirColors = { windDown: "#60a5fa", liftUp: "#f87171", sideways: "#a78bfa" };
+                            const color = dirColors[bannerPreviewDirection];
+                            return (
+                              <div
+                                className="absolute bottom-full mb-2 right-0 w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg"
+                                style={{ borderColor: `${color}44` }}
+                              >
+                                <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                                  {prev.record.thumb
+                                    ? <img src={proxyArtUrl(upgradeDiscogsThumb(prev.record.thumb) || prev.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                    : <div className="w-full h-full bg-stone-700" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
+                                  <div className="text-stone-500 text-[10px] truncate">{prev.record.artist}</div>
+                                </div>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); navigateTrail(prev.record); setBannerPreviewDirection(null); }}
+                                  className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
+                                  style={{ color, background: `${color}22` }}
+                                >→</button>
+                              </div>
+                            );
+                          })()}
                           {[
                             { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Wind down" },
                             { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Lift up" },
@@ -9756,10 +9859,22 @@ export default function VinylCrate() {
                             return (
                               <button
                                 key={key}
-                                onClick={(e) => { e.stopPropagation(); navigateTrail(s.record); }}
-                                title={`${label}: ${s.record.title}`}
-                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 transition-opacity hover:opacity-80"
-                                style={{ background: `${color}22`, border: `1px solid ${color}66`, color }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (bannerPreviewDirection === key) {
+                                    navigateTrail(s.record);
+                                    setBannerPreviewDirection(null);
+                                  } else {
+                                    setBannerPreviewDirection(key);
+                                  }
+                                }}
+                                title={label}
+                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 transition-all"
+                                style={{
+                                  background: bannerPreviewDirection === key ? `${color}44` : `${color}22`,
+                                  border: `1px solid ${color}${bannerPreviewDirection === key ? "99" : "66"}`,
+                                  color,
+                                }}
                               >{symbol}</button>
                             );
                           })}
@@ -9785,16 +9900,28 @@ export default function VinylCrate() {
                   </>
                 ) : (
                   <button
-                    onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record); setSelected(null); }}
+                    onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record, true); setSelected(null); }}
                     className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
                   >▷ Session</button>
                 )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    const sid = playSessions[0]?.id;
-                    setDismissedSessionId(sid);
-                    try { localStorage.setItem("cratemate_np_dismissed", sid || ""); } catch {}
+                    if (sessionMinimized) {
+                      if (trailHistory.length > 1) {
+                        setTrailActive(true);
+                        setTrailSavePrompt(true);
+                      } else {
+                        setTrailCenter(null);
+                        setTrailHistory([]);
+                        setTrailSuggestions(null);
+                        setTrailAlreadyLoggedIds(new Set());
+                      }
+                    } else {
+                      const sid = playSessions[0]?.id;
+                      setDismissedSessionId(sid);
+                      try { localStorage.setItem("cratemate_np_dismissed", sid || ""); } catch {}
+                    }
                   }}
                   className="text-stone-600 hover:text-stone-400 text-lg leading-none shrink-0 transition-colors"
                 >×</button>
