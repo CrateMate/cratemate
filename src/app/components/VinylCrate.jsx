@@ -5148,6 +5148,9 @@ export default function VinylCrate() {
     () => { try { return localStorage.getItem("cratemate_hide_for_sale") === "1"; } catch { return false; } }
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [devSimulateFree, setDevSimulateFree] = useState(() => {
+    try { return localStorage.getItem("cratemate_dev_simulate_free") === "1"; } catch { return false; }
+  });
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [compareBase, setCompareBase] = useState(null);   // record A
   const [compareTarget, setCompareTarget] = useState(null); // record B (null = picker mode)
@@ -6823,7 +6826,7 @@ export default function VinylCrate() {
 
   // For non-Spotify users: use Last.fm artist similarity to rank collection records
   async function fetchLastfmNextSuggestion(centerRecord, seenKeys) {
-    if (Object.keys(spotifyFeatures).length > 0) return; // Spotify users use audio features instead
+    if (!devSimulateFree && Object.keys(spotifyFeatures).length > 0) return; // Spotify users use audio features instead
     try {
       const artistName = stripArtistNum(centerRecord.artist || "").trim();
       if (!artistName) return;
@@ -9760,6 +9763,27 @@ export default function VinylCrate() {
                 </div>
               )}
             </div>
+
+            {/* Developer tools */}
+            <div className="mt-6 pt-4 border-t border-stone-800/40">
+              <div className="text-stone-700 text-[10px] uppercase tracking-widest mb-3">Developer</div>
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <div className="text-stone-400 text-sm">Simulate free user</div>
+                  <div className="text-stone-600 text-xs mt-0.5">Forces Last.fm Play Next instead of Spotify 3-way trail</div>
+                </div>
+                <button
+                  onClick={() => {
+                    const next = !devSimulateFree;
+                    setDevSimulateFree(next);
+                    try { localStorage.setItem("cratemate_dev_simulate_free", next ? "1" : "0"); } catch {}
+                  }}
+                  className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ml-4 ${devSimulateFree ? "bg-amber-600" : "bg-stone-700"}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${devSimulateFree ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -9847,7 +9871,7 @@ export default function VinylCrate() {
           {(() => {
             const sessionMinimized = !!(trailCenter && !trailActive);
             const bannerRecord = sessionMinimized ? trailCenter : nowPlaying.record;
-            const hasSpotifyFeatures = Object.keys(spotifyFeatures).length > 0;
+            const hasSpotifyFeatures = !devSimulateFree && Object.keys(spotifyFeatures).length > 0;
             return (
               <div className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto">
                 <div
