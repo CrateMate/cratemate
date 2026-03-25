@@ -83,8 +83,9 @@ export async function POST(request: Request) {
   // 4. Fetch features from Spotify → Tier 1 (album) → Tier 2 (tracks) → Tier 3 (artist)
   const features = await fetchAlbumFeatures(artist, title, tracklist).catch(() => null);
   if (!features) {
-    // Cache "not found" sentinel for 90 days (matches success TTL)
-    await upsertSpotifyFeaturesCache(cacheKey, {}, 90);
+    // Cache "not found" sentinel for 2 days — short TTL so transient API
+    // failures (e.g. ReccoBeats outage) auto-retry on the next pass
+    await upsertSpotifyFeaturesCache(cacheKey, {}, 2);
     return NextResponse.json(null);
   }
 

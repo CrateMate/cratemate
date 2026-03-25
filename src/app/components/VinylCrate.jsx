@@ -5377,7 +5377,7 @@ export default function VinylCrate() {
 
   // Shared fetch helper — deduplicates, normalises, writes to state.
   // Returns true if features were successfully stored.
-  async function fetchOneFeature(record) {
+  async function fetchOneFeature(record, { force = false } = {}) {
     const id = String(record.id);
     if (fetchingFeaturesRef.current.has(id)) return false;
     fetchingFeaturesRef.current.add(id);
@@ -5385,7 +5385,7 @@ export default function VinylCrate() {
       const res = await fetch("/api/spotify/features", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record_id: record.id, artist: record.artist, title: record.title }),
+        body: JSON.stringify({ record_id: record.id, artist: record.artist, title: record.title, ...(force && { force: true }) }),
       });
       if (!res.ok) return false;
       const data = await res.json();
@@ -9362,7 +9362,7 @@ export default function VinylCrate() {
                       .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
                       .slice(0, 10);
                     for (const record of uncached) {
-                      await fetchOneFeature(record);
+                      await fetchOneFeature(record, { force: true });
                     }
                     setSpotifyAnalyzing(false);
                   };
