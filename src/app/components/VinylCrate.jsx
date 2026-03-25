@@ -9801,20 +9801,22 @@ export default function VinylCrate() {
             const bannerRecord = sessionMinimized ? trailCenter : nowPlaying.record;
             const hasSpotifyFeatures = Object.keys(spotifyFeatures).length > 0;
             return (
-              <div
-                className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto cursor-pointer"
-                onClick={() => sessionMinimized ? setTrailActive(true) : setSelected(nowPlaying.record)}
-              >
-                <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
-                  {bannerRecord.thumb
-                    ? <img src={proxyArtUrl(upgradeDiscogsThumb(bannerRecord.thumb) || bannerRecord.thumb)} alt="" className="w-full h-full object-cover"
-                        onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                    : <div className="w-full h-full bg-stone-700" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-amber-50 text-sm truncate leading-tight">{bannerRecord.title}</div>
-                  <div className="text-stone-500 text-xs">
-                    {sessionMinimized ? `${trailHistory.length} in session` : relativePlayTime(nowPlaying.loggedAt)}
+              <div className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto">
+                <div
+                  className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                  onClick={() => setSelected(bannerRecord)}
+                >
+                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                    {bannerRecord.thumb
+                      ? <img src={proxyArtUrl(upgradeDiscogsThumb(bannerRecord.thumb) || bannerRecord.thumb)} alt="" className="w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                      : <div className="w-full h-full bg-stone-700" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-amber-50 text-sm truncate leading-tight">{bannerRecord.title}</div>
+                    <div className="text-stone-500 text-xs">
+                      {sessionMinimized ? `${trailHistory.length} in session` : relativePlayTime(nowPlaying.loggedAt)}
+                    </div>
                   </div>
                 </div>
                 {sessionMinimized ? (
