@@ -4327,6 +4327,7 @@ async function generateCollectionDNA(stats, username) {
   ctx.textAlign = 'left';
   let headerSub = username ? `@${username} · ` : '';
   headerSub += `${stats.totalRecords} records`;
+  if (stats.totalOwnedLabel) headerSub += ` · ${stats.totalOwnedLabel} of music`;
   if (stats.totalPlays > 0) headerSub += ` · ${stats.totalPlays} plays`;
   ctx.fillText(headerSub, TX, curY);
   curY += 70;
@@ -4605,154 +4606,225 @@ async function generateListeningDNA(stats, username) {
   ctx.fillText(sub, TX, curY);
   curY += 70;
 
-  // ── MOST PLAYED RECORDS ────────────────────────────────────────────────────
+  // ── GENRE BAR (by play count) ──────────────────────────────────────────────
+  if (stats.topGenres.length > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('WHAT YOU SPIN', TX, curY);
+    curY += 36;
+
+    const totalGenreCount = stats.topGenres.reduce((s, g) => s + g.count, 0);
+    const barH = 54;
+    const barW = W - 160;
+    let barX = TX;
+
+    for (const { genre, count } of stats.topGenres) {
+      const segW = Math.round((count / totalGenreCount) * barW);
+      if (segW < 1) continue;
+      const hex = getGenrePalette(genre).hex;
+      ctx.save();
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = hex;
+      ctx.fillRect(barX, curY, segW, barH);
+      if (segW > 90) {
+        ctx.beginPath(); ctx.rect(barX, curY, segW, barH); ctx.clip();
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.font = `500 22px "DM Sans", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(cap(genre), barX + segW / 2, curY + 35);
+      }
+      ctx.restore();
+      barX += segW;
+    }
+    curY += barH + 70;
+  }
+
+  // ── TOP ARTISTS BY PLAYS (with record thumbnails) ─────────────────────────
+  if (stats.topPlayedArtists.length > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('TOP ARTISTS', TX, curY);
+    ctx.textAlign = 'right';
+    ctx.fillText('PLAYS', W - TX, curY);
+    curY += 50;
+
+    // Load artist record thumbnails in parallel
+    const artistThumbsMap = {};
+    const thumbPromises = [];
+    for (const { artist, records: artistRecords } of stats.topPlayedArtists.slice(0, 5)) {
+      const recs = (artistRecords || []).slice(0, 5);
+      artistThumbsMap[artist] = [];
+      for (const rec of recs) {
+        const localIdx = artistThumbsMap[artist].length;
+        thumbPromises.push(
+          (rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null)).then(img => ({ artist, idx: localIdx, img }))
+        );
+        artistThumbsMap[artist].push(null);
+      }
+    }
+    const thumbResults = await Promise.all(thumbPromises);
+    for (const { artist, idx, img } of thumbResults) {
+      if (artistThumbsMap[artist]) artistThumbsMap[artist][idx] = img;
+    }
+
+    const ARTIST_THUMB = 56;
+    const ARTIST_THUMB_GAP = 6;
+    for (const { artist, count } of stats.topPlayedArtists.slice(0, 5)) {
+      if (curY > H - 600) break;
+      const cleanName = artist.replace(/\s*\(\d+\)\s*$/, '').trim();
+      ctx.fillStyle = '#fef3c7';
+      ctx.font = `700 58px "Fraunces", serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText(cleanName.length > 18 ? cleanName.slice(0, 16) + '…' : cleanName, TX, curY + 10);
+
+      // Play count on the right
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
+      ctx.font = `300 28px "DM Sans", sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${count}`, W - TX, curY + 6);
+
+      // Mini record thumbnails below the name
+      const thumbs = artistThumbsMap[artist] || [];
+      if (thumbs.length > 0) {
+        thumbs.forEach((img, ti) => {
+          const ttx = TX + ti * (ARTIST_THUMB + ARTIST_THUMB_GAP);
+          const tty = curY + 20;
+          ctx.save();
+          ctx.shadowColor = 'transparent';
+          canvasRoundRect(ctx, ttx, tty, ARTIST_THUMB, ARTIST_THUMB, 8);
+          ctx.clip();
+          if (img) {
+            ctx.drawImage(img, ttx, tty, ARTIST_THUMB, ARTIST_THUMB);
+          } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+            ctx.fillRect(ttx, tty, ARTIST_THUMB, ARTIST_THUMB);
+          }
+          ctx.restore();
+        });
+        curY += ARTIST_THUMB + 34;
+      } else {
+        curY += 20;
+      }
+      curY += 20;
+    }
+  }
+
+  // ── MOST PLAYED RECORDS — 2 rows × 5 ──────────────────────────────────────
   if (stats.topPlayed.length > 0) {
+    curY += 10;
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
     ctx.font = `500 26px "DM Sans", sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillText('MOST PLAYED', TX, curY);
     curY += 36;
 
-    const THUMB = 160;
-    const GAP = 16;
-    const recs = stats.topPlayed.slice(0, 4);
+    const THUMB = 164;
+    const GAP = 12;
+    const recs = stats.topPlayed.slice(0, 10);
+    const ROW_H = THUMB + 48;
 
     const thumbImgs = await Promise.all(
       recs.map(({ record: r }) => r.thumb ? loadImgForCanvas(r.thumb) : Promise.resolve(null))
     );
 
-    thumbImgs.forEach((img, i) => {
-      const tx = TX + i * (THUMB + GAP);
-      const ty = curY;
-      ctx.save();
-      ctx.shadowColor = 'transparent';
-      canvasRoundRect(ctx, tx, ty, THUMB, THUMB, 16);
-      ctx.clip();
-      if (img) {
-        ctx.drawImage(img, tx, ty, THUMB, THUMB);
-      } else {
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(tx, ty, THUMB, THUMB);
-      }
-      ctx.restore();
-      // Play count badge
-      const countStr = `▷ ${recs[i].count}`;
-      ctx.font = `600 16px "DM Sans", sans-serif`;
-      const badgeW = ctx.measureText(countStr).width + 14;
-      ctx.fillStyle = 'rgba(0,0,0,0.70)';
-      canvasRoundRect(ctx, tx + THUMB - badgeW - 4, ty + THUMB - 30, badgeW, 24, 8); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.90)';
-      ctx.textAlign = 'center';
-      ctx.fillText(countStr, tx + THUMB - badgeW / 2 - 4, ty + THUMB - 13);
-    });
+    for (let row = 0; row < 2; row++) {
+      const rowRecs = recs.slice(row * 5, row * 5 + 5);
+      if (rowRecs.length === 0) break;
+      const rowY = curY + row * (ROW_H + 8);
 
-    // Title + artist below
-    ctx.font = `500 20px "DM Sans", sans-serif`;
-    recs.forEach(({ record: r }, i) => {
-      const tx = TX + i * (THUMB + GAP);
-      const titleStr = (r.title || '').length > 14 ? r.title.slice(0, 12) + '…' : r.title;
-      const artistStr = (r.artist || '').replace(/\s*\(\d+\)\s*$/, '').trim();
-      const artistShort = artistStr.length > 14 ? artistStr.slice(0, 12) + '…' : artistStr;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(titleStr, tx, curY + THUMB + 22);
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = `300 18px "DM Sans", sans-serif`;
-      ctx.fillText(artistShort, tx, curY + THUMB + 44);
-      ctx.font = `500 20px "DM Sans", sans-serif`;
-    });
-
-    curY += THUMB + 64;
-  }
-
-  // ── TOP PLAYED ARTISTS ─────────────────────────────────────────────────────
-  if (stats.topPlayedArtists.length > 0 && curY < H - 550) {
-    curY += 10;
-    ctx.fillStyle = 'rgba(255,255,255,0.40)';
-    ctx.font = `500 26px "DM Sans", sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText('TOP ARTISTS BY PLAYS', TX, curY);
-    curY += 56;
-
-    const maxArtistPlays = stats.topPlayedArtists[0]?.count || 1;
-    const barMaxW = W - TX * 2 - 200;
-
-    for (const { artist, count } of stats.topPlayedArtists.slice(0, 5)) {
-      if (curY > H - 420) break;
-      const cleanName = artist.replace(/\s*\(\d+\)\s*$/, '').trim();
-      const displayName = cleanName.length > 20 ? cleanName.slice(0, 18) + '…' : cleanName;
-
-      // Artist name
-      ctx.fillStyle = '#fef3c7';
-      ctx.font = `600 38px "Fraunces", serif`;
-      ctx.textAlign = 'left';
-      ctx.fillText(displayName, TX, curY);
-
-      // Play count + proportional bar
-      const barW = Math.max(8, (count / maxArtistPlays) * barMaxW);
-      ctx.save();
-      ctx.shadowColor = 'transparent';
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      canvasRoundRect(ctx, TX, curY + 10, barMaxW + 60, 20, 10); ctx.fill();
-      ctx.fillStyle = 'rgba(245,158,11,0.5)';
-      canvasRoundRect(ctx, TX, curY + 10, barW, 20, 10); ctx.fill();
-      ctx.restore();
-
-      ctx.fillStyle = 'rgba(255,255,255,0.70)';
-      ctx.font = `400 26px "DM Sans", sans-serif`;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${count} plays`, W - TX, curY);
-
-      curY += 72;
-    }
-  }
-
-  // ── DAY OF WEEK CHART ──────────────────────────────────────────────────────
-  if (stats.byDow && curY < H - 350) {
-    curY += 20;
-    ctx.fillStyle = 'rgba(255,255,255,0.40)';
-    ctx.font = `500 26px "DM Sans", sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText('WHEN YOU LISTEN', TX, curY);
-    curY += 40;
-
-    const dowLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const maxDow = Math.max(...stats.byDow, 1);
-    const colW = 100;
-    const colGap = 20;
-    const chartH = 140;
-    const chartStartX = TX + 30;
-
-    for (let i = 0; i < 7; i++) {
-      const cx = chartStartX + i * (colW + colGap);
-      const val = stats.byDow[i];
-      const barH = Math.max(4, (val / maxDow) * chartH);
-      const barY = curY + chartH - barH;
-
-      ctx.save();
-      ctx.shadowColor = 'transparent';
-      // Bar
-      const isWeekend = i === 0 || i === 6;
-      ctx.fillStyle = isWeekend ? 'rgba(245,158,11,0.55)' : 'rgba(255,255,255,0.18)';
-      canvasRoundRect(ctx, cx, barY, colW, barH, 8); ctx.fill();
-
-      // Count on top of bar
-      if (val > 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.65)';
-        ctx.font = `500 22px "DM Sans", sans-serif`;
+      rowRecs.forEach(({ record: r, count }, i) => {
+        const gi = row * 5 + i;
+        const tx = TX + i * (THUMB + GAP);
+        const ty = rowY;
+        const img = thumbImgs[gi];
+        ctx.save();
+        ctx.shadowColor = 'transparent';
+        canvasRoundRect(ctx, tx, ty, THUMB, THUMB, 14);
+        ctx.clip();
+        if (img) {
+          ctx.drawImage(img, tx, ty, THUMB, THUMB);
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          ctx.fillRect(tx, ty, THUMB, THUMB);
+        }
+        ctx.restore();
+        // Play count badge
+        const countStr = `▷ ${count}`;
+        ctx.font = `600 15px "DM Sans", sans-serif`;
+        const badgeW = ctx.measureText(countStr).width + 12;
+        ctx.fillStyle = 'rgba(0,0,0,0.70)';
+        canvasRoundRect(ctx, tx + THUMB - badgeW - 4, ty + THUMB - 28, badgeW, 22, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.90)';
         ctx.textAlign = 'center';
-        ctx.fillText(`${val}`, cx + colW / 2, barY - 8);
-      }
-      ctx.restore();
-
-      // Day label below
-      ctx.fillStyle = isWeekend ? 'rgba(245,158,11,0.70)' : 'rgba(255,255,255,0.40)';
-      ctx.font = `400 22px "DM Sans", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText(dowLabels[i], cx + colW / 2, curY + chartH + 28);
+        ctx.fillText(countStr, tx + THUMB - badgeW / 2 - 4, ty + THUMB - 12);
+        // Title + artist below
+        const titleStr = (r.title || '').length > 14 ? r.title.slice(0, 12) + '…' : r.title;
+        const artistStr = (r.artist || '').replace(/\s*\(\d+\)\s*$/, '').trim();
+        const artistShort = artistStr.length > 14 ? artistStr.slice(0, 12) + '…' : artistStr;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.font = `500 18px "DM Sans", sans-serif`;
+        ctx.fillText(titleStr, tx, ty + THUMB + 20);
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.font = `300 16px "DM Sans", sans-serif`;
+        ctx.fillText(artistShort, tx, ty + THUMB + 38);
+      });
     }
 
-    curY += chartH + 50;
+    const rows = Math.min(2, Math.ceil(recs.length / 5));
+    curY += rows * (ROW_H + 8) + 10;
+  }
+
+  // ── SOUND PROFILE (play-weighted, anchored above footer) ───────────────────
+  if (stats.playAudioProfile) {
+    const { energy, valence, danceability, acousticness, tempo } = stats.playAudioProfile;
+    const bars = [
+      { label: 'Energy', value: energy, color: 'rgba(217,119,6,0.7)' },
+      { label: 'Mood', value: valence, color: 'rgba(225,29,72,0.6)' },
+      { label: 'Dance', value: danceability, color: 'rgba(5,150,105,0.6)' },
+      { label: 'Acoustic', value: acousticness, color: 'rgba(120,113,108,0.7)' },
+    ];
+    const barMaxW = W - TX * 2 - 160;
+    const profileH = bars.length * 40 + (tempo ? 40 : 0) + 44;
+    let py = H - 136 - 24 - profileH;
+    if (py > curY + 20) {
+      ctx.fillStyle = 'rgba(255,255,255,0.40)';
+      ctx.font = `500 26px "DM Sans", sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillText('SOUND PROFILE (BY PLAYS)', TX, py);
+      py += 44;
+
+      for (const { label, value, color } of bars) {
+        const v = Math.min(1, Math.max(0, value));
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = `400 26px "DM Sans", sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText(label, TX, py);
+        ctx.save();
+        ctx.shadowColor = 'transparent';
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        canvasRoundRect(ctx, TX + 160, py - 18, barMaxW, 20, 10); ctx.fill();
+        ctx.fillStyle = color;
+        canvasRoundRect(ctx, TX + 160, py - 18, Math.max(8, v * barMaxW), 20, 10); ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = 'rgba(255,255,255,0.50)';
+        ctx.font = `400 22px "DM Sans", sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(v * 100)}%`, W - TX, py);
+        py += 40;
+      }
+      if (tempo) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = `400 26px "DM Sans", sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText('Avg BPM', TX, py);
+        ctx.fillStyle = 'rgba(255,255,255,0.50)';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(tempo)}`, W - TX, py);
+      }
+    }
   }
 
   drawCardFooter(ctx, W, H, logoImg, username);
@@ -9329,24 +9401,54 @@ export default function VinylCrate() {
                             if (dnaGenerating) return;
                             setDnaGenerating(true);
                             try {
-                              const topGenresList = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([genre, count]) => ({ genre, count }));
+                              // Genre bar by play count (not record count)
+                              const playGenreCounts = {};
+                              for (const [id, count] of Object.entries(playCounts)) {
+                                const rec = myRecords.find(r => String(r.id) === String(id));
+                                if (!rec) continue;
+                                for (const g of getGenres(rec)) playGenreCounts[g] = (playGenreCounts[g] || 0) + count;
+                              }
+                              const topGenresList = Object.entries(playGenreCounts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([genre, count]) => ({ genre, count }));
+
+                              // Top artists by plays with record thumbnails
                               const artistPlayCounts = {};
                               for (const [id, count] of Object.entries(playCounts)) {
                                 const rec = myRecords.find(r => String(r.id) === String(id));
                                 if (rec?.artist) artistPlayCounts[rec.artist] = (artistPlayCounts[rec.artist] || 0) + count;
                               }
-                              const topPlayedArtists = Object.entries(artistPlayCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([artist, count]) => ({ artist, count }));
+                              const topPlayedArtists = Object.entries(artistPlayCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([artist, count]) => ({
+                                artist, count,
+                                records: myRecords.filter(r => r.artist === artist).slice(0, 5).map(r => ({ thumb: r.thumb })),
+                              }));
+
+                              // Play-weighted audio profile
+                              const myIds = new Set(myRecords.map(r => r.id));
+                              let wEnergy = 0, wValence = 0, wDance = 0, wAcoustic = 0, wTempo = 0, wTotal = 0;
+                              for (const [id, count] of Object.entries(playCounts)) {
+                                if (!myIds.has(id)) continue;
+                                const f = spotifyFeatures[id];
+                                if (!f) continue;
+                                wEnergy += f.energy * count; wValence += f.valence * count;
+                                wDance += f.danceability * count; wAcoustic += f.acousticness * count;
+                                wTempo += (f.tempo || 0) * count; wTotal += count;
+                              }
+                              const playAudioProfile = wTotal > 0 ? {
+                                energy: wEnergy / wTotal, valence: wValence / wTotal,
+                                danceability: wDance / wTotal, acousticness: wAcoustic / wTotal,
+                                tempo: wTempo / wTotal,
+                              } : null;
+
                               const uniqueRecords = new Set(Object.keys(playCounts).filter(id => (playCounts[id] || 0) > 0)).size;
                               const listeningStats = {
                                 topGenres: topGenresList,
                                 totalPlays,
                                 totalListeningLabel: totalListeningLabel,
-                                topPlayed: topPlayed.slice(0, 4),
+                                topPlayed: topPlayed.slice(0, 10),
                                 topPlayedArtists,
-                                byDow,
                                 streak,
                                 nightPlays, dayPlays, weekendPlays, weekdayPlays,
                                 uniqueRecords,
+                                playAudioProfile,
                               };
                               const canvas = await generateListeningDNA(listeningStats, discogsUsername);
                               const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
@@ -9580,6 +9682,10 @@ export default function VinylCrate() {
                             audioProfile,
                             totalRecords: myRecords.length,
                             totalPlays: Object.values(playCounts).reduce((s, v) => s + v, 0),
+                            totalOwnedLabel: (() => {
+                              const secs = myRecords.reduce((s, r) => s + (r.duration_secs || 0), 0);
+                              return secs > 0 ? formatListeningTime(secs) : null;
+                            })(),
                           };
                           const canvas = await generateCollectionDNA(stats, discogsUsername);
                           const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
