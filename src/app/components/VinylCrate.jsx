@@ -8151,8 +8151,12 @@ export default function VinylCrate() {
                                 localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
                                 setScreensaverEnabled(next);
                               }}
-                              className={`px-2 py-1.5 transition-colors ${screensaverEnabled ? "text-amber-300" : "hover:text-stone-200"}`}
-                            >⟳</button>
+                              className={`px-3.5 py-1.5 text-sm transition-colors relative ${screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-200"}`}
+                              title={screensaverEnabled ? "Auto-pan ON" : "Auto-pan OFF"}
+                            >
+                              ⟳
+                              {screensaverEnabled && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                            </button>
                           </>
                         )}
                         <div className="w-px self-stretch bg-white/10" />
