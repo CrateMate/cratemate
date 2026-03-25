@@ -5897,6 +5897,11 @@ export default function VinylCrate() {
     setHeaderVisible(true);
     lastScrollY.current = 0;
     upScrollAccum.current = 0;
+    // Exit fullscreen when switching tabs or leaving drift
+    if (controlsHidden) {
+      driftFullscreenRef.current = false;
+      setControlsHidden(false);
+    }
   }, [tab, page]); // reset on tab change AND page change
 
   const [isDiscoverable, setIsDiscoverable] = useState(false);
@@ -8016,19 +8021,18 @@ export default function VinylCrate() {
                 const hasFilter = statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null;
                 return (
                   <>
-                    {/* Tap overlay to show controls when faded */}
+                    {/* Small corner button to restore controls when faded — doesn't block scroll */}
                     {controlsHidden && (
-                      <div
-                        className="absolute inset-0 z-40"
-                        onClick={(e) => {
-                          if (e.target === e.currentTarget) {
-                            driftFullscreenRef.current = false;
-                            setControlsHidden(false);
-                            driftResetFade();
-                          }
+                      <button
+                        onClick={() => {
+                          driftFullscreenRef.current = false;
+                          setControlsHidden(false);
+                          driftResetFade();
                         }}
-                        style={{ pointerEvents: "auto" }}
-                      />
+                        className="absolute top-4 right-4 z-50 w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+                      </button>
                     )}
 
                     {/* Top-left: back + share + downloads */}
@@ -8136,17 +8140,21 @@ export default function VinylCrate() {
                           onClick={() => setHoneycombZoom((z) => Math.min(1.8, parseFloat((z + 0.25).toFixed(2))))}
                           className="px-2 py-1.5 hover:text-amber-300 transition-colors"
                         >+</button>
-                        <div className="w-px self-stretch bg-white/10" />
-                        {/* Auto-pan */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const next = !screensaverEnabled;
-                            localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
-                            setScreensaverEnabled(next);
-                          }}
-                          className={`px-2 py-1.5 transition-colors ${screensaverEnabled ? "text-amber-300" : "hover:text-stone-200"}`}
-                        >⟳</button>
+                        {/* Auto-pan — only for honeycomb/grid, not tiles */}
+                        {honeycombShape !== "tiles" && (
+                          <>
+                            <div className="w-px self-stretch bg-white/10" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const next = !screensaverEnabled;
+                                localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
+                                setScreensaverEnabled(next);
+                              }}
+                              className={`px-2 py-1.5 transition-colors ${screensaverEnabled ? "text-amber-300" : "hover:text-stone-200"}`}
+                            >⟳</button>
+                          </>
+                        )}
                         <div className="w-px self-stretch bg-white/10" />
                         {/* Fullscreen toggle — stays hidden until tap */}
                         <button
