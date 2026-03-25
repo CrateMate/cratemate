@@ -3260,7 +3260,7 @@ function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playC
   );
 }
 
-function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, playCounts, savePrompt, saving, onSaveSession, onDiscardSession }) {
+function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, onMinimize, playCounts, savePrompt, saving, onSaveSession, onDiscardSession }) {
   const CENTER = 140;
   const SLOT = 100;
   const GAP = 18;
@@ -3286,7 +3286,9 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
           ← Close
         </button>
         <span className="text-stone-600 text-xs uppercase tracking-widest">Your Session</span>
-        <div className="w-12" />
+        <button onClick={onMinimize} className="w-12 flex justify-end text-stone-500 hover:text-stone-300 transition-colors" title="Minimize session">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-5 h-5"><path d="M19 15l-7 7-7-7"/></svg>
+        </button>
       </div>
 
       {/* History strip */}
@@ -6828,6 +6830,10 @@ export default function VinylCrate() {
     }
   }
 
+  function minimizeTrail() {
+    setTrailActive(false);
+  }
+
   async function navigateTrail(record) {
     setTrailCenter(record);
     // Compute the full history set synchronously before the state update applies
@@ -9728,10 +9734,20 @@ export default function VinylCrate() {
               <div className="text-amber-50 text-sm truncate leading-tight">{nowPlaying.record.title}</div>
               <div className="text-stone-500 text-xs">{relativePlayTime(nowPlaying.loggedAt)}</div>
             </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record); setSelected(null); }}
-              className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
-            >▷ Session</button>
+            {trailCenter && !trailActive ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); setTrailActive(true); setSelected(null); }}
+                className="px-3 py-1.5 rounded-full border border-amber-700/60 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0 flex items-center gap-1"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
+                Resume
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record); setSelected(null); }}
+                className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
+              >▷ Session</button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -9761,6 +9777,7 @@ export default function VinylCrate() {
           onSearchChange={setTrailSearch}
           onToggleSearch={() => setTrailSearchOpen(o => !o)}
           onClose={handleTrailClose}
+          onMinimize={minimizeTrail}
           playCounts={playCounts}
           savePrompt={trailSavePrompt}
           saving={trailSaving}
