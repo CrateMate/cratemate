@@ -4320,7 +4320,8 @@ async function generateCollectionDNA(stats, username) {
     pillX += pillW + 10;
   }
 
-  // Username + record count + total plays
+  // Username + record count + hours owned
+  const SEC_GAP = 60; // consistent spacing between all sections
   let curY = pillY + pillH + 40;
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = `300 32px "DM Sans", sans-serif`;
@@ -4328,9 +4329,13 @@ async function generateCollectionDNA(stats, username) {
   let headerSub = username ? `@${username} · ` : '';
   headerSub += `${stats.totalRecords} records`;
   if (stats.totalOwnedLabel) headerSub += ` · ${stats.totalOwnedLabel} of music`;
-  if (stats.totalPlays > 0) headerSub += ` · ${stats.totalPlays} plays`;
   ctx.fillText(headerSub, TX, curY);
-  curY += 70;
+  curY += SEC_GAP;
+
+  // ── Shared constants for record grids ──
+  const REC_THUMB = 176;
+  const REC_GAP = 11;
+  const REC_ROW_H = REC_THUMB + 48;
 
   // ── GENRE BAR ──────────────────────────────────────────────────────────────
   if (stats.topGenres.length > 0) {
@@ -4363,7 +4368,7 @@ async function generateCollectionDNA(stats, username) {
       ctx.restore();
       barX += segW;
     }
-    curY += barH + 70;
+    curY += barH + SEC_GAP;
   }
 
   // ── FAVORITE ARTISTS (with record thumbnails) ─────────────────────────────
@@ -4386,7 +4391,7 @@ async function generateCollectionDNA(stats, username) {
       thumbPromises.push(
         (rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null)).then(img => ({ artist, idx: localIdx, img }))
       );
-      artistThumbsMap[artist].push(null); // placeholder
+      artistThumbsMap[artist].push(null);
     }
   }
   const thumbResults = await Promise.all(thumbPromises);
@@ -4404,7 +4409,6 @@ async function generateCollectionDNA(stats, username) {
     ctx.textAlign = 'left';
     ctx.fillText(cleanName.length > 22 ? cleanName.slice(0, 20) + '…' : cleanName, TX, curY + 10);
 
-    // Mini record thumbnails on the right
     const thumbs = artistThumbsMap[artist] || [];
     const thumbStartX = W - TX - (thumbs.length * (ARTIST_THUMB + ARTIST_THUMB_GAP) - ARTIST_THUMB_GAP);
     thumbs.forEach((img, ti) => {
@@ -4426,20 +4430,16 @@ async function generateCollectionDNA(stats, username) {
     curY += 74;
   }
 
-  // ── FAVORITE RECORDS (by hearts) — 2 rows of 5 ─────────────────────────────
+  // ── FAVORITE RECORDS (by % hearted) — 2 rows of 5 ─────────────────────────
   if (stats.favoriteRecords && stats.favoriteRecords.length > 0) {
-    curY += 24;
+    curY += SEC_GAP - 14;
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
     ctx.font = `500 26px "DM Sans", sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillText('FAVORITE RECORDS', TX, curY);
     curY += 36;
 
-    const THUMB = 164;
-    const GAP = 12;
     const favs = stats.favoriteRecords.slice(0, 10);
-    const startX = TX;
-    const ROW_H = THUMB + 48; // art + text below
 
     const thumbImgs = await Promise.all(
       favs.map(rec => rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null))
@@ -4448,47 +4448,47 @@ async function generateCollectionDNA(stats, username) {
     for (let row = 0; row < 2; row++) {
       const rowFavs = favs.slice(row * 5, row * 5 + 5);
       if (rowFavs.length === 0) break;
-      const rowY = curY + row * (ROW_H + 8);
+      const rowY = curY + row * (REC_ROW_H + 8);
 
       rowFavs.forEach((rec, i) => {
         const gi = row * 5 + i;
-        const tx = startX + i * (THUMB + GAP);
+        const tx = TX + i * (REC_THUMB + REC_GAP);
         const ty = rowY;
         const img = thumbImgs[gi];
         ctx.save();
         ctx.shadowColor = 'transparent';
-        canvasRoundRect(ctx, tx, ty, THUMB, THUMB, 14);
+        canvasRoundRect(ctx, tx, ty, REC_THUMB, REC_THUMB, 14);
         ctx.clip();
         if (img) {
-          ctx.drawImage(img, tx, ty, THUMB, THUMB);
+          ctx.drawImage(img, tx, ty, REC_THUMB, REC_THUMB);
         } else {
           ctx.fillStyle = 'rgba(255,255,255,0.08)';
-          ctx.fillRect(tx, ty, THUMB, THUMB);
+          ctx.fillRect(tx, ty, REC_THUMB, REC_THUMB);
         }
         ctx.restore();
         // Heart badge
         ctx.fillStyle = 'rgba(220,38,38,0.85)';
-        canvasRoundRect(ctx, tx + THUMB - 40, ty + THUMB - 30, 36, 24, 8); ctx.fill();
+        canvasRoundRect(ctx, tx + REC_THUMB - 40, ty + REC_THUMB - 30, 36, 24, 8); ctx.fill();
         ctx.fillStyle = 'white';
         ctx.font = `500 15px "DM Sans", sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(`♥${rec.heartCount}`, tx + THUMB - 22, ty + THUMB - 13);
+        ctx.fillText(`♥${rec.heartCount}`, tx + REC_THUMB - 22, ty + REC_THUMB - 13);
         // Title + artist below
-        const titleStr = (rec.title || '').length > 14 ? rec.title.slice(0, 12) + '…' : rec.title;
+        const titleStr = (rec.title || '').length > 15 ? rec.title.slice(0, 13) + '…' : rec.title;
         const artistStr = (rec.artist || '').replace(/\s*\(\d+\)\s*$/, '').trim();
-        const artistShort = artistStr.length > 14 ? artistStr.slice(0, 12) + '…' : artistStr;
+        const artistShort = artistStr.length > 15 ? artistStr.slice(0, 13) + '…' : artistStr;
         ctx.textAlign = 'left';
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.font = `500 18px "DM Sans", sans-serif`;
-        ctx.fillText(titleStr, tx, ty + THUMB + 20);
+        ctx.fillText(titleStr, tx, ty + REC_THUMB + 20);
         ctx.fillStyle = 'rgba(255,255,255,0.45)';
         ctx.font = `300 16px "DM Sans", sans-serif`;
-        ctx.fillText(artistShort, tx, ty + THUMB + 38);
+        ctx.fillText(artistShort, tx, ty + REC_THUMB + 38);
       });
     }
 
     const rows = Math.min(2, Math.ceil(favs.length / 5));
-    curY += rows * (ROW_H + 8) + 10;
+    curY += rows * (REC_ROW_H + 8);
   }
 
   // ── SOUND PROFILE (anchored above footer) ──────────────────────────────────
@@ -4501,11 +4501,9 @@ async function generateCollectionDNA(stats, username) {
       { label: 'Acoustic', value: acousticness, color: 'rgba(120,113,108,0.7)' },
     ];
     const barMaxW = W - TX * 2 - 160;
-    // Anchor from bottom: footer starts at H-136, leave 24px gap
     const profileH = bars.length * 40 + (tempo ? 40 : 0) + 44;
     let py = H - 136 - 24 - profileH;
-    // Only draw if there's room (don't overlap favorite records)
-    if (py > curY + 20) {
+    if (py > curY + SEC_GAP) {
       ctx.fillStyle = 'rgba(255,255,255,0.40)';
       ctx.font = `500 26px "DM Sans", sans-serif`;
       ctx.textAlign = 'left';
@@ -4557,6 +4555,10 @@ async function generateListeningDNA(stats, username) {
   const ctx = canvas.getContext("2d");
   const logoImg = await loadCardLogo();
   const TX = 80;
+  const SEC_GAP = 60;
+  const REC_THUMB = 176;
+  const REC_GAP = 11;
+  const REC_ROW_H = REC_THUMB + 48;
 
   drawCardGradient(ctx, W, H, stats.topGenres);
   drawCardShadow(ctx);
@@ -4595,7 +4597,7 @@ async function generateListeningDNA(stats, username) {
     pillX += pillW + 10;
   }
 
-  // Subtitle: plays + listening time
+  // Subtitle
   let curY = pillY + pillH + 40;
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = `300 32px "DM Sans", sans-serif`;
@@ -4604,7 +4606,7 @@ async function generateListeningDNA(stats, username) {
   sub += `${stats.totalPlays} plays`;
   if (stats.totalListeningLabel) sub += ` · ${stats.totalListeningLabel} listened`;
   ctx.fillText(sub, TX, curY);
-  curY += 70;
+  curY += SEC_GAP;
 
   // ── GENRE BAR (by play count) ──────────────────────────────────────────────
   if (stats.topGenres.length > 0) {
@@ -4637,10 +4639,10 @@ async function generateListeningDNA(stats, username) {
       ctx.restore();
       barX += segW;
     }
-    curY += barH + 70;
+    curY += barH + SEC_GAP;
   }
 
-  // ── TOP ARTISTS BY PLAYS (with record thumbnails) ─────────────────────────
+  // ── TOP ARTISTS (same layout as collection card) ──────────────────────────
   if (stats.topPlayedArtists.length > 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
     ctx.font = `500 26px "DM Sans", sans-serif`;
@@ -4650,7 +4652,6 @@ async function generateListeningDNA(stats, username) {
     ctx.fillText('PLAYS', W - TX, curY);
     curY += 50;
 
-    // Load artist record thumbnails in parallel
     const artistThumbsMap = {};
     const thumbPromises = [];
     for (const { artist, records: artistRecords } of stats.topPlayedArtists.slice(0, 5)) {
@@ -4677,7 +4678,7 @@ async function generateListeningDNA(stats, username) {
       ctx.fillStyle = '#fef3c7';
       ctx.font = `700 58px "Fraunces", serif`;
       ctx.textAlign = 'left';
-      ctx.fillText(cleanName.length > 18 ? cleanName.slice(0, 16) + '…' : cleanName, TX, curY + 10);
+      ctx.fillText(cleanName.length > 22 ? cleanName.slice(0, 20) + '…' : cleanName, TX, curY + 10);
 
       // Play count on the right
       ctx.fillStyle = 'rgba(255,255,255,0.70)';
@@ -4685,45 +4686,39 @@ async function generateListeningDNA(stats, username) {
       ctx.textAlign = 'right';
       ctx.fillText(`${count}`, W - TX, curY + 6);
 
-      // Mini record thumbnails below the name
+      // Record thumbnails on the right (no play badges on these)
       const thumbs = artistThumbsMap[artist] || [];
-      if (thumbs.length > 0) {
-        thumbs.forEach((img, ti) => {
-          const ttx = TX + ti * (ARTIST_THUMB + ARTIST_THUMB_GAP);
-          const tty = curY + 20;
-          ctx.save();
-          ctx.shadowColor = 'transparent';
-          canvasRoundRect(ctx, ttx, tty, ARTIST_THUMB, ARTIST_THUMB, 8);
-          ctx.clip();
-          if (img) {
-            ctx.drawImage(img, ttx, tty, ARTIST_THUMB, ARTIST_THUMB);
-          } else {
-            ctx.fillStyle = 'rgba(255,255,255,0.08)';
-            ctx.fillRect(ttx, tty, ARTIST_THUMB, ARTIST_THUMB);
-          }
-          ctx.restore();
-        });
-        curY += ARTIST_THUMB + 34;
-      } else {
-        curY += 20;
-      }
-      curY += 20;
+      const thumbStartX = W - TX - (thumbs.length * (ARTIST_THUMB + ARTIST_THUMB_GAP) - ARTIST_THUMB_GAP);
+      thumbs.forEach((img, ti) => {
+        const ttx = thumbStartX + ti * (ARTIST_THUMB + ARTIST_THUMB_GAP);
+        const tty = curY - 36;
+        ctx.save();
+        ctx.shadowColor = 'transparent';
+        canvasRoundRect(ctx, ttx, tty, ARTIST_THUMB, ARTIST_THUMB, 8);
+        ctx.clip();
+        if (img) {
+          ctx.drawImage(img, ttx, tty, ARTIST_THUMB, ARTIST_THUMB);
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          ctx.fillRect(ttx, tty, ARTIST_THUMB, ARTIST_THUMB);
+        }
+        ctx.restore();
+      });
+
+      curY += 74;
     }
   }
 
   // ── MOST PLAYED RECORDS — 2 rows × 5 ──────────────────────────────────────
   if (stats.topPlayed.length > 0) {
-    curY += 10;
+    curY += SEC_GAP - 14;
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
     ctx.font = `500 26px "DM Sans", sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillText('MOST PLAYED', TX, curY);
     curY += 36;
 
-    const THUMB = 164;
-    const GAP = 12;
     const recs = stats.topPlayed.slice(0, 10);
-    const ROW_H = THUMB + 48;
 
     const thumbImgs = await Promise.all(
       recs.map(({ record: r }) => r.thumb ? loadImgForCanvas(r.thumb) : Promise.resolve(null))
@@ -4732,22 +4727,22 @@ async function generateListeningDNA(stats, username) {
     for (let row = 0; row < 2; row++) {
       const rowRecs = recs.slice(row * 5, row * 5 + 5);
       if (rowRecs.length === 0) break;
-      const rowY = curY + row * (ROW_H + 8);
+      const rowY = curY + row * (REC_ROW_H + 8);
 
       rowRecs.forEach(({ record: r, count }, i) => {
         const gi = row * 5 + i;
-        const tx = TX + i * (THUMB + GAP);
+        const tx = TX + i * (REC_THUMB + REC_GAP);
         const ty = rowY;
         const img = thumbImgs[gi];
         ctx.save();
         ctx.shadowColor = 'transparent';
-        canvasRoundRect(ctx, tx, ty, THUMB, THUMB, 14);
+        canvasRoundRect(ctx, tx, ty, REC_THUMB, REC_THUMB, 14);
         ctx.clip();
         if (img) {
-          ctx.drawImage(img, tx, ty, THUMB, THUMB);
+          ctx.drawImage(img, tx, ty, REC_THUMB, REC_THUMB);
         } else {
           ctx.fillStyle = 'rgba(255,255,255,0.08)';
-          ctx.fillRect(tx, ty, THUMB, THUMB);
+          ctx.fillRect(tx, ty, REC_THUMB, REC_THUMB);
         }
         ctx.restore();
         // Play count badge
@@ -4755,26 +4750,26 @@ async function generateListeningDNA(stats, username) {
         ctx.font = `600 15px "DM Sans", sans-serif`;
         const badgeW = ctx.measureText(countStr).width + 12;
         ctx.fillStyle = 'rgba(0,0,0,0.70)';
-        canvasRoundRect(ctx, tx + THUMB - badgeW - 4, ty + THUMB - 28, badgeW, 22, 7); ctx.fill();
+        canvasRoundRect(ctx, tx + REC_THUMB - badgeW - 4, ty + REC_THUMB - 28, badgeW, 22, 7); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,0.90)';
         ctx.textAlign = 'center';
-        ctx.fillText(countStr, tx + THUMB - badgeW / 2 - 4, ty + THUMB - 12);
+        ctx.fillText(countStr, tx + REC_THUMB - badgeW / 2 - 4, ty + REC_THUMB - 12);
         // Title + artist below
-        const titleStr = (r.title || '').length > 14 ? r.title.slice(0, 12) + '…' : r.title;
+        const titleStr = (r.title || '').length > 15 ? r.title.slice(0, 13) + '…' : r.title;
         const artistStr = (r.artist || '').replace(/\s*\(\d+\)\s*$/, '').trim();
-        const artistShort = artistStr.length > 14 ? artistStr.slice(0, 12) + '…' : artistStr;
+        const artistShort = artistStr.length > 15 ? artistStr.slice(0, 13) + '…' : artistStr;
         ctx.textAlign = 'left';
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.font = `500 18px "DM Sans", sans-serif`;
-        ctx.fillText(titleStr, tx, ty + THUMB + 20);
+        ctx.fillText(titleStr, tx, ty + REC_THUMB + 20);
         ctx.fillStyle = 'rgba(255,255,255,0.45)';
         ctx.font = `300 16px "DM Sans", sans-serif`;
-        ctx.fillText(artistShort, tx, ty + THUMB + 38);
+        ctx.fillText(artistShort, tx, ty + REC_THUMB + 38);
       });
     }
 
     const rows = Math.min(2, Math.ceil(recs.length / 5));
-    curY += rows * (ROW_H + 8) + 10;
+    curY += rows * (REC_ROW_H + 8);
   }
 
   // ── SOUND PROFILE (play-weighted, anchored above footer) ───────────────────
@@ -4789,7 +4784,7 @@ async function generateListeningDNA(stats, username) {
     const barMaxW = W - TX * 2 - 160;
     const profileH = bars.length * 40 + (tempo ? 40 : 0) + 44;
     let py = H - 136 - 24 - profileH;
-    if (py > curY + 20) {
+    if (py > curY + SEC_GAP) {
       ctx.fillStyle = 'rgba(255,255,255,0.40)';
       ctx.font = `500 26px "DM Sans", sans-serif`;
       ctx.textAlign = 'left';
@@ -9669,7 +9664,14 @@ export default function VinylCrate() {
                           }));
                           const favoriteRecordsList = [...myRecords]
                             .filter(r => (r.favorite_tracks || []).length > 0)
-                            .sort((a, b) => (b.favorite_tracks || []).length - (a.favorite_tracks || []).length)
+                            .sort((a, b) => {
+                              // Sort by % of tracks hearted (fair to short albums)
+                              const tcA = spotifyFeatures[a.id]?.track_count || (a.favorite_tracks || []).length || 1;
+                              const tcB = spotifyFeatures[b.id]?.track_count || (b.favorite_tracks || []).length || 1;
+                              const pctA = (a.favorite_tracks || []).length / tcA;
+                              const pctB = (b.favorite_tracks || []).length / tcB;
+                              return pctB - pctA;
+                            })
                             .slice(0, 10)
                             .map(r => ({ id: r.id, title: r.title, artist: r.artist, thumb: r.thumb, heartCount: (r.favorite_tracks || []).length }));
                           const avg = (key) => spotifyData.reduce((s, f) => s + (f[key] || 0), 0) / (spotifyData.length || 1);
