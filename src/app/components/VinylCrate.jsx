@@ -997,13 +997,23 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="px-4 pt-2 pb-1">
-        <input
-          value={wantsSearch}
-          onChange={(e) => setWantsSearch(e.target.value)}
-          placeholder="Search artist, title, label, genre…"
-          className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
-          style={{ backgroundColor: "var(--bg-input)" }}
-        />
+        <div className="relative">
+          <input
+            value={wantsSearch}
+            onChange={(e) => setWantsSearch(e.target.value)}
+            placeholder="Search artist, title, label, genre…"
+            className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 pr-9 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
+            style={{ backgroundColor: "var(--bg-input)" }}
+          />
+          {wantsSearch && (
+            <button
+              onClick={() => setWantsSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-300 transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          )}
+        </div>
       </div>
       {/* iOS Home Screen guidance */}
       {typeof navigator !== "undefined" && /iPhone|iPad/i.test(navigator.userAgent) && !window.navigator.standalone && (
@@ -7713,14 +7723,24 @@ export default function VinylCrate() {
             </HintBanner>
           )}
           {viewMode !== "drift" && (!selected || tab !== "crate") && <div className="px-4 space-y-2 mb-1">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onFocus={() => { setSearchFocused(true); setHeaderVisible(false); }}
-              onBlur={() => { setSearchFocused(false); setHeaderVisible(true); }}
-              placeholder="Search artist, title, genre, song..."
-              className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60" style={{ backgroundColor: "var(--bg-input)" }}
-            />
+            <div className="relative">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => { setSearchFocused(true); setHeaderVisible(false); }}
+                onBlur={() => { setSearchFocused(false); setHeaderVisible(true); }}
+                placeholder="Search artist, title, genre, song..."
+                className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 pr-9 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60" style={{ backgroundColor: "var(--bg-input)" }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-300 transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              )}
+            </div>
             {/* Row 1: sort pill · ∞/pages · view toggles · Discogs icon · Add */}
             <div className="flex items-center gap-2">
               {/* Cycling sort pill — left side cycles type, right side flips direction */}
