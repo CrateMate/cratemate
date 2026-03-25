@@ -5408,6 +5408,7 @@ export default function VinylCrate() {
   const [trailSavePrompt, setTrailSavePrompt] = useState(false);
   const [trailSaving, setTrailSaving] = useState(false);
   const [trailAlreadyLoggedIds, setTrailAlreadyLoggedIds] = useState(new Set());
+  const [lastfmNextSuggestion, setLastfmNextSuggestion] = useState(null); // { record } for non-Spotify users
   const [bannerPreviewDirection, setBannerPreviewDirection] = useState(null);
   const [sessionToast, setSessionToast] = useState(null); // { recordId, record }
   const sessionToastTimerRef = useRef(null);
@@ -6820,6 +6821,39 @@ export default function VinylCrate() {
     };
   }
 
+  // For non-Spotify users: use Last.fm artist similarity to rank collection records
+  async function fetchLastfmNextSuggestion(centerRecord, seenKeys) {
+    if (Object.keys(spotifyFeatures).length > 0) return; // Spotify users use audio features instead
+    try {
+      const artistName = stripArtistNum(centerRecord.artist || "").trim();
+      if (!artistName) return;
+      const res = await fetch(`/api/lastfm/artist-similar?artist=${encodeURIComponent(artistName)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const similarMap = new Map(
+        (data.similar || []).map((s) => [s.name.toLowerCase().trim(), s.match])
+      );
+      const candidates = dedupeByAlbum(myRecords, playCounts)
+        .filter((r) => !seenKeys.has(getCanonicalKey(r)))
+        .map((r) => {
+          const cleanArtist = stripArtistNum(r.artist || "").toLowerCase().trim();
+          const match = similarMap.get(cleanArtist) || 0;
+          return { record: r, match };
+        })
+        .filter((c) => c.match > 0)
+        .sort((a, b) => {
+          const penalty = (r) =>
+            lastPlayedDates[r.id] &&
+            Date.now() - new Date(lastPlayedDates[r.id]).getTime() < 7 * 86400000
+              ? 0.3 : 1;
+          return b.match * penalty(b.record) - a.match * penalty(a.record);
+        });
+      setLastfmNextSuggestion(candidates.length > 0 ? { record: candidates[0].record } : null);
+    } catch {
+      setLastfmNextSuggestion(null);
+    }
+  }
+
   async function enterTrail(record, seedAlreadyLogged = false) {
     setTrailCenter(record);
     setTrailHistory([record]);
@@ -6829,16 +6863,18 @@ export default function VinylCrate() {
     setTrailError("");
     setTrailAlreadyLoggedIds(seedAlreadyLogged ? new Set([String(record.id)]) : new Set());
     setBannerPreviewDirection(null);
+    setLastfmNextSuggestion(null);
     setTrailActive(true);
     setTrailLoading(true);
+    const seedKeys = new Set([getCanonicalKey(record)]);
     try {
-      // Load all cached features + fetch center record's features
       const [, centerFeatures] = await Promise.all([
         loadSpotifyFeatures(),
         fetchAndCacheFeatures(record),
       ]);
       const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [record.id]: centerFeatures } : {}) };
-      setTrailSuggestions(computeTrailSuggestions(record, allFeatures, new Set([getCanonicalKey(record)])));
+      setTrailSuggestions(computeTrailSuggestions(record, allFeatures, seedKeys));
+      fetchLastfmNextSuggestion(record, seedKeys); // fire-and-forget — updates banner when ready
     } catch {
       setTrailError("Couldn't load suggestions — try again.");
     } finally {
@@ -6852,10 +6888,10 @@ export default function VinylCrate() {
 
   async function navigateTrail(record) {
     setTrailCenter(record);
-    // Compute the full history set synchronously before the state update applies
     const nextSeenKeys = new Set([...trailHistory.map(r => getCanonicalKey(r)), getCanonicalKey(record)]);
     setTrailHistory(prev => [...prev, record]);
     setTrailSuggestions(null);
+    setLastfmNextSuggestion(null);
     setTrailSearch("");
     setTrailSearchOpen(false);
     setTrailError("");
@@ -6864,6 +6900,7 @@ export default function VinylCrate() {
       const centerFeatures = await fetchAndCacheFeatures(record);
       const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [record.id]: centerFeatures } : {}) };
       setTrailSuggestions(computeTrailSuggestions(record, allFeatures, nextSeenKeys));
+      fetchLastfmNextSuggestion(record, nextSeenKeys); // fire-and-forget
     } catch {
       setTrailError("Couldn't load suggestions — try again.");
     } finally {
@@ -6888,6 +6925,7 @@ export default function VinylCrate() {
     setTrailCenter(null);
     setTrailHistory([]);
     setTrailSuggestions(null);
+    setLastfmNextSuggestion(null);
   }
 
   async function saveTrailSession() {
@@ -9892,7 +9930,10 @@ export default function VinylCrate() {
                           })}
                         </div>
                       ) : (() => {
-                        const next = trailSuggestions.windDown || trailSuggestions.liftUp || trailSuggestions.sideways;
+                        const next = lastfmNextSuggestion
+                          || trailSuggestions.windDown
+                          || trailSuggestions.liftUp
+                          || trailSuggestions.sideways;
                         return next ? (
                           <button
                             onClick={(e) => { e.stopPropagation(); navigateTrail(next.record); }}
@@ -9928,6 +9969,7 @@ export default function VinylCrate() {
                         setTrailHistory([]);
                         setTrailSuggestions(null);
                         setTrailAlreadyLoggedIds(new Set());
+                        setLastfmNextSuggestion(null);
                       }
                     } else {
                       const sid = playSessions[0]?.id;
