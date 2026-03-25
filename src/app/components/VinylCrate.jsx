@@ -1193,7 +1193,9 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
           onClick={(e) => { e.stopPropagation(); onLogPlay?.(record.id); }}
           className="w-7 h-7 rounded-full border border-stone-700/60 text-stone-600 hover:text-amber-400 hover:border-amber-800/50 transition-colors flex items-center justify-center shrink-0"
           title="Log a play"
-        >⏺</button>
+        >
+          <svg viewBox="0 0 8 10" fill="currentColor" className="w-2.5 h-3 ml-0.5"><path d="M0 0L8 5L0 10z"/></svg>
+        </button>
       </div>
     </div>
   );
@@ -1515,7 +1517,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
             <button
               onClick={() => onLogPlay?.(record.id)}
               className="flex-1 py-2 rounded-xl bg-amber-900/20 border border-amber-800/30 text-amber-400/80 text-xs font-medium hover:bg-amber-900/35 hover:text-amber-300 transition-colors"
-            >⏺ Log</button>
+            ><svg viewBox="0 0 8 10" fill="currentColor" className="inline w-2 h-2.5 mr-1 mb-px"><path d="M0 0L8 5L0 10z"/></svg>Log</button>
             {!record.for_sale && (
               <button
                 onClick={() => { onEnterTrail?.(record); onClose(); }}
@@ -7176,7 +7178,7 @@ export default function VinylCrate() {
         <div className="flex-1 flex flex-col overflow-hidden relative">
           {!seenHints["crate_play"] && collection.length > 0 && collection.length <= 10 && (
             <HintBanner onDismiss={() => dismissHint("crate_play")}>
-              Long-press any record or tap ⏺ in list view to log a play and start your streak.
+              Long-press any record or tap the play button in list view to log a play and start your streak.
             </HintBanner>
           )}
           {viewMode !== "drift" && (!selected || tab !== "crate") && <div className="px-4 space-y-2 mb-1">
@@ -8357,7 +8359,7 @@ export default function VinylCrate() {
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
-              Long-press any record in visual views, tap ⏺ in list view, or use the Log button in the detail card to log a play.
+              Long-press any record in visual views, tap the play button in list view, or use the Log button in the detail card to log a play.
             </HintBanner>
           )}
           <div className="px-4">
@@ -8370,7 +8372,7 @@ export default function VinylCrate() {
               <>
                 {streak > 0 && (
                   <div className="flex items-center gap-2 px-2.5 py-2 mb-3 rounded-xl bg-amber-900/15 border border-amber-900/25">
-                    <span className="text-lg">{streak >= 7 ? "🔥" : "⏺"}</span>
+                    <span className="text-lg">{streak >= 7 ? "🔥" : "●"}</span>
                     <div>
                       <span className="text-amber-300 text-sm font-medium">{streak} day streak</span>
                       {badge && <span className="text-amber-900/80 text-xs ml-2">{badge}</span>}
