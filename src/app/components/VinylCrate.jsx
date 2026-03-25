@@ -2629,7 +2629,7 @@ function getSeason(month) {
   return "fall";
 }
 
-function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures = {}, artistMembers = {}, todayWeather = null, playSessions = []) {
+function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures = {}, artistMembers = {}, todayWeather = null, playSessions = [], lastfmVibeData = null) {
   const today = new Date();
   const todayMonth = today.getMonth() + 1;
   const todayDay   = today.getDate();
@@ -2827,7 +2827,35 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     return mainHookCandidates[Math.floor(Math.random() * mainHookCandidates.length)];
   }
 
-  // ─── Priority 3: Weather match ────────────────────────────────────────────
+  // ─── Priority 3: Recent vibe match (Last.fm) ──────────────────────────────
+  // Uses recently-played artists as seeds to find a similar record in-collection
+  // not played in 14+ days. Fires for all users (no Spotify required).
+  if (lastfmVibeData?.map?.size > 0) {
+    const candidates = myRecords
+      .filter(notRecentlyPlayed)
+      .map((r) => {
+        const key = stripArtistNum(r.artist || "").toLowerCase().trim();
+        const score = lastfmVibeData.map.get(key) || 0;
+        return { record: r, score };
+      })
+      .filter((c) => c.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (candidates.length > 0) {
+      const pool = candidates.slice(0, 5);
+      const { record } = pool[Math.floor(Math.random() * pool.length)];
+      const seedNames = (lastfmVibeData.seeds || []).slice(0, 2).join(" and ");
+      return {
+        type: "recent_vibe",
+        record,
+        fact: seedNames
+          ? `"${record.title}" by ${record.artist} is in the same sonic neighborhood as ${seedNames}, which you've been spinning lately.`
+          : `"${record.title}" by ${record.artist} sounds like what you've been playing lately.`,
+      };
+    }
+  }
+
+  // ─── Priority 4: Weather match ────────────────────────────────────────────
   // Matches the current weather mood to audio features via Spotify data.
   // Requires location to be set and at least 5 records with features.
   {
@@ -2869,7 +2897,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }
   }
 
-  // ─── Priority 4: Day-of-week energy match ────────────────────────────────
+  // ─── Priority 5: Day-of-week energy match ────────────────────────────────
   {
     const featureCount = Object.keys(spotifyFeatures).length;
     if (featureCount >= 5) {
@@ -2904,7 +2932,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }
   }
 
-  // ─── Priority 5: Season-appropriate genre ────────────────────────────────
+  // ─── Priority 6: Season-appropriate genre ────────────────────────────────
   {
     const season = getSeason(todayMonth);
     const preferredGenres = SEASON_GENRES[season];
@@ -2927,7 +2955,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }
   }
 
-  // ─── Priority 6: Played this day last year (±3 days) ─────────────────────
+  // ─── Priority 7: Played this day last year (±3 days) ─────────────────────
   {
     const lastYearToday = new Date(todayYear - 1, todayMonth - 1, todayDay);
     const seenIds = new Set();
@@ -2948,7 +2976,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }
   }
 
-  // ─── Priority 7: Round-year milestone (≥10 years, divisible by 5) ────────
+  // ─── Priority 8: Round-year milestone (≥10 years, divisible by 5) ────────
   {
     const milestoneRecords = myRecords
       .filter((r) => {
@@ -2985,7 +3013,7 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
     }
   }
 
-  // ─── Priority 8: Beloved-but-forgotten (played before, silent 90+ days) ──
+  // ─── Priority 9: Beloved-but-forgotten (played before, silent 90+ days) ──
   {
     const staleCandidates = myRecords
       .filter((r) => {
@@ -3397,7 +3425,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                     {isSideways && rec && suggestion?.explanation?.length > 0 && (
                       <div style={{ position: "absolute", left: SLOT + 8, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", gap: 2 }}>
                         {suggestion.explanation.map(pill => (
-                          <span key={pill} style={{ fontSize: 7, color, opacity: 0.9, background: "rgba(0,0,0,0.55)", borderRadius: 3, padding: "2px 4px", whiteSpace: "nowrap" }}>{pill}</span>
+                          <span key={pill} style={{ fontSize: 9, color, opacity: 0.9, background: "rgba(0,0,0,0.55)", borderRadius: 3, padding: "2px 4px", whiteSpace: "nowrap" }}>{pill}</span>
                         ))}
                       </div>
                     )}
@@ -3407,7 +3435,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                   {!isSideways && rec && suggestion?.explanation?.length > 0 && (
                     <div style={{ paddingTop: 4, display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
                       {suggestion.explanation.map(pill => (
-                        <span key={pill} style={{ fontSize: 7, color, opacity: 0.9, background: "rgba(0,0,0,0.55)", borderRadius: 3, padding: "2px 4px", whiteSpace: "nowrap" }}>{pill}</span>
+                        <span key={pill} style={{ fontSize: 9, color, opacity: 0.9, background: "rgba(0,0,0,0.55)", borderRadius: 3, padding: "2px 4px", whiteSpace: "nowrap" }}>{pill}</span>
                       ))}
                     </div>
                   )}
@@ -6317,7 +6345,27 @@ export default function VinylCrate() {
             });
             if (res.ok) artistMembers = await res.json();
           } catch {}
-          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers, todayWeather, playSessions);
+          // Fetch Last.fm vibe data based on recently-played artists
+          let lastfmVibeData = null;
+          try {
+            const recentArtists = [...new Set(
+              [...playSessions]
+                .sort((a, b) => new Date(b.played_at) - new Date(a.played_at))
+                .map((s) => myRecords.find((r) => String(r.id) === String(s.record_id)))
+                .filter((r) => r && !r.is_compilation)
+                .map((r) => stripArtistNum(r.artist || "").trim())
+                .filter(Boolean)
+            )].slice(0, 5);
+            if (recentArtists.length > 0) {
+              const lfmRes = await fetch(`/api/lastfm/similar?artists=${encodeURIComponent(recentArtists.join(","))}`);
+              if (lfmRes.ok) {
+                const lfmData = await lfmRes.json();
+                const map = new Map((lfmData.similar || []).map((s) => [s.name.toLowerCase().trim(), s.score]));
+                if (map.size > 0) lastfmVibeData = { map, seeds: recentArtists };
+              }
+            }
+          } catch {}
+          const hook = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers, todayWeather, playSessions, lastfmVibeData);
           if (hook) {
             const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
             const text = await callClaude(
