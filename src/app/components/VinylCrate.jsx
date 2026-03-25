@@ -9720,44 +9720,87 @@ export default function VinylCrate() {
           className="fixed bottom-0 left-0 right-0 z-[190] border-t border-stone-800/60 backdrop-blur-md"
           style={{ background: "rgba(12,11,9,0.92)" }}
         >
-          <div
-            className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto cursor-pointer"
-            onClick={() => setSelected(nowPlaying.record)}
-          >
-            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
-              {nowPlaying.record.thumb
-                ? <img src={proxyArtUrl(upgradeDiscogsThumb(nowPlaying.record.thumb) || nowPlaying.record.thumb)} alt="" className="w-full h-full object-cover"
-                    onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                : <div className="w-full h-full bg-stone-700" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-amber-50 text-sm truncate leading-tight">{nowPlaying.record.title}</div>
-              <div className="text-stone-500 text-xs">{relativePlayTime(nowPlaying.loggedAt)}</div>
-            </div>
-            {trailCenter && !trailActive ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); setTrailActive(true); setSelected(null); }}
-                className="px-3 py-1.5 rounded-full border border-amber-700/60 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0 flex items-center gap-1"
+          {(() => {
+            const sessionMinimized = !!(trailCenter && !trailActive);
+            const bannerRecord = sessionMinimized ? trailCenter : nowPlaying.record;
+            const hasSpotifyFeatures = Object.keys(spotifyFeatures).length > 0;
+            return (
+              <div
+                className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto cursor-pointer"
+                onClick={() => sessionMinimized ? setTrailActive(true) : setSelected(nowPlaying.record)}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
-                Resume
-              </button>
-            ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record); setSelected(null); }}
-                className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
-              >▷ Session</button>
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                const sid = playSessions[0]?.id;
-                setDismissedSessionId(sid);
-                try { localStorage.setItem("cratemate_np_dismissed", sid || ""); } catch {}
-              }}
-              className="text-stone-600 hover:text-stone-400 text-lg leading-none shrink-0 transition-colors"
-            >×</button>
-          </div>
+                <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                  {bannerRecord.thumb
+                    ? <img src={proxyArtUrl(upgradeDiscogsThumb(bannerRecord.thumb) || bannerRecord.thumb)} alt="" className="w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    : <div className="w-full h-full bg-stone-700" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-amber-50 text-sm truncate leading-tight">{bannerRecord.title}</div>
+                  <div className="text-stone-500 text-xs">
+                    {sessionMinimized ? `${trailHistory.length} in session` : relativePlayTime(nowPlaying.loggedAt)}
+                  </div>
+                </div>
+                {sessionMinimized ? (
+                  <>
+                    {trailSuggestions && !trailLoading && (
+                      hasSpotifyFeatures ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          {[
+                            { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Wind down" },
+                            { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Lift up" },
+                            { key: "sideways", color: "#a78bfa", symbol: "↔", label: "Detour" },
+                          ].map(({ key, color, symbol, label }) => {
+                            const s = trailSuggestions[key];
+                            if (!s) return null;
+                            return (
+                              <button
+                                key={key}
+                                onClick={(e) => { e.stopPropagation(); navigateTrail(s.record); }}
+                                title={`${label}: ${s.record.title}`}
+                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 transition-opacity hover:opacity-80"
+                                style={{ background: `${color}22`, border: `1px solid ${color}66`, color }}
+                              >{symbol}</button>
+                            );
+                          })}
+                        </div>
+                      ) : (() => {
+                        const next = trailSuggestions.windDown || trailSuggestions.liftUp || trailSuggestions.sideways;
+                        return next ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigateTrail(next.record); }}
+                            title={next.record.title}
+                            className="px-2.5 py-1 rounded-full border border-stone-700/60 text-stone-400 text-xs hover:text-stone-300 hover:border-stone-600 transition-colors shrink-0"
+                          >Next →</button>
+                        ) : null;
+                      })()
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setTrailActive(true); setSelected(null); }}
+                      className="px-3 py-1.5 rounded-full border border-amber-700/60 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0 flex items-center gap-1"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3 h-3"><path d="M5 15l7-7 7 7"/></svg>
+                      Resume
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record); setSelected(null); }}
+                    className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
+                  >▷ Session</button>
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const sid = playSessions[0]?.id;
+                    setDismissedSessionId(sid);
+                    try { localStorage.setItem("cratemate_np_dismissed", sid || ""); } catch {}
+                  }}
+                  className="text-stone-600 hover:text-stone-400 text-lg leading-none shrink-0 transition-colors"
+                >×</button>
+              </div>
+            );
+          })()}
           <div style={{ height: "env(safe-area-inset-bottom, 0px)" }} />
         </div>
       )}
