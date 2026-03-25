@@ -1632,30 +1632,11 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                     <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded-full border ${d.cls} shrink-0`}>{d.label}</span>
                   ))}
                   <span className="flex-1" />
-                  <span className="text-stone-600 text-xs shrink-0">~{Math.round(f.tempo)} BPM</span>
+                  <span className={`text-xs shrink-0 ${isSpotify ? "text-emerald-700" : "text-stone-600"}`}>{isSpotify ? "" : "~"}{Math.round(f.tempo)} BPM</span>
                   <span className="text-stone-600 text-xs shrink-0">{soundProfileOpen ? "▲" : "▼"}</span>
                 </button>
                 {soundProfileOpen && (
                   <div className="space-y-2">
-                    <div className="flex justify-end mb-1">
-                      {(() => {
-                        const src = fromSpotify?.source;
-                        const label = !isSpotify ? "estimated"
-                          : src === "tracks" ? "via Spotify ~"
-                          : src === "artist" ? "artist avg"
-                          : "via Spotify";
-                        const cls = !isSpotify
-                          ? "border-stone-800 text-stone-600 bg-stone-900/40"
-                          : src === "artist"
-                          ? "border-amber-900/40 text-amber-700/80 bg-amber-900/10"
-                          : "border-emerald-900/40 text-emerald-700/80 bg-emerald-900/10";
-                        return (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${cls}`}>
-                            {label}
-                          </span>
-                        );
-                      })()}
-                    </div>
                     {bars.map(({ label, value, color, hint }) => (
                       <div key={label} className="flex items-start gap-3">
                         <div className="flex flex-col shrink-0 w-[76px]">
@@ -1663,7 +1644,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                           {hint && <span className="text-stone-700 text-[10px] leading-tight">{hint}</span>}
                         </div>
                         <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden mt-1.5">
-                          <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(value * 100)}%` }} />
+                          <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }} />
                         </div>
                       </div>
                     ))}
@@ -3204,8 +3185,9 @@ function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playC
             const labelR = R + 16;
 
             function pt(i, v) {
+              const clamped = Math.min(1, Math.max(0, v));
               const angle = -Math.PI / 2 + (2 * Math.PI / N) * i;
-              return [CX + v * R * Math.cos(angle), CY + v * R * Math.sin(angle)];
+              return [CX + clamped * R * Math.cos(angle), CY + clamped * R * Math.sin(angle)];
             }
             function polygon(vals, color) {
               const pts = vals.map((v, i) => pt(i, v).join(",")).join(" ");
@@ -3882,7 +3864,7 @@ function RadarChart({ myData, theirData, myLabel, theirLabel }) {
   const labels = ["Energy", "Mood", "Dance", "Acoustic", "Loudness"];
   const n = keys.length;
   const angle = (k) => -Math.PI / 2 + (k * 2 * Math.PI) / n;
-  const pt = (k, v) => [cx + v * R * Math.cos(angle(k)), cy + v * R * Math.sin(angle(k))];
+  const pt = (k, v) => { const c = Math.min(1, Math.max(0, v)); return [cx + c * R * Math.cos(angle(k)), cy + c * R * Math.sin(angle(k))]; };
   const poly = (data) => keys.map((key, k) => pt(k, data?.[key] ?? 0).join(",")).join(" ");
   const gridLevels = [0.25, 0.5, 0.75, 1.0];
 
@@ -6762,7 +6744,15 @@ export default function VinylCrate() {
   async function loadSpotifyFeatures() {
     try {
       const res = await fetch("/api/spotify/features");
-      if (res.ok) setSpotifyFeatures(await res.json());
+      if (!res.ok) return;
+      const raw = await res.json();
+      const normalized = Object.fromEntries(
+        Object.entries(raw).map(([id, f]) => [
+          id,
+          f.loudness != null ? { ...f, loudness: Math.min(1, Math.max(0, (f.loudness + 30) / 27)) } : f,
+        ])
+      );
+      setSpotifyFeatures(normalized);
     } catch {}
   }
 
