@@ -1575,10 +1575,17 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
           {/* Collapsible tracklist */}
           <button
             onClick={() => setTracklistOpen(o => !o)}
-            className="flex items-center justify-between w-full py-1 mb-2"
+            className="flex items-center gap-2 w-full py-1 mb-2"
           >
             <span className="text-stone-400 text-xs uppercase tracking-widest">Tracklist</span>
-            <span className="text-stone-600 text-xs">{tracklistOpen ? "▲" : "▼"}</span>
+            <span className="flex-1" />
+            {(() => {
+              const totalSecs = record.duration_secs || parseDurationSecs(tracks);
+              if (!totalSecs) return null;
+              const m = Math.round(totalSecs / 60);
+              return <span className="text-stone-600 text-xs shrink-0">{m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`}</span>;
+            })()}
+            <span className="text-stone-600 text-xs shrink-0">{tracklistOpen ? "▲" : "▼"}</span>
           </button>
           {tracklistOpen && (
             <>
@@ -5776,6 +5783,26 @@ export default function VinylCrate() {
   const [tileExporting, setTileExporting] = useState(null); // "square" | "full" | null
   const [dnaGenerating, setDnaGenerating] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
+  const driftFadeTimerRef = useRef(null);
+  const driftFullscreenRef = useRef(false); // true = user explicitly chose fullscreen
+  // Auto-fade drift controls after 3s of no interaction
+  useEffect(() => {
+    if (viewMode !== "drift" || controlsHidden) {
+      if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
+      return;
+    }
+    driftFadeTimerRef.current = setTimeout(() => {
+      if (!driftFullscreenRef.current) setControlsHidden(true);
+    }, 3000);
+    return () => { if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current); };
+  }, [viewMode, controlsHidden]);
+
+  function driftResetFade() {
+    if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
+    driftFadeTimerRef.current = setTimeout(() => {
+      if (!driftFullscreenRef.current) setControlsHidden(true);
+    }, 3000);
+  }
   const tabRowRef = useRef(null);
   const forSaleRef = useRef(null);
   const [forSaleForced, setForSaleForced] = useState(false);
@@ -5847,14 +5874,17 @@ export default function VinylCrate() {
   const SHOW_ACCUM = 24; // px of upward travel required before header re-appears
   const [searchFocused, setSearchFocused] = useState(false);
   function handleTabScroll(e) {
-    const y = e.currentTarget.scrollTop;
+    const el = e.currentTarget;
+    const y = el.scrollTop;
     const delta = y - lastScrollY.current;
     lastScrollY.current = y;
     if (Math.abs(delta) < 4) return;
+    // Don't hide if page isn't scrollable enough (prevents rebound loop)
+    const scrollRoom = el.scrollHeight - el.clientHeight;
+    if (scrollRoom < 200) return;
     if (delta > 0) {
       upScrollAccum.current = 0;
-      // Only hide after a meaningful scroll — prevents rebound on short pages
-      if (y > 80) setHeaderVisible(false);
+      if (y > 120) setHeaderVisible(false);
     } else {
       upScrollAccum.current += Math.abs(delta);
       if (upScrollAccum.current >= SHOW_ACCUM) {
@@ -7619,10 +7649,10 @@ export default function VinylCrate() {
     >
       <div style={{
         display: "grid",
-        gridTemplateRows: headerVisible ? "1fr" : "0fr",
-        opacity: headerVisible ? 1 : 0,
+        gridTemplateRows: (headerVisible && !(viewMode === "drift" && controlsHidden)) ? "1fr" : "0fr",
+        opacity: (headerVisible && !(viewMode === "drift" && controlsHidden)) ? 1 : 0,
         transition: "grid-template-rows 0.28s ease, opacity 0.22s ease",
-        pointerEvents: headerVisible ? "auto" : "none",
+        pointerEvents: (headerVisible && !(viewMode === "drift" && controlsHidden)) ? "auto" : "none",
       }}>
       <div style={{ overflow: "hidden" }}>
       {(!selected || tab !== "crate") && viewMode !== "drift" && (
@@ -7980,220 +8010,229 @@ export default function VinylCrate() {
                 }}
               />
               )}
-              {/* Top-left: back to list + share (row 1), downloads (row 2, tiles only) */}
-              {!controlsHidden && (
-              <div className="absolute top-4 left-4 z-50 flex flex-col items-start gap-2">
-                {/* Row 1 */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setViewMode("list");
-                      if (previousTab) { setTab(previousTab); setPreviousTab(null); }
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
-                  >
-                    {previousTab === "stats" ? "← Stats" : "≡ List"}
-                  </button>
-                  {discogsConnected && (
-                    <button
-                      onClick={() => {
-                        if (!discogsUsername) return;
-                        const view = honeycombShape === "grid" ? "grid" : honeycombShape === "tiles" ? "tiles" : "honeycomb";
-                        navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}?view=${view}`);
-                        setShareCopied(true);
-                        setTimeout(() => setShareCopied(false), 2000);
-                      }}
-                      disabled={!discogsUsername}
-                      className={`px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border text-xs transition-colors ${
-                        discogsUsername
-                          ? "border-white/10 text-stone-400 hover:text-amber-300"
-                          : "border-white/5 text-stone-700 cursor-not-allowed"
-                      }`}
-                      title={discogsUsername ? "Share your crate" : "Re-link Discogs to enable sharing"}
-                    >
-                      {shareCopied ? "Copied!" : "↗ Share"}
-                    </button>
-                  )}
-                </div>
-                {/* Row 2 — download options, tiles only */}
-                {honeycombShape === "tiles" && (
-                  <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
-                    {[["square", "⬇ 1:1"], ["full", "⬇ Full"]].map(([mode, label]) => (
-                      <button
-                        key={mode}
-                        disabled={!!tileExporting}
-                        onClick={async () => {
-                          if (tileExporting) return;
-                          setTileExporting(mode);
-                          try {
-                            const canvas = await generateTileExport(honeycombRecords, playCounts, mode);
-                            const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-                            const filename = mode === "square" ? "my-crate-square.png" : "my-crate-full.png";
-                            const file = new File([blob], filename, { type: "image/png" });
-                            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                              await navigator.share({ files: [file] });
-                            } else {
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url; a.download = filename; a.click();
-                              URL.revokeObjectURL(url);
-                            }
-                          } catch {}
-                          setTileExporting(null);
-                        }}
-                        className={`px-3 py-1.5 text-xs transition-colors disabled:text-stone-700 ${mode === "full" ? "border-l border-white/10" : ""} ${tileExporting === mode ? "text-amber-300" : "text-stone-400 hover:text-amber-300"}`}
-                      >
-                        {tileExporting === mode ? "Saving…" : label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              )}
-              {/* Top-right: sort cycle + shape toggles + hide button */}
-              {!controlsHidden && (
-              <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2">
-                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden text-xs text-stone-400">
-                  <button
-                    onClick={() => {
-                      const order = ["year", "genre", "az"];
-                      setHoneycombSort(order[(order.indexOf(honeycombSort) + 1) % order.length]);
-                      setHoneycombSortDir("asc");
-                    }}
-                    className="flex items-center gap-1 pl-3 pr-2 py-1.5 hover:text-amber-300 transition-colors"
-                    title="Cycle sort"
-                  >
-                    <span>⇅</span>
-                    <span>{honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : "A–Z"}</span>
-                  </button>
-                  <button
-                    onClick={() => setHoneycombSortDir(d => d === "asc" ? "desc" : "asc")}
-                    className="pl-1 pr-3 py-1.5 text-[10px] opacity-60 hover:opacity-100 hover:text-amber-300 transition-all border-l border-white/10"
-                    title="Flip direction"
-                  >
-                    {honeycombSortDir === "asc" ? "↑" : "↓"}
-                  </button>
-                </div>
-                <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
-                  <button onClick={() => setHoneycombShape("honeycomb")}
-                    className={`px-3 py-1.5 text-xs transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⬡</button>
-                  <button onClick={() => setHoneycombShape("grid")}
-                    className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "grid" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>⊞</button>
-                  <button onClick={() => setHoneycombShape("tiles")}
-                    className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${honeycombShape === "tiles" ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}>▦</button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const next = !screensaverEnabled;
-                      localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
-                      setScreensaverEnabled(next);
-                    }}
-                    title={screensaverEnabled ? "Disable auto-pan" : "Enable auto-pan"}
-                    className={`px-3 py-1.5 text-xs border-l border-white/10 transition-colors ${screensaverEnabled ? "text-amber-300" : "text-stone-400 hover:text-stone-200"}`}
-                  >⟳</button>
-                </div>
-                <button
-                  onClick={() => setControlsHidden(true)}
-                  className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-500 hover:text-stone-300 text-xs transition-colors"
-                  title="Hide controls"
-                >⚙</button>
-              </div>
-              )}
-              {controlsHidden && (
-                <button
-                  onClick={() => setControlsHidden(false)}
-                  className="absolute top-4 right-4 z-50 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm border border-white/10 text-stone-500 hover:text-stone-300 text-xs transition-colors"
-                  title="Show controls"
-                >⚙</button>
-              )}
-              {/* Stat filter badge + Clear all */}
-              {!controlsHidden && (statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
-                <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2">
-                  {statFilterLabel && (
-                    <button
-                      onClick={clearStatFilter}
-                      className="px-3 py-1.5 rounded-full bg-amber-900/70 backdrop-blur-sm border border-amber-700/50 text-amber-200 text-xs flex items-center gap-2"
-                    >
-                      <span>Filtered: {statFilterLabel}</span>
-                      <span className="text-amber-400 font-bold">×</span>
-                    </button>
-                  )}
-                  {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
-                    <button
-                      onClick={clearStatFilter}
-                      className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-rose-400 hover:border-rose-900/40 text-xs transition-colors"
-                    >
-                      Clear all ×
-                    </button>
-                  )}
-                </div>
-              )}
-              {/* Unified genre + decade filter strip — bottom */}
-              {!controlsHidden && (() => {
-                const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
-                const hasGenres = genres.length > 0;
-                const hasDecades = decades.length > 0;
-                if (!hasGenres && !hasDecades) return null;
+              {/* ── Drift controls — auto-fade after 3s, tap to show ── */}
+              {(() => {
+                const driftVisible = !controlsHidden;
+                const hasFilter = statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null;
                 return (
-                  <div className="absolute left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}>
-                    <div
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
-                      style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
-                    >
-                      {hasGenres && genres.map((g) => (
-                        <GenreTag
-                          key={g}
-                          genre={g}
+                  <>
+                    {/* Tap overlay to show controls when faded */}
+                    {controlsHidden && (
+                      <div
+                        className="absolute inset-0 z-40"
+                        onClick={(e) => {
+                          if (e.target === e.currentTarget) {
+                            driftFullscreenRef.current = false;
+                            setControlsHidden(false);
+                            driftResetFade();
+                          }
+                        }}
+                        style={{ pointerEvents: "auto" }}
+                      />
+                    )}
+
+                    {/* Top-left: back + share + downloads */}
+                    <div className="absolute top-4 left-4 z-50 flex flex-col items-start gap-2"
+                      style={{ opacity: driftVisible ? 1 : 0, pointerEvents: driftVisible ? "auto" : "none", transition: "opacity 0.4s ease" }}>
+                      <div className="flex items-center gap-2">
+                        <button
                           onClick={() => {
-                            setStatFilterLabel(null);
-                            setActiveStyles(new Set());
-                            toggleGenre(g);
+                            setViewMode("list");
+                            if (previousTab) { setTab(previousTab); setPreviousTab(null); }
                           }}
-                          active={activeGenres.has(g)}
-                        />
-                      ))}
-                      {hasGenres && hasDecades && (
-                        <span className="text-stone-700 text-xs shrink-0 px-1">|</span>
-                      )}
-                      {hasDecades && (
-                        <>
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 text-xs hover:text-amber-300 transition-colors"
+                        >
+                          {previousTab === "stats" ? "← Stats" : "≡ List"}
+                        </button>
+                        {discogsConnected && (
                           <button
-                            onClick={() => setActiveDecade(new Set())}
-                            className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${!activeDecade.size ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-                          >All</button>
-                          {decades.map(d => (
-                            <button key={d} onClick={() => setActiveDecade(prev => {
-                              const s = new Set(prev);
-                              s.has(d) ? s.delete(d) : s.add(d);
-                              return s;
-                            })}
-                              className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${activeDecade.has(d) ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-                            >{d}</button>
+                            onClick={() => {
+                              if (!discogsUsername) return;
+                              const view = honeycombShape === "grid" ? "grid" : honeycombShape === "tiles" ? "tiles" : "honeycomb";
+                              navigator.clipboard.writeText(`${window.location.origin}/crate/${discogsUsername}?view=${view}`);
+                              setShareCopied(true);
+                              setTimeout(() => setShareCopied(false), 2000);
+                            }}
+                            disabled={!discogsUsername}
+                            className={`px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border text-xs transition-colors ${
+                              discogsUsername ? "border-white/10 text-stone-400 hover:text-amber-300" : "border-white/5 text-stone-700 cursor-not-allowed"
+                            }`}
+                          >
+                            {shareCopied ? "Copied!" : "↗ Share"}
+                          </button>
+                        )}
+                      </div>
+                      {honeycombShape === "tiles" && (
+                        <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden">
+                          {[["square", "⬇ 1:1"], ["full", "⬇ Full"]].map(([mode, label]) => (
+                            <button
+                              key={mode}
+                              disabled={!!tileExporting}
+                              onClick={async () => {
+                                if (tileExporting) return;
+                                setTileExporting(mode);
+                                try {
+                                  const canvas = await generateTileExport(honeycombRecords, playCounts, mode);
+                                  const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+                                  const filename = mode === "square" ? "my-crate-square.png" : "my-crate-full.png";
+                                  const file = new File([blob], filename, { type: "image/png" });
+                                  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                                    await navigator.share({ files: [file] });
+                                  } else {
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = url; a.download = filename; a.click();
+                                    URL.revokeObjectURL(url);
+                                  }
+                                } catch {}
+                                setTileExporting(null);
+                              }}
+                              className={`px-3 py-1.5 text-xs transition-colors disabled:text-stone-700 ${mode === "full" ? "border-l border-white/10" : ""} ${tileExporting === mode ? "text-amber-300" : "text-stone-400 hover:text-amber-300"}`}
+                            >
+                              {tileExporting === mode ? "Saving…" : label}
+                            </button>
                           ))}
-                        </>
+                        </div>
                       )}
                     </div>
-                  </div>
+
+                    {/* Top-right: merged control bar (sort + shapes + zoom + fullscreen) */}
+                    <div className="absolute top-4 right-4 z-50 flex flex-col items-end gap-2"
+                      style={{ opacity: driftVisible ? 1 : 0, pointerEvents: driftVisible ? "auto" : "none", transition: "opacity 0.4s ease" }}>
+                      <div className="flex rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden text-xs text-stone-400">
+                        {/* Sort */}
+                        <button
+                          onClick={() => {
+                            const order = ["year", "genre", "az"];
+                            setHoneycombSort(order[(order.indexOf(honeycombSort) + 1) % order.length]);
+                            setHoneycombSortDir("asc");
+                          }}
+                          className="flex items-center gap-1 pl-3 pr-1 py-1.5 hover:text-amber-300 transition-colors"
+                        >
+                          <span>⇅</span>
+                          <span>{honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : "A–Z"}</span>
+                        </button>
+                        <button
+                          onClick={() => setHoneycombSortDir(d => d === "asc" ? "desc" : "asc")}
+                          className="pr-2 py-1.5 text-[10px] opacity-60 hover:opacity-100 hover:text-amber-300 transition-all"
+                        >
+                          {honeycombSortDir === "asc" ? "↑" : "↓"}
+                        </button>
+                        <div className="w-px self-stretch bg-white/10" />
+                        {/* Shapes */}
+                        <button onClick={() => setHoneycombShape("honeycomb")}
+                          className={`px-2 py-1.5 transition-colors ${honeycombShape === "honeycomb" ? "text-amber-300" : "hover:text-stone-200"}`}>⬡</button>
+                        <button onClick={() => setHoneycombShape("grid")}
+                          className={`px-2 py-1.5 transition-colors ${honeycombShape === "grid" ? "text-amber-300" : "hover:text-stone-200"}`}>⊞</button>
+                        <button onClick={() => setHoneycombShape("tiles")}
+                          className={`px-2 py-1.5 transition-colors ${honeycombShape === "tiles" ? "text-amber-300" : "hover:text-stone-200"}`}>▦</button>
+                        <div className="w-px self-stretch bg-white/10" />
+                        {/* Zoom */}
+                        <button
+                          onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
+                          className="px-2 py-1.5 hover:text-amber-300 transition-colors"
+                        >−</button>
+                        <button
+                          onClick={() => setHoneycombZoom((z) => Math.min(1.8, parseFloat((z + 0.25).toFixed(2))))}
+                          className="px-2 py-1.5 hover:text-amber-300 transition-colors"
+                        >+</button>
+                        <div className="w-px self-stretch bg-white/10" />
+                        {/* Auto-pan */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const next = !screensaverEnabled;
+                            localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
+                            setScreensaverEnabled(next);
+                          }}
+                          className={`px-2 py-1.5 transition-colors ${screensaverEnabled ? "text-amber-300" : "hover:text-stone-200"}`}
+                        >⟳</button>
+                        <div className="w-px self-stretch bg-white/10" />
+                        {/* Fullscreen toggle — stays hidden until tap */}
+                        <button
+                          onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
+                          className="px-2.5 py-1.5 hover:text-amber-300 transition-colors"
+                          title="Fullscreen"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Stat filter badge — always visible when active */}
+                    {hasFilter && (
+                      <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2">
+                        {statFilterLabel && (
+                          <button
+                            onClick={clearStatFilter}
+                            className="px-3 py-1.5 rounded-full bg-amber-900/70 backdrop-blur-sm border border-amber-700/50 text-amber-200 text-xs flex items-center gap-2"
+                          >
+                            <span>Filtered: {statFilterLabel}</span>
+                            <span className="text-amber-400 font-bold">×</span>
+                          </button>
+                        )}
+                        {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
+                          <button
+                            onClick={clearStatFilter}
+                            className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-rose-400 hover:border-rose-900/40 text-xs transition-colors"
+                          >
+                            Clear all ×
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Genre/decade filter strip — only visible when filter is active (entered from stats drill-down) */}
+                    {hasFilter && driftVisible && (() => {
+                      const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
+                      const hasGenres = genres.length > 0;
+                      const hasDecades = decades.length > 0;
+                      if (!hasGenres && !hasDecades) return null;
+                      return (
+                        <div className="absolute left-0 right-0 z-50 flex justify-center pointer-events-none" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}>
+                          <div
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 pointer-events-auto"
+                            style={{ overflowX: "auto", maxWidth: "calc(100% - 32px)", scrollbarWidth: "none", msOverflowStyle: "none" }}
+                          >
+                            {hasGenres && genres.map((g) => (
+                              <GenreTag
+                                key={g}
+                                genre={g}
+                                onClick={() => {
+                                  setStatFilterLabel(null);
+                                  setActiveStyles(new Set());
+                                  toggleGenre(g);
+                                }}
+                                active={activeGenres.has(g)}
+                              />
+                            ))}
+                            {hasGenres && hasDecades && (
+                              <span className="text-stone-700 text-xs shrink-0 px-1">|</span>
+                            )}
+                            {hasDecades && (
+                              <>
+                                <button
+                                  onClick={() => setActiveDecade(new Set())}
+                                  className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${!activeDecade.size ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                                >All</button>
+                                {decades.map(d => (
+                                  <button key={d} onClick={() => setActiveDecade(prev => {
+                                    const s = new Set(prev);
+                                    s.has(d) ? s.delete(d) : s.add(d);
+                                    return s;
+                                  })}
+                                    className={`px-3 py-1 rounded-full text-xs shrink-0 border transition-colors ${activeDecade.has(d) ? "bg-amber-900/50 border-amber-700/60 text-amber-200" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+                                  >{d}</button>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
                 );
               })()}
-              {/* Bottom-center: zoom + screensaver */}
-              {!controlsHidden && (
-              <div className="absolute left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full bg-black/60 backdrop-blur-sm border border-white/10 overflow-hidden" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 3.5rem)" }}>
-                <button
-                  onClick={() => setHoneycombZoom((z) => Math.max(0.4, parseFloat((z - 0.25).toFixed(2))))}
-                  className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
-                >
-                  −
-                </button>
-                <div className="w-px h-3 bg-white/10" />
-                <button
-                  onClick={() => setHoneycombZoom((z) => Math.min(1.8, parseFloat((z + 0.25).toFixed(2))))}
-                  className="px-4 py-1.5 text-stone-400 text-base hover:text-amber-300 transition-colors"
-                >
-                  +
-                </button>
-              </div>
-              )}
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
