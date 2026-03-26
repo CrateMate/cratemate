@@ -3943,8 +3943,10 @@ function RadarChart({ myData, theirData, myLabel, theirLabel }) {
       {/* Legend */}
       <circle cx={18} cy={200} r={3} fill="rgba(217,119,6,0.7)" />
       <text x={24} y={200} dominantBaseline="middle" fill="rgba(120,113,108,0.8)" fontSize="7.5">{myLabel}</text>
-      <circle cx={90} cy={200} r={3} fill="rgba(14,165,233,0.7)" />
-      <text x={96} y={200} dominantBaseline="middle" fill="rgba(120,113,108,0.8)" fontSize="7.5">{theirLabel}</text>
+      {theirLabel && <>
+        <circle cx={90} cy={200} r={3} fill="rgba(14,165,233,0.7)" />
+        <text x={96} y={200} dominantBaseline="middle" fill="rgba(120,113,108,0.8)" fontSize="7.5">{theirLabel}</text>
+      </>}
     </svg>
   );
 }
@@ -6160,7 +6162,11 @@ export default function CrateMate() {
       .then((d) => {
         setDiscogsConnected(d.connected);
         setDiscogsUsername(d.username);
-        setIsDiscoverable(d.is_discoverable ?? false);
+        setIsDiscoverable(d.is_discoverable ?? true);
+        // Auto-enable discoverability for new users (no profile row yet → null)
+        if (d.is_discoverable == null) {
+          fetch("/api/discogs/toggle-discovery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ discoverable: true }) }).catch(() => {});
+        }
       })
       .catch(() => {});
 
@@ -6172,7 +6178,7 @@ export default function CrateMate() {
         .then((d) => {
           setDiscogsConnected(d.connected);
           setDiscogsUsername(d.username);
-          setIsDiscoverable(d.is_discoverable ?? false);
+          setIsDiscoverable(d.is_discoverable ?? true);
         })
         .catch(() => {});
     }
@@ -10382,14 +10388,9 @@ export default function CrateMate() {
 
       {tab === "discover" && (
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
-          {!seenHints["discover"] && (
-            <HintBanner onDismiss={() => dismissHint("discover")}>
-              Toggle discoverability above to find other collectors who share your taste.
-            </HintBanner>
-          )}
           <div className="px-4 pt-2 space-y-4">
-          {/* Discovery toggle */}
-          <div className="bg-white/[0.04] rounded-xl p-4">
+          {/* Discovery toggle + share */}
+          <div className="bg-white/[0.04] rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-stone-200 text-sm font-medium">Make my crate discoverable</div>
@@ -10412,6 +10413,19 @@ export default function CrateMate() {
                 <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white/90 transition-all shadow ${isDiscoverable ? "left-5" : "left-0.5"}`} />
               </button>
             </div>
+            {discogsUsername && (
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/crate/${discogsUsername}`;
+                  if (navigator.share) navigator.share({ title: "Check out my crate", url }).catch(() => {});
+                  else { navigator.clipboard.writeText(url); }
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-stone-800 text-stone-500 hover:text-amber-300 hover:border-amber-800/50 text-xs transition-colors"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                Share your crate
+              </button>
+            )}
           </div>
 
           {!isDiscoverable ? (
@@ -10420,6 +10434,41 @@ export default function CrateMate() {
             </div>
           ) : (
             <>
+              {/* Crate DNA — social card */}
+              {(() => {
+                const { genres } = buildCollectionStats(myRecords);
+                const topGenres = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                const topArtists = [...new Map(myRecords.filter(r => r.artist && !/^various/i.test(r.artist)).map(r => [r.artist, r])).entries()]
+                  .map(([artist, r]) => ({ artist, count: myRecords.filter(x => x.artist === artist).length, thumb: r.thumb }))
+                  .sort((a, b) => b.count - a.count).slice(0, 5);
+                return (
+                  <div className="bg-white/[0.04] rounded-xl overflow-hidden">
+                    <div className="px-3 pt-3 pb-2 flex items-center justify-between">
+                      <div className="text-stone-500 text-xs uppercase tracking-wider">Your Crate DNA</div>
+                      <div className="text-stone-700 text-[10px]">{myRecords.length} records</div>
+                    </div>
+                    {topGenres.length > 0 && (
+                      <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
+                        {topGenres.map(([genre]) => (
+                          <span key={genre} className="text-[10px] px-2 py-0.5 rounded-full border border-amber-800/30 bg-amber-900/15 text-amber-400/80">{genre}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="px-3 pb-3 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                      {topArtists.map(({ artist, count, thumb }) => (
+                        <div key={artist} className="shrink-0 text-center" style={{ width: 52 }}>
+                          <div className="w-10 h-10 mx-auto rounded-lg overflow-hidden bg-stone-800 mb-1">
+                            {thumb ? <img src={proxyArtUrl(upgradeDiscogsThumb(thumb) || thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <div className="w-full h-full bg-stone-700" />}
+                          </div>
+                          <div className="text-stone-400 text-[9px] truncate">{stripArtistNum(artist)}</div>
+                          <div className="text-stone-700 text-[8px]">{count} rec</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="flex items-center justify-between">
                 <div className="text-stone-500 text-xs uppercase tracking-wider">Similar Crates</div>
                 <button
@@ -10448,8 +10497,9 @@ export default function CrateMate() {
                 <div className="text-center py-8 text-stone-600 text-sm">Finding similar crates…</div>
               )}
               {discoverResults !== null && !discoverLoading && discoverResults.length === 0 && (
-                <div className="text-center py-8">
-                  <div className="text-stone-600 text-sm">No other discoverable users yet — spread the word</div>
+                <div className="text-center py-6">
+                  <div className="text-stone-600 text-sm">No other discoverable users yet</div>
+                  <div className="text-stone-700 text-xs mt-1">Share your crate link to grow the community</div>
                 </div>
               )}
               {discoverResults && discoverResults.length > 0 && (

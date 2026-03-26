@@ -22,6 +22,6 @@ export async function GET() {
   return NextResponse.json({
     connected: !!tokenRow,
     username: tokenRow?.discogs_username || profileRow?.display_name || null,
-    is_discoverable: profileRow?.is_discoverable ?? false,
+    is_discoverable: profileRow ? (profileRow.is_discoverable ?? false) : null,
   });
 }
