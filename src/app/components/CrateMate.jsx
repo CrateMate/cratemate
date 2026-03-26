@@ -6533,13 +6533,14 @@ export default function CrateMate() {
         if (enrichmentAbort.current) break;
         const batch = uncached.slice(i, i + CONCURRENCY);
         const results = await Promise.allSettled(batch.map(r => fetchAndCacheFeatures(r)));
-        // Mark failed records so we don't retry them on next load
+        // Mark failed records with genre-based estimates so we don't retry and UI stays clean
         batch.forEach((r, idx) => {
           const result = results[idx];
           if (!spotifyFeaturesRef.current[r.id] && (result.status === "rejected" || !result.value)) {
-            const sentinel = { _notFound: true };
-            spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: sentinel };
-            setSpotifyFeatures(prev => ({ ...prev, [r.id]: sentinel }));
+            const estimated = estimateFeaturesFromRecord(r);
+            estimated._estimated = true;
+            spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: estimated };
+            setSpotifyFeatures(prev => ({ ...prev, [r.id]: estimated }));
           }
         });
         done += batch.length;
@@ -7544,12 +7545,11 @@ export default function CrateMate() {
 
     // Resolve features: real Spotify data first, then genre-based estimate
     function resolveFeatures(r) {
-      const f = features[r.id];
-      return (f && f.energy != null) ? f : estimateFeaturesFromRecord(r);
+      return features[r.id] || estimateFeaturesFromRecord(r);
     }
     function hasRealFeatures(r) {
       const f = features[r.id];
-      return !!(f && f.energy != null);
+      return !!(f && !f._estimated);
     }
 
     // Build micro-explanation pills for a suggestion
