@@ -343,29 +343,44 @@ async function fetchFeaturesByTracks(
   const candidates = tracklist.filter(t => t.type === "track" && t.title).slice(0, 5);
   if (candidates.length < 2) return null;
 
-  const spotifyIds: string[] = [];
-  const matchedTracks: { title: string; position?: string }[] = [];
+  // Collect ALL matching Spotify IDs per track (ReccoBeats may only have certain versions)
+  const trackCandidates: { ids: string[]; title: string; position?: string }[] = [];
   for (const track of candidates) {
     const q = `track:${cleanTitle(track.title)} artist:${artist}`;
-    const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=3`);
+    const res = await spotifyGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
     if (!res.ok) continue;
     const data = await res.json();
     const items: Array<{ id: string; name: string }> = data.tracks?.items || [];
-    const best = items.find(t =>
+    const matches = items.filter(t =>
       normalise(t.name).includes(normalise(track.title)) ||
       normalise(track.title).includes(normalise(t.name))
     );
-    if (best) {
-      spotifyIds.push(best.id);
-      matchedTracks.push({ title: track.title, position: track.position });
+    if (matches.length > 0) {
+      trackCandidates.push({ ids: matches.map(m => m.id), title: track.title, position: track.position });
     }
   }
 
-  if (spotifyIds.length < 2) return null;
-  const valid = await reccoBeatsFeatures(spotifyIds);
-  if (valid.length < 2) return null;
+  if (trackCandidates.length < 2) return null;
+
+  // Try all IDs for each track against ReccoBeats, pick the first that returns features
+  const resolvedIds: string[] = [];
+  const resolvedTracks: { title: string; position?: string }[] = [];
+  const allCandidateIds = trackCandidates.flatMap(tc => tc.ids);
+  const allFeatures = await reccoBeatsFeatures(allCandidateIds);
+  const featureById = new Map(allFeatures.map((f, i) => [allCandidateIds[i], f]));
+
+  for (const tc of trackCandidates) {
+    const hit = tc.ids.find(id => featureById.has(id));
+    if (hit) {
+      resolvedIds.push(hit);
+      resolvedTracks.push({ title: tc.title, position: tc.position });
+    }
+  }
+
+  if (resolvedIds.length < 2) return null;
+  const valid = resolvedIds.map(id => featureById.get(id)!);
   const result = avgFeatures(valid, "tracks");
-  result.track_features = buildTrackFeatures(valid, matchedTracks);
+  result.track_features = buildTrackFeatures(valid, resolvedTracks);
   return result;
 }
 
