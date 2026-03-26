@@ -1,5 +1,5 @@
-import VinylCrate from "../components/VinylCrate";
+import CrateMate from "../components/CrateMate";
 
 export default function AppPage() {
-  return <VinylCrate />;
+  return <CrateMate />;
 }

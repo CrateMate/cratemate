@@ -1703,7 +1703,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   const hexLongPressTimer = useRef(null);
   const hexLongPressFired = useRef(false);
 
-  // Screensaver (idle auto-pan) — state is lifted to parent VinylCrate
+  // Screensaver (idle auto-pan) — state is lifted to parent CrateMate
   const screensaverEnabledRef = useRef(screensaverEnabled);
   useEffect(() => { screensaverEnabledRef.current = screensaverEnabled; }, [screensaverEnabled]);
   const idleTimerRef = useRef(null);
@@ -5570,7 +5570,7 @@ async function generateCrateStory(session, username) {
   return canvas;
 }
 
-export default function VinylCrate() {
+export default function CrateMate() {
   const { user } = useUser();
   const { theme, setTheme } = useTheme();
   const [collection, setCollection] = useState(null);

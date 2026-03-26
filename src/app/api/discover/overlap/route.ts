@@ -20,7 +20,7 @@ type AudioProfile = {
   loudness: number;
 };
 
-// Mirrors GENRE_AUDIO_PROFILES in VinylCrate.jsx (tempo omitted — not needed for radar)
+// Mirrors GENRE_AUDIO_PROFILES in CrateMate.jsx (tempo omitted — not needed for radar)
 const GENRE_PROFILES: Record<string, AudioProfile> = {
   "electronic":       { energy: 0.82, valence: 0.58, danceability: 0.78, acousticness: 0.05, loudness: 0.89 },
   "house":            { energy: 0.86, valence: 0.64, danceability: 0.87, acousticness: 0.02, loudness: 0.89 },

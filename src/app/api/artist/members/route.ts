@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-// Shape expected by buildTodayHook in VinylCrate.jsx
+// Shape expected by buildTodayHook in CrateMate.jsx
 type MemberRecord = {
   name: string;
   birth_month: number | null;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { HoneycombView, TileView, CoverArt } from "@/app/components/VinylCrate";
+import { HoneycombView, TileView, CoverArt } from "@/app/components/CrateMate";
 
 function PublicDetailCard({ record, onClose }) {
   const year = record.year_original || record.year_pressed;
