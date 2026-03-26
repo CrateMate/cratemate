@@ -11136,6 +11136,44 @@ export default function CrateMate() {
         </div>
       )}
 
+      {/* Direction preview popup — rendered outside banner to avoid blocking button taps */}
+      {nowPlaying && bannerPreviewDirection && (() => {
+        const suggestions = (trailCenter && !trailActive) ? trailSuggestions : bannerSuggestions;
+        const prev = suggestions?.[bannerPreviewDirection];
+        if (!prev) return null;
+        const dirColors = { windDown: "#60a5fa", liftUp: "#f87171", sideways: "#a78bfa" };
+        const color = dirColors[bannerPreviewDirection];
+        const isSession = !!(trailCenter && !trailActive);
+        return (
+          <div className="shrink-0 px-4 pb-1 flex justify-end max-w-md mx-auto w-full">
+            <div
+              className="w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg"
+              style={{ borderColor: `${color}44` }}
+            >
+              <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                {prev.record.thumb
+                  ? <img src={proxyArtUrl(upgradeDiscogsThumb(prev.record.thumb) || prev.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  : <div className="w-full h-full bg-stone-700" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
+                <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
+              </div>
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  setBannerPreviewDirection(null);
+                  if (isSession) navigateTrail(prev.record);
+                  else await logPlay(prev.record.id);
+                }}
+                className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
+                style={{ color, background: `${color}22` }}
+              >{isSession ? "→" : "▶"}</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Now Playing banner — sits above bottom tabs */}
       {nowPlaying && viewMode !== "drift" && (
         <div
@@ -11169,34 +11207,7 @@ export default function CrateMate() {
                   <>
                     {trailSuggestions && !trailLoading && (
                       hasSpotifyFeatures ? (
-                        <div className="relative flex items-center gap-1 shrink-0" style={{ zIndex: 1 }}>
-                          {bannerPreviewDirection && (() => {
-                            const prev = trailSuggestions[bannerPreviewDirection];
-                            if (!prev) return null;
-                            const dirColors = { windDown: "#60a5fa", liftUp: "#f87171", sideways: "#a78bfa" };
-                            const color = dirColors[bannerPreviewDirection];
-                            return (
-                              <div
-                                className="absolute bottom-full mb-2 right-0 w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg pointer-events-auto"
-                                style={{ borderColor: `${color}44`, zIndex: 10 }}
-                              >
-                                <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
-                                  {prev.record.thumb
-                                    ? <img src={proxyArtUrl(upgradeDiscogsThumb(prev.record.thumb) || prev.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                                    : <div className="w-full h-full bg-stone-700" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
-                                  <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
-                                </div>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); navigateTrail(prev.record); setBannerPreviewDirection(null); }}
-                                  className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
-                                  style={{ color, background: `${color}22` }}
-                                >→</button>
-                              </div>
-                            );
-                          })()}
+                        <div className="shrink-0 flex items-center gap-1">
                           {[
                             { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Cool off" },
                             { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Turn it up" },
@@ -11207,7 +11218,7 @@ export default function CrateMate() {
                             return (
                               <button
                                 key={key}
-                                onClick={(e) => {
+                                onPointerDown={(e) => {
                                   e.stopPropagation();
                                   setBannerPreviewDirection(prev => prev === key ? null : key);
                                 }}
@@ -11248,34 +11259,7 @@ export default function CrateMate() {
                   <>
                     {/* Trail direction buttons — visible even without active session */}
                     {bannerSuggestions && hasSpotifyFeatures && (
-                      <div className="relative flex items-center gap-1 shrink-0" style={{ zIndex: 1 }}>
-                        {bannerPreviewDirection && (() => {
-                          const prev = bannerSuggestions[bannerPreviewDirection];
-                          if (!prev) return null;
-                          const dirColors = { windDown: "#60a5fa", liftUp: "#f87171", sideways: "#a78bfa" };
-                          const color = dirColors[bannerPreviewDirection];
-                          return (
-                            <div
-                              className="absolute bottom-full mb-2 right-0 w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg pointer-events-auto"
-                              style={{ borderColor: `${color}44`, zIndex: 10 }}
-                            >
-                              <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
-                                {prev.record.thumb
-                                  ? <img src={proxyArtUrl(upgradeDiscogsThumb(prev.record.thumb) || prev.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                                  : <div className="w-full h-full bg-stone-700" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
-                                <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
-                              </div>
-                              <button
-                                onClick={async (e) => { e.stopPropagation(); setBannerPreviewDirection(null); await logPlay(prev.record.id); }}
-                                className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
-                                style={{ color, background: `${color}22` }}
-                              >▶</button>
-                            </div>
-                          );
-                        })()}
+                      <div className="shrink-0 flex items-center gap-1">
                         {[
                           { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Cool off" },
                           { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Turn it up" },
@@ -11286,7 +11270,7 @@ export default function CrateMate() {
                           return (
                             <button
                               key={key}
-                              onClick={(e) => {
+                              onPointerDown={(e) => {
                                 e.stopPropagation();
                                 setBannerPreviewDirection(prev => prev === key ? null : key);
                               }}
