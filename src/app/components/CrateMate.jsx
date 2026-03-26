@@ -5748,18 +5748,18 @@ export default function CrateMate() {
   // Dismissed session ID + timestamp stored locally — auto-restores after 6 hours
   const BANNER_RESTORE_MS = 6 * 60 * 60 * 1000; // 6 hours
   const [dismissedSessionId, setDismissedSessionId] = useState(() => {
+    if (typeof window === "undefined") return null;
     try {
       const raw = localStorage.getItem("cratemate_np_dismissed");
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (parsed.ts && Date.now() - parsed.ts > 6 * 60 * 60 * 1000) {
-        localStorage.removeItem("cratemate_np_dismissed");
+        try { localStorage.removeItem("cratemate_np_dismissed"); } catch {}
         return null;
       }
       return parsed.id || null;
     } catch {
-      // Legacy format (plain string) — clear it
-      localStorage.removeItem("cratemate_np_dismissed");
+      try { localStorage.removeItem("cratemate_np_dismissed"); } catch {}
       return null;
     }
   });
