@@ -1085,7 +1085,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={onScroll}>
+        <div className="flex-1 overflow-y-auto px-4" style={{ paddingBottom: 16 }} onScroll={onScroll}>
           {topSlot && <div className="pb-2">{topSlot}</div>}
           {visibleGroups.map((group) => {
             const key = group.master_id ? `master_${group.master_id}` : `release_${group.representative?.release_id}`;
@@ -5620,7 +5620,7 @@ export default function CrateMate() {
   const [wantsSubTab, setWantsSubTab] = useState("wantlist");
   const [lastfmRecs, setLastfmRecs] = useState(null);
   const [lastfmRecsLoading, setLastfmRecsLoading] = useState(false);
-  const [lastfmExpanded, setLastfmExpanded] = useState(true);
+  const [lastfmExpanded, setLastfmExpanded] = useState(false);
   const [recoFiltersExpanded, setRecoFiltersExpanded] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [seenHints, setSeenHints] = useState(() => {
@@ -5932,38 +5932,7 @@ export default function CrateMate() {
   const HISTORY_PAGE_SIZE = 20;
   const historySentinelRef = useRef(null);
 
-  // Auto-hide header on scroll down, reveal on scroll up
-  const [headerVisible, setHeaderVisible] = useState(true);
-  const lastScrollY = useRef(0);
-  // Accumulate upward movement — prevents iOS rubber-band bounce from re-showing header
-  const upScrollAccum = useRef(0);
-  const SHOW_ACCUM = 24; // px of upward travel required before header re-appears
   const [searchFocused, setSearchFocused] = useState(false);
-  function handleTabScroll(e) {
-    const el = e.currentTarget;
-    const y = el.scrollTop;
-    const delta = y - lastScrollY.current;
-    lastScrollY.current = y;
-    if (Math.abs(delta) < 4) return;
-    // Don't hide if page isn't scrollable enough (prevents rebound loop)
-    const scrollRoom = el.scrollHeight - el.clientHeight;
-    if (scrollRoom < 200) return;
-    if (delta > 0) {
-      upScrollAccum.current = 0;
-      if (y > 120) setHeaderVisible(false);
-    } else {
-      upScrollAccum.current += Math.abs(delta);
-      if (upScrollAccum.current >= SHOW_ACCUM) {
-        upScrollAccum.current = 0;
-        setHeaderVisible(true);
-      }
-    }
-  }
-  useEffect(() => {
-    if (!controlsHidden) setHeaderVisible(true);
-    lastScrollY.current = 0;
-    upScrollAccum.current = 0;
-  }, [tab, page]); // reset on tab change AND page change
 
   const [isDiscoverable, setIsDiscoverable] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null);
@@ -6144,8 +6113,8 @@ export default function CrateMate() {
 
   function relativePlayTime(loggedAt) {
     const mins = Math.floor((Date.now() - new Date(loggedAt).getTime()) / 60000);
-    if (mins < 1) return "Now Playing";
-    if (mins < 60) return `Last played · ${mins}m ago`;
+    if (mins < 90) return "Now Playing";
+    if (mins < 60 * 24) return `Last played · ${mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`} ago`;
     if (mins < 1440) return `Last played · ${Math.floor(mins / 60)}h ago`;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const logged = new Date(loggedAt); logged.setHours(0, 0, 0, 0);
@@ -7779,44 +7748,41 @@ export default function CrateMate() {
       className="h-dvh flex flex-col max-w-md mx-auto"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
+      {/* ── Compact header (fixed, no scroll-hide) ── */}
       <div style={{
         display: "grid",
-        gridTemplateRows: (headerVisible && !controlsHidden) ? "1fr" : "0fr",
-        opacity: (headerVisible && !controlsHidden) ? 1 : 0,
+        gridTemplateRows: !controlsHidden ? "1fr" : "0fr",
+        opacity: !controlsHidden ? 1 : 0,
         transition: "grid-template-rows 0.28s ease, opacity 0.22s ease",
-        pointerEvents: (headerVisible && !controlsHidden) ? "auto" : "none",
+        pointerEvents: !controlsHidden ? "auto" : "none",
       }}>
       <div style={{ overflow: "hidden" }}>
       {(!selected || tab !== "crate") && viewMode !== "drift" && (
-        <div className="px-5 pt-7 pb-2 flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/icon-192.png" alt="CrateMate" width={46} height={46} className="rounded-xl shrink-0" />
+        <div className="px-4 pt-4 pb-1.5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <img src="/icon-192.png" alt="CrateMate" width={34} height={34} className="rounded-lg shrink-0" />
             <div>
-              {user?.firstName && (
-                <div className="text-xs uppercase tracking-widest text-amber-900 leading-none mb-1.5">{user.firstName}&apos;s</div>
-              )}
-              <h1 style={{ fontFamily: "'Fraunces',serif", fontSize: 24, lineHeight: 1 }} className="text-amber-50">
-                CrateMate
+              <h1 style={{ fontFamily: "'Fraunces',serif", fontSize: 18, lineHeight: 1.1 }} className="text-amber-50">
+                {user?.firstName ? `${user.firstName}'s CrateMate` : "CrateMate"}
               </h1>
-            </div>
-            <div className="text-stone-600 text-xs mt-0.5 leading-tight">
-              <div>{myRecords.length} records</div>
-              {forSaleRecords.length > 0 && (
-                <button
-                  className="text-stone-500 hover:text-amber-400 transition-colors text-left"
-                  onClick={() => {
-                    setTab("crate");
-                    setForSaleForced(true);
-                    // Wait for React to render the section before scrolling
-                    setTimeout(() => forSaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
-                  }}
-                >
-                  {forSaleRecords.length} for sale ↓
-                </button>
-              )}
+              <div className="text-stone-600 text-[10px] leading-tight mt-0.5">
+                {myRecords.length} records
+                {forSaleRecords.length > 0 && (
+                  <button
+                    className="text-stone-500 hover:text-amber-400 transition-colors ml-1.5"
+                    onClick={() => {
+                      setTab("crate");
+                      setForSaleForced(true);
+                      setTimeout(() => forSaleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+                    }}
+                  >
+                    · {forSaleRecords.length} for sale
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2">
             {!isOnline && (
               <div className="text-[10px] text-amber-700/80 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-700 animate-pulse inline-block" />
@@ -7828,88 +7794,35 @@ export default function CrateMate() {
                 const next = theme === "dark" ? "light" : theme === "light" ? "system" : theme === "system" ? "personal" : "dark";
                 setTheme(next);
               }}
-              title={theme === "personal" && personalTheme
-                ? `Personal theme · ${personalTheme.sorted[0]?.[0] ?? ""} × ${personalTheme.sorted[1]?.[0] ?? ""}`
-                : `Theme: ${theme}`}
-              className="text-stone-600 hover:text-stone-400 text-base transition-colors leading-none"
+              title={`Theme: ${theme}`}
+              className="text-stone-600 hover:text-stone-400 text-sm transition-colors leading-none"
             >
               {theme === "dark" ? "🌑" : theme === "light" ? "☀" : theme === "system" ? "⊙" : "🎵"}
             </button>
             <button
               onClick={() => setShowSettings(true)}
-              className="text-stone-600 hover:text-stone-400 text-base transition-colors leading-none"
+              className="text-stone-600 hover:text-stone-400 text-sm transition-colors leading-none"
               title="Settings"
             >⚙</button>
-            <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
+            <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-7 h-7" } }} />
           </div>
         </div>
       )}
       </div>
       </div>
 
-      {/* Global fullscreen restore button — shows on ALL tabs when header is hidden */}
-      {controlsHidden && (
+      {/* Global fullscreen restore button */}
+      {controlsHidden && viewMode !== "drift" && (
         <button
           onClick={() => {
             driftFullscreenRef.current = false;
             setControlsHidden(false);
-            if (viewMode === "drift") driftResetFade();
           }}
           className="absolute top-3 right-4 z-50 w-9 h-9 rounded-full bg-black/20 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
         </button>
       )}
-
-      <div ref={tabRowRef} className={`relative flex px-4 pr-10 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
-        {/* Focus mode toggle — absolute right, doesn't take tab space */}
-        {!controlsHidden && (
-          <button
-            onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
-            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-400 transition-colors"
-            title="Focus mode"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
-          </button>
-        )}
-        {[
-          ["crate",    "⏺", "Crate"],
-          ["history",  "▷", "Log"],
-          ["reco",     "✦", "Picks"],
-          ["hearts",   "♥", "Faves"],
-          ["wants",    "◉", "Wants"],
-          ["stats",    "◎", "Stats"],
-          ["discover", "⊕", "Connect"],
-        ].map(([id, icon, label]) => {
-          const active = tab === id;
-          return (
-            <button
-              key={id}
-              onClick={() => { setTab(id); setSelected(null); }}
-              className={`flex-1 min-h-[44px] flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
-                active
-                  ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
-                  : viewMode === "drift" ? "text-stone-600 hover:text-stone-400 bg-black/40" : "text-stone-500 hover:text-stone-300"
-              }`}
-            >
-              {active ? (
-                <span className="flex items-center justify-center gap-1">
-                  {id === "crate"
-                    ? <img src="/icon-192.png" alt="" width={11} height={11} className="rounded-sm opacity-75" />
-                    : icon}
-                  {label}
-                </span>
-              ) : (
-                <span className="flex items-center justify-center">
-                  {id === "crate"
-                    ? <img src="/icon-192.png" alt="" width={12} height={12} className="rounded-sm opacity-50" />
-                    : icon}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
 
       {tab === "crate" && (
         <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -7923,8 +7836,8 @@ export default function CrateMate() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onFocus={() => { setSearchFocused(true); setHeaderVisible(false); }}
-                onBlur={() => { setSearchFocused(false); setHeaderVisible(true); }}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
                 placeholder="Search artist, title, genre, song..."
                 className="w-full border border-stone-800/80 rounded-xl px-4 py-2.5 pr-9 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60" style={{ backgroundColor: "var(--bg-input)" }}
               />
@@ -8389,7 +8302,7 @@ export default function CrateMate() {
               })()}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+            <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
               {pagedRecords.map((r) => (
                 <RecordRow
                   key={r.id}
@@ -8943,7 +8856,7 @@ export default function CrateMate() {
       })()}
 
       {tab === "reco" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
           <div className="px-4 space-y-3 pt-0">
 
           {/* Genre + Decade filters */}
@@ -9102,7 +9015,7 @@ export default function CrateMate() {
       )}
 
       {tab === "history" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
               Long-press any record in visual views, tap the play button in list view, or use the Log button in the detail card to log a play.
@@ -9323,8 +9236,7 @@ export default function CrateMate() {
               onSaveThreshold={savePriceThreshold}
               onRemoveThreshold={removePriceThreshold}
               nowPlaying={!!nowPlaying}
-              onScroll={handleTabScroll}
-              onStartImport={async () => {
+                           onStartImport={async () => {
                 if (!wantlist) {
                   const res = await fetch("/api/discogs/wantlist");
                   if (res.ok) setWantlist(await res.json());
@@ -9346,7 +9258,7 @@ export default function CrateMate() {
           )}
 
           {wantsSubTab === "discover" && (
-            <div className="flex-1 overflow-y-auto px-4 space-y-3 pt-2" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+            <div className="flex-1 overflow-y-auto px-4 space-y-3 pt-2" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
 
               {myRecords.length === 0 && (
                 <div className="text-center py-10 px-4">
@@ -9523,7 +9435,7 @@ export default function CrateMate() {
       )}
 
       {tab === "stats" && (
-        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
           {(() => {
             const { decades, genres, formats, styles } = buildCollectionStats(myRecords);
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
@@ -9576,15 +9488,15 @@ export default function CrateMate() {
             return (
               <div className="space-y-6 pt-2">
                 {/* Subtab pills */}
-                <div className="flex gap-1.5">
-                  {[["collection", "◎ Collection"], ["listening", "◷ Listening"]].map(([id, label]) => (
+                <div className="flex gap-2">
+                  {[["collection", "Collection"], ["listening", "Listening"]].map(([id, label]) => (
                     <button
                       key={id}
                       onClick={() => setStatsSubTab(id)}
-                      className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                      className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                         statsSubTab === id
-                          ? "bg-amber-900/25 text-amber-400 border-amber-800/35"
-                          : "text-stone-500 border-stone-800/50 hover:text-stone-300"
+                          ? "bg-amber-900/30 border-amber-800/40 text-amber-400"
+                          : "border-stone-800 text-stone-500 hover:text-stone-300"
                       }`}
                     >
                       {label}
@@ -10187,7 +10099,7 @@ export default function CrateMate() {
       )}
 
       {tab === "discover" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: nowPlaying ? 96 : 32 }} onScroll={handleTabScroll}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
           {!seenHints["discover"] && (
             <HintBanner onDismiss={() => dismissHint("discover")}>
               Toggle discoverability above to find other collectors who share your taste.
@@ -10746,11 +10658,11 @@ export default function CrateMate() {
         </div>
       )}
 
-      {/* Now Playing banner */}
+      {/* Now Playing banner — sits above bottom tabs */}
       {nowPlaying && viewMode !== "drift" && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-[190] border-t border-stone-800/60 backdrop-blur-md"
-          style={{ background: "rgba(12,11,9,0.92)" }}
+          className="shrink-0 border-t border-stone-800/60"
+          style={{ background: "var(--bg-main, #0c0b09)" }}
         >
           {(() => {
             const sessionMinimized = !!(trailCenter && !trailActive);
@@ -10954,7 +10866,6 @@ export default function CrateMate() {
               </div>
             );
           })()}
-          <div style={{ height: "env(safe-area-inset-bottom, 0px)" }} />
         </div>
       )}
 
@@ -10982,9 +10893,108 @@ export default function CrateMate() {
         />
       )}
 
+      {/* ── Bottom tab bar (scrollable) ── */}
+      {viewMode !== "drift" && (
+        <div className="shrink-0 border-t border-stone-800/40" style={{ background: "var(--bg-main, #0c0b09)" }}>
+          <div
+            ref={tabRowRef}
+            className="flex gap-1 px-3 py-1.5 overflow-x-auto relative"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}
+          >
+            {[
+              ["crate",    "⏺", "Crate"],
+              ["history",  "▷", "Log"],
+              ["reco",     "✦", "Picks"],
+              ["wants",    "☆", "Wants"],
+              ["stats",    "◫", "Stats"],
+              ["hearts",   "♥", "Hearts"],
+              ["discover", "⊕", "Discover"],
+            ].map(([id, icon, label]) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => { setTab(id); setSelected(null); }}
+                  className={`shrink-0 min-h-[40px] px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
+                    active
+                      ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
+                      : "text-stone-500 hover:text-stone-300"
+                  }`}
+                >
+                  <span className="flex items-center justify-center gap-1">
+                    {id === "crate"
+                      ? <img src="/icon-192.png" alt="" width={11} height={11} className={`rounded-sm ${active ? "opacity-75" : "opacity-50"}`} />
+                      : <span>{icon}</span>}
+                    {active && <span>{label}</span>}
+                  </span>
+                </button>
+              );
+            })}
+            {/* Focus mode toggle */}
+            {!controlsHidden && (
+              <button
+                onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
+                className="shrink-0 min-h-[40px] px-2 flex items-center justify-center text-stone-700 hover:text-stone-400 transition-colors"
+                title="Focus mode"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
+              </button>
+            )}
+          </div>
+          <div style={{ height: "env(safe-area-inset-bottom, 0px)" }} />
+        </div>
+      )}
+
+      {/* Bottom tab bar for drift view */}
+      {viewMode === "drift" && !controlsHidden && (
+        <div className="shrink-0 relative z-[60]" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}>
+          <div
+            className="flex gap-1 px-3 py-1.5 overflow-x-auto"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {[
+              ["crate",    "⏺", "Crate"],
+              ["history",  "▷", "Log"],
+              ["reco",     "✦", "Picks"],
+              ["wants",    "☆", "Wants"],
+              ["stats",    "◫", "Stats"],
+              ["hearts",   "♥", "Hearts"],
+              ["discover", "⊕", "Discover"],
+            ].map(([id, icon, label]) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => { setTab(id); setSelected(null); }}
+                  className={`shrink-0 min-h-[40px] px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
+                    active
+                      ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
+                      : "text-stone-600 hover:text-stone-400"
+                  }`}
+                >
+                  <span className="flex items-center justify-center gap-1">
+                    {id === "crate"
+                      ? <img src="/icon-192.png" alt="" width={11} height={11} className={`rounded-sm ${active ? "opacity-75" : "opacity-50"}`} />
+                      : <span>{icon}</span>}
+                    {active && <span>{label}</span>}
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
+              className="shrink-0 min-h-[40px] px-2 flex items-center justify-center text-stone-700 hover:text-stone-400 transition-colors"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
+            </button>
+          </div>
+          <div style={{ height: "env(safe-area-inset-bottom, 0px)" }} />
+        </div>
+      )}
+
       {/* Background enrichment indicator */}
       {enrichmentProgress && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[150] pointer-events-none">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[150] pointer-events-none">
           <div className="bg-stone-950/90 border border-stone-800/60 rounded-full px-3 py-1.5 flex items-center gap-2 backdrop-blur-sm">
             <div className="w-1.5 h-1.5 rounded-full bg-amber-600/70 animate-pulse shrink-0" />
             <span className="text-stone-500 text-[11px]">
