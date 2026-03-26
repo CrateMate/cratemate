@@ -6671,6 +6671,7 @@ export default function CrateMate() {
     if (sortBy === "year") cmp = (a.year_original || a.year_pressed || 9999) - (b.year_original || b.year_pressed || 9999);
     else if (sortBy === "genre") cmp = (a.genres || a.genre || "").localeCompare(b.genres || b.genre || "");
     else if (sortBy === "hearts") cmp = (a.favorite_tracks || []).length - (b.favorite_tracks || []).length;
+    else if (sortBy === "energy") cmp = (spotifyFeatures[a.id]?.energy || 0) - (spotifyFeatures[b.id]?.energy || 0);
     else cmp = (a.artist || "").localeCompare(b.artist || "");
     return sortDir === "asc" ? cmp : -cmp;
   }), [pool, sortBy, sortDir]);
@@ -7882,7 +7883,7 @@ export default function CrateMate() {
               <div className="flex items-center rounded-full bg-stone-800/60 border border-stone-700/50 text-xs text-stone-300 select-none overflow-hidden">
                 <button
                   onClick={() => {
-                    const ORDER = ["artist", "year", "genre", "hearts"];
+                    const ORDER = ["artist", "year", "genre", "hearts", "energy"];
                     const next = ORDER[(ORDER.indexOf(sortBy) + 1) % ORDER.length];
                     setSortBy(next); setSortDir("asc");
                   }}
@@ -7890,7 +7891,7 @@ export default function CrateMate() {
                   title="Cycle sort"
                 >
                   <span>⇅</span>
-                  <span>{{ artist: "A–Z", year: "Year", genre: "Genre", hearts: "♥" }[sortBy]}</span>
+                  <span>{{ artist: "A–Z", year: "Year", genre: "Genre", hearts: "♥", energy: "Energy" }[sortBy]}</span>
                 </button>
                 <button
                   onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")}
