@@ -6918,11 +6918,12 @@ export default function CrateMate() {
           const hooks = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers, todayWeather, playSessions, lastfmVibeData);
 
           if (hooks.length > 0) {
-            // Generate Claude reasons for all hooks in parallel
-            const picks = await Promise.all(hooks.map(async (hook) => {
+            // Generate Claude reasons sequentially (parallel hits rate limits)
+            const picks = [];
+            for (const hook of hooks) {
               const reason = await generateHookReason(hook);
-              return { recordId: hook.record.id, reason, hookType: hook.type };
-            }));
+              picks.push({ recordId: hook.record.id, reason, hookType: hook.type });
+            }
             try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks })); } catch {}
             const chosen = picks[Math.floor(Math.random() * picks.length)];
             const record = myRecords.find((r) => String(r.id) === String(chosen.recordId));
