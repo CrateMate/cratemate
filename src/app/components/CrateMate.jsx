@@ -9888,7 +9888,7 @@ export default function CrateMate() {
                       )}
                       {oldestYear < 9999 && newestYear > 0 && (
                         <div className="bg-white/[0.04] rounded-xl p-3 text-center">
-                          <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{oldestYear}–{String(newestYear).slice(-2)}</div>
+                          <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{oldestYear}–{newestYear}</div>
                           <div className="text-stone-500 text-xs mt-0.5">year range</div>
                         </div>
                       )}
