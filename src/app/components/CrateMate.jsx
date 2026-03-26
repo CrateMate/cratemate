@@ -5591,7 +5591,7 @@ export default function CrateMate() {
     tabSlideTimer.current = setTimeout(() => setTabSlide(null), 250);
   }
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("artist");
+  const [sortBy, setSortBy] = useState("az");
   const [sortDir, setSortDir] = useState("asc");
   const [hideForSale, setHideForSale] = useState(
     () => { try { return localStorage.getItem("cratemate_hide_for_sale") === "1"; } catch { return false; } }
@@ -6672,7 +6672,7 @@ export default function CrateMate() {
     else if (sortBy === "genre") cmp = (a.genres || a.genre || "").localeCompare(b.genres || b.genre || "");
     else if (sortBy === "hearts") cmp = (a.favorite_tracks || []).length - (b.favorite_tracks || []).length;
     else if (sortBy === "energy") cmp = (spotifyFeatures[a.id]?.energy || 0) - (spotifyFeatures[b.id]?.energy || 0);
-    else cmp = (a.artist || "").localeCompare(b.artist || "");
+    else /* az */ cmp = (a.artist || "").localeCompare(b.artist || "");
     return sortDir === "asc" ? cmp : -cmp;
   }), [pool, sortBy, sortDir]);
 
@@ -6771,6 +6771,9 @@ export default function CrateMate() {
     }
     if (honeycombSort === "energy") {
       return [...filtered].sort((a, b) => dir * ((spotifyFeatures[a.id]?.energy || 0) - (spotifyFeatures[b.id]?.energy || 0)));
+    }
+    if (honeycombSort === "hearts") {
+      return [...filtered].sort((a, b) => dir * ((a.favorite_tracks || []).length - (b.favorite_tracks || []).length));
     }
     // Genre mode: biggest genre cluster first, most-played within genre first
     const primaryGenre = (r) => getGenres(r)[0] || "zzz";
@@ -7886,7 +7889,7 @@ export default function CrateMate() {
               <div className="flex items-center rounded-full bg-stone-800/60 border border-stone-700/50 text-xs text-stone-300 select-none overflow-hidden">
                 <button
                   onClick={() => {
-                    const ORDER = ["artist", "year", "genre", "hearts", "energy"];
+                    const ORDER = ["az", "year", "genre", "hearts", "energy"];
                     const next = ORDER[(ORDER.indexOf(sortBy) + 1) % ORDER.length];
                     setSortBy(next); setSortDir("asc");
                   }}
@@ -7894,7 +7897,7 @@ export default function CrateMate() {
                   title="Cycle sort"
                 >
                   <span>⇅</span>
-                  <span>{{ artist: "A–Z", year: "Year", genre: "Genre", hearts: "♥", energy: "Energy" }[sortBy]}</span>
+                  <span>{{ az: "A–Z", year: "Year", genre: "Genre", hearts: "♥", energy: "Energy" }[sortBy] || "A–Z"}</span>
                 </button>
                 <button
                   onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")}
@@ -8205,14 +8208,14 @@ export default function CrateMate() {
                         {/* Sort */}
                         <button
                           onClick={() => {
-                            const order = ["year", "genre", "az", "energy"];
+                            const order = ["az", "year", "genre", "hearts", "energy"];
                             setHoneycombSort(order[(order.indexOf(honeycombSort) + 1) % order.length]);
                             setHoneycombSortDir("asc");
                           }}
                           className="flex items-center gap-1 pl-3 pr-1 py-1.5 hover:text-amber-300 transition-colors"
                         >
                           <span>⇅</span>
-                          <span>{honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : honeycombSort === "energy" ? "Energy" : "A–Z"}</span>
+                          <span>{{ az: "A–Z", year: "Year", genre: "Genre", hearts: "♥", energy: "Energy" }[honeycombSort] || "A–Z"}</span>
                         </button>
                         <button
                           onClick={() => setHoneycombSortDir(d => d === "asc" ? "desc" : "asc")}
