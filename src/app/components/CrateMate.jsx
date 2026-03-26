@@ -10979,13 +10979,13 @@ export default function CrateMate() {
         </div>
       )}
 
-      {/* Background enrichment indicator */}
+      {/* Background enrichment indicator — top of screen, out of the way */}
       {enrichmentProgress && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[150] pointer-events-none">
-          <div className="bg-stone-950/90 border border-stone-800/60 rounded-full px-3 py-1.5 flex items-center gap-2 backdrop-blur-sm">
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[150] pointer-events-none">
+          <div className="bg-stone-950/90 border border-stone-800/60 rounded-full px-3 py-1 flex items-center gap-2 backdrop-blur-sm">
             <div className="w-1.5 h-1.5 rounded-full bg-amber-600/70 animate-pulse shrink-0" />
-            <span className="text-stone-500 text-[11px]">
-              {enrichmentProgress.type === "audio" ? "Analyzing audio" : "Enriching library"} · {enrichmentProgress.done}/{enrichmentProgress.total}
+            <span className="text-stone-500 text-[10px]">
+              {enrichmentProgress.type === "audio" ? "Analyzing" : "Enriching"} · {enrichmentProgress.done}/{enrichmentProgress.total}
             </span>
           </div>
         </div>
