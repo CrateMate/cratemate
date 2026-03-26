@@ -3376,8 +3376,8 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                 background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)",
                 display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 8,
               }}>
-                <p style={{ color: "#fef3c7", fontSize: 10, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{centerRecord.title}</p>
-                <p style={{ color: "#a8a29e", fontSize: 9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{centerRecord.artist}</p>
+                <p style={{ color: "#fef3c7", fontSize: 13, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Fraunces', serif" }}>{centerRecord.title}</p>
+                <p style={{ color: "#a8a29e", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{centerRecord.artist}</p>
               </div>
             </div>
 
@@ -3421,8 +3421,8 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                           {suggestion.estimated && (
                             <span style={{ position: "absolute", top: 4, right: 4, fontSize: 8, color: "#a8a29e", opacity: 0.7, background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "1px 3px" }}>~</span>
                           )}
-                          <p style={{ color: "#fef3c7", fontSize: 8, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
-                          <p style={{ color: "#a8a29e", fontSize: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.artist}</p>
+                          <p style={{ color: "#fef3c7", fontSize: 10, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Fraunces', serif" }}>{rec.title}</p>
+                          <p style={{ color: "#a8a29e", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.artist}</p>
                         </div>
                       </button>
                     ) : (
@@ -5847,6 +5847,7 @@ export default function VinylCrate() {
   const [trailAlreadyLoggedIds, setTrailAlreadyLoggedIds] = useState(new Set());
   const [lastfmNextSuggestion, setLastfmNextSuggestion] = useState(null); // { record } for non-Spotify users
   const [bannerPreviewDirection, setBannerPreviewDirection] = useState(null);
+  const [bannerSuggestions, setBannerSuggestions] = useState(null); // precomputed trail suggestions for now playing
   const [sessionToast, setSessionToast] = useState(null); // { recordId, record }
   const sessionToastTimerRef = useRef(null);
 
@@ -7357,6 +7358,25 @@ export default function VinylCrate() {
       setLastfmNextSuggestion(null);
     }
   }
+
+  // Precompute trail suggestions for the now-playing banner (no session needed)
+  const bannerSuggestionsRecordRef = useRef(null);
+  useEffect(() => {
+    if (!nowPlaying?.record?.id) { setBannerSuggestions(null); return; }
+    if (trailCenter) return; // active session — use trailSuggestions instead
+    if (bannerSuggestionsRecordRef.current === nowPlaying.record.id) return; // already computed
+    bannerSuggestionsRecordRef.current = nowPlaying.record.id;
+    const hasSpotify = !devSimulateFree && Object.keys(spotifyFeatures).length > 0;
+    if (!hasSpotify) { setBannerSuggestions(null); return; }
+    // Async: fetch features then compute
+    (async () => {
+      try {
+        const f = spotifyFeatures[nowPlaying.record.id] || await fetchAndCacheFeatures(nowPlaying.record);
+        const allFeatures = { ...spotifyFeatures, ...(f ? { [nowPlaying.record.id]: f } : {}) };
+        setBannerSuggestions(computeTrailSuggestions(nowPlaying.record, allFeatures));
+      } catch { setBannerSuggestions(null); }
+    })();
+  }, [nowPlaying?.record?.id, trailCenter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function enterTrail(record, seedAlreadyLogged = false) {
     setTrailCenter(record);
@@ -10621,10 +10641,74 @@ export default function VinylCrate() {
                     </button>
                   </>
                 ) : (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record, true); setSelected(null); }}
-                    className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
-                  >▷ Session</button>
+                  <>
+                    {/* Trail direction buttons — visible even without active session */}
+                    {bannerSuggestions && hasSpotifyFeatures && (
+                      <div className="relative flex items-center gap-1 shrink-0">
+                        {bannerPreviewDirection && (() => {
+                          const prev = bannerSuggestions[bannerPreviewDirection];
+                          if (!prev) return null;
+                          const dirColors = { windDown: "#60a5fa", liftUp: "#f87171", sideways: "#a78bfa" };
+                          const color = dirColors[bannerPreviewDirection];
+                          return (
+                            <div
+                              className="absolute bottom-full mb-2 right-0 w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg"
+                              style={{ borderColor: `${color}44` }}
+                            >
+                              <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                                {prev.record.thumb
+                                  ? <img src={proxyArtUrl(upgradeDiscogsThumb(prev.record.thumb) || prev.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                  : <div className="w-full h-full bg-stone-700" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
+                                <div className="text-stone-500 text-[10px] truncate">{prev.record.artist}</div>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record, true); setTimeout(() => navigateTrail(prev.record), 100); setBannerPreviewDirection(null); }}
+                                className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
+                                style={{ color, background: `${color}22` }}
+                              >→</button>
+                            </div>
+                          );
+                        })()}
+                        {[
+                          { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Wind down" },
+                          { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Lift up" },
+                          { key: "sideways", color: "#a78bfa", symbol: "↔", label: "Detour" },
+                        ].map(({ key, color, symbol, label }) => {
+                          const s = bannerSuggestions[key];
+                          if (!s) return null;
+                          return (
+                            <button
+                              key={key}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (bannerPreviewDirection === key) {
+                                  enterTrail(nowPlaying.record, true);
+                                  setTimeout(() => navigateTrail(s.record), 100);
+                                  setBannerPreviewDirection(null);
+                                } else {
+                                  setBannerPreviewDirection(key);
+                                }
+                              }}
+                              title={label}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 transition-all"
+                              style={{
+                                background: bannerPreviewDirection === key ? `${color}44` : `${color}22`,
+                                border: `1px solid ${color}${bannerPreviewDirection === key ? "99" : "66"}`,
+                                color,
+                              }}
+                            >{symbol}</button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record, true); setSelected(null); }}
+                      className="px-3 py-1.5 rounded-full border border-amber-800/50 text-amber-400 text-xs hover:bg-amber-900/30 transition-colors shrink-0"
+                    >▷ Session</button>
+                  </>
                 )}
                 <button
                   onClick={(e) => {
