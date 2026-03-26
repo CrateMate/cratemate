@@ -1688,7 +1688,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   );
 }
 
-export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onDoubleTap, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb", onDragStart }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onDoubleTap, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb", onInteract }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -1923,12 +1923,13 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
     cancelAnimationFrame(rafRef.current);
     const pos = e.touches ? e.touches[0] : e;
     lastPos.current = { x: pos.clientX, y: pos.clientY };
-    if (onDragStart) onDragStart();
+    if (onInteract) onInteract();
   }
 
   function onPointerMove(e) {
     if (!dragging.current) resetIdleTimer();
     if (!dragging.current) return;
+    if (onInteract) onInteract();
     const pos = e.touches ? e.touches[0] : e;
     const dx = pos.clientX - lastPos.current.x;
     const dy = pos.clientY - lastPos.current.y;
@@ -2161,7 +2162,7 @@ function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStar
   );
 }
 
-export function TileView({ records, playCounts, onSelect, onDoubleTap, screensaverEnabled = true, onDragStart }) {
+export function TileView({ records, playCounts, onSelect, onDoubleTap, screensaverEnabled = true, onInteract }) {
   const containerRef = useRef(null); // outer scroll container
   const innerRef = useRef(null);     // inner grid (for width measurement)
   const [containerWidth, setContainerWidth] = useState(0);
@@ -2251,8 +2252,8 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap, screensav
         WebkitOverflowScrolling: "touch",
         scrollbarWidth: "none",
       }}
-      onScroll={() => { if (!screensaverActive.current) startIdleTimer(); }}
-      onPointerDown={(e) => { stopScreensaver(); pointerStartY.current = e.clientY; startIdleTimer(); if (onDragStart) onDragStart(); }}
+      onScroll={() => { if (!screensaverActive.current) startIdleTimer(); if (onInteract) onInteract(); }}
+      onPointerDown={(e) => { stopScreensaver(); pointerStartY.current = e.clientY; startIdleTimer(); if (onInteract) onInteract(); }}
     >
       {/* Inner: CSS grid — measured for width */}
       <div
@@ -5799,10 +5800,14 @@ export default function VinylCrate() {
   const [dnaGenerating, setDnaGenerating] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
   const driftFadeTimerRef = useRef(null);
+  const driftRestoreTimerRef = useRef(null);
   const driftFullscreenRef = useRef(false); // true = user explicitly chose fullscreen
+  const driftHiddenByDragRef = useRef(false); // true = hidden by drag, should restore on stop
   const inDrift = viewMode === "drift" && tab === "crate";
 
   const DRIFT_FADE_MS = 6000;
+  const DRIFT_RESTORE_MS = 800; // show controls after stopping drag/scroll
+
   // Auto-fade drift controls — only when actually in drift view
   useEffect(() => {
     if (!inDrift || controlsHidden) {
@@ -5823,11 +5828,24 @@ export default function VinylCrate() {
     }, DRIFT_FADE_MS);
   }
 
-  // Hide controls immediately when user starts dragging/scrolling in drift
+  // Hide controls when user starts dragging/scrolling — restore when they stop
   function driftHideOnInteract() {
-    if (!inDrift || controlsHidden || driftFullscreenRef.current) return;
-    if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
-    setControlsHidden(true);
+    if (!inDrift || driftFullscreenRef.current) return;
+    if (driftRestoreTimerRef.current) clearTimeout(driftRestoreTimerRef.current);
+    if (!controlsHidden) {
+      if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
+      driftHiddenByDragRef.current = true;
+      setControlsHidden(true);
+    }
+    // Reset the restore timer — fires when interaction stops
+    driftRestoreTimerRef.current = setTimeout(() => {
+      if (driftHiddenByDragRef.current) {
+        driftHiddenByDragRef.current = false;
+        setControlsHidden(false);
+        // After restoring, start the idle fade timer
+        driftResetFade();
+      }
+    }, DRIFT_RESTORE_MS);
   }
   const tabRowRef = useRef(null);
   const forSaleRef = useRef(null);
@@ -8059,7 +8077,7 @@ export default function VinylCrate() {
                   onSelect={(rec) => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
                   onDoubleTap={handleDoubleTap}
                   screensaverEnabled={screensaverEnabled}
-                  onDragStart={driftHideOnInteract}
+                  onInteract={driftHideOnInteract}
                 />
               ) : (
               <HoneycombView
@@ -8073,7 +8091,7 @@ export default function VinylCrate() {
                   if (!rec.for_sale) setLastPlayed(rec);
                 }}
                 onLogPlay={handleLogPlay}
-                onDragStart={driftHideOnInteract}
+                onInteract={driftHideOnInteract}
                 onDoubleTap={handleDoubleTap}
                 screensaverEnabled={screensaverEnabled}
                 onToggleScreensaver={() => {
