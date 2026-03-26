@@ -4692,18 +4692,18 @@ async function generateListeningDNA(stats, username) {
     for (const { artist, count } of stats.topPlayedArtists.slice(0, 5)) {
       if (curY > H - 600) break;
       const cleanName = artist.replace(/\s*\(\d+\)\s*$/, '').trim();
+      const displayName = cleanName.length > 18 ? cleanName.slice(0, 16) + '…' : cleanName;
       ctx.fillStyle = '#fef3c7';
       ctx.font = `700 58px "Fraunces", serif`;
       ctx.textAlign = 'left';
-      ctx.fillText(cleanName.length > 22 ? cleanName.slice(0, 20) + '…' : cleanName, TX, curY + 10);
+      ctx.fillText(displayName, TX, curY + 10);
+      // Play count next to name
+      const nameW = ctx.measureText(displayName).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.40)';
+      ctx.font = `300 24px "DM Sans", sans-serif`;
+      ctx.fillText(`${count}×`, TX + nameW + 14, curY + 6);
 
-      // Play count on the right
-      ctx.fillStyle = 'rgba(255,255,255,0.70)';
-      ctx.font = `300 28px "DM Sans", sans-serif`;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${count}`, W - TX, curY + 6);
-
-      // Record thumbnails on the right (no play badges on these)
+      // Record thumbnails on the right
       const thumbs = artistThumbsMap[artist] || [];
       const thumbStartX = W - TX - (thumbs.length * (ARTIST_THUMB + ARTIST_THUMB_GAP) - ARTIST_THUMB_GAP);
       thumbs.forEach((img, ti) => {
@@ -8207,8 +8207,8 @@ export default function VinylCrate() {
                       </div>
                     )}
 
-                    {/* Genre/decade filter strip — only visible when filter is active (entered from stats drill-down) */}
-                    {hasFilter && driftVisible && (() => {
+                    {/* Genre/decade filter strip — visible when controls are shown */}
+                    {driftVisible && (() => {
                       const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
                       const hasGenres = genres.length > 0;
                       const hasDecades = decades.length > 0;
@@ -9439,7 +9439,7 @@ export default function VinylCrate() {
             const longestStreak = computeLongestStreak(playSessions);
             const topPlayed = Object.entries(playCounts)
               .sort((a, b) => b[1] - a[1])
-              .slice(0, 5)
+              .slice(0, 10)
               .map(([id, count]) => ({ record: myRecords.find(r => String(r.id) === String(id)), count }))
               .filter(x => x.record);
             const maxPlays = topPlayed[0]?.count || 1;
