@@ -343,6 +343,15 @@ function upgradeDiscogsThumb(url) {
   // Old Discogs CDN: strip -150 suffix to get full-res.
   if (/-150\.(jpe?g|png|webp)(\?.*)?$/i.test(str))
     return str.replace(/-150\.(jpe?g|png|webp)(\?.*)?$/i, (_m, ext, query) => `.${ext}${query || ""}`);
+  // New Discogs imgproxy CDN: upgrade quality/dimensions (HMAC-signed, can't change path).
+  // Swap low-res params for higher quality — the HMAC covers the whole path so this may fail,
+  // but the fallback chain in CoverArt will catch it and try the original URL.
+  if (/i\.discogs\.com/i.test(str) && (/\/h:150\//.test(str) || /\/w:150\//.test(str) || /\/q:40\//.test(str))) {
+    return str
+      .replace(/\/h:150\//g, "/h:600/")
+      .replace(/\/w:150\//g, "/w:600/")
+      .replace(/\/q:40\//g, "/q:85/");
+  }
   // iTunes: upgrade to 1000px for the detail hero.
   if (/mzstatic\.com/i.test(str))
     return str.replace(/\d+x\d+bb(\.(jpe?g|png|webp))?$/i, "1000x1000bb.jpg");
@@ -6583,6 +6592,44 @@ export default function CrateMate() {
     }
 
     runDiscogsQueue();
+  }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Background cover upgrade: upgrade low-res thumbs to full-res Discogs covers
+  const coverUpgradeRef = useRef(false);
+  useEffect(() => {
+    if (!Array.isArray(collection) || collection.length === 0) return;
+    if (coverUpgradeRef.current) return;
+    const isLowRes = (url) => {
+      if (!url || typeof url !== "string") return false;
+      const s = url.toLowerCase();
+      if (/-150\.(jpe?g|png|webp)(\?.*)?$/.test(s)) return true;
+      if (s.includes("i.discogs.com") && (/\/h:150\//.test(s) || /\/w:150\//.test(s) || /\/q:40\//.test(s))) return true;
+      if (s.includes("/userimages/") || s.includes("/user-image/")) return true;
+      return false;
+    };
+    const needsUpgrade = collection.filter(r => r.discogs_id && (!r.thumb || isLowRes(r.thumb)));
+    if (needsUpgrade.length === 0) return;
+    coverUpgradeRef.current = true;
+
+    (async () => {
+      // Wait for other enrichment passes to settle
+      await new Promise(res => setTimeout(res, 3000));
+      try {
+        const res = await fetch("/api/discogs/enrich/job?mode=thumb", { method: "POST" });
+        if (!res.ok) return;
+        const { job_id } = await res.json();
+        if (!job_id) return;
+        for (let i = 0; i < 300; i++) {
+          await new Promise(r => setTimeout(r, 1500));
+          const pollRes = await fetch(`/api/discogs/enrich/job/${encodeURIComponent(job_id)}`);
+          if (!pollRes.ok) break;
+          const data = await pollRes.json();
+          if (i % 8 === 7) refreshRecords();
+          if (data.status === "completed" || data.status === "failed") break;
+        }
+        refreshRecords();
+      } catch {}
+    })();
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Background duration enrichment: fetch tracklist from Discogs cache and compute album duration
