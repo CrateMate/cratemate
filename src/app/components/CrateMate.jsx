@@ -343,15 +343,8 @@ function upgradeDiscogsThumb(url) {
   // Old Discogs CDN: strip -150 suffix to get full-res.
   if (/-150\.(jpe?g|png|webp)(\?.*)?$/i.test(str))
     return str.replace(/-150\.(jpe?g|png|webp)(\?.*)?$/i, (_m, ext, query) => `.${ext}${query || ""}`);
-  // New Discogs imgproxy CDN: upgrade quality/dimensions (HMAC-signed, can't change path).
-  // Swap low-res params for higher quality — the HMAC covers the whole path so this may fail,
-  // but the fallback chain in CoverArt will catch it and try the original URL.
-  if (/i\.discogs\.com/i.test(str) && (/\/h:150\//.test(str) || /\/w:150\//.test(str) || /\/q:40\//.test(str))) {
-    return str
-      .replace(/\/h:150\//g, "/h:600/")
-      .replace(/\/w:150\//g, "/w:600/")
-      .replace(/\/q:40\//g, "/q:85/");
-  }
+  // New Discogs imgproxy CDN: HMAC-signed — can't modify without breaking the signature.
+  // The background cover upgrade pass fetches full-res URLs from the Discogs API instead.
   // iTunes: upgrade to 1000px for the detail hero.
   if (/mzstatic\.com/i.test(str))
     return str.replace(/\d+x\d+bb(\.(jpe?g|png|webp))?$/i, "1000x1000bb.jpg");
