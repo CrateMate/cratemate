@@ -10609,7 +10609,7 @@ export default function CrateMate() {
                             {!overlapLoading && overlapData && (() => {
                               const artists = overlapData.sharedArtists || [];
                               const maxCount = Math.max(...artists.map(e => Math.max(e.myTitles.length, e.theirTitles.length)), 1);
-                              const visibleArtists = showAllSharedArtists ? artists : artists.slice(0, 15);
+                              const visibleArtists = showAllSharedArtists ? artists : artists.slice(0, 5);
 
                               // Compute my profile client-side (mirrors stats tab logic)
                               const myIds = new Set(myRecords.map(r => String(r.id)));
@@ -10676,7 +10676,7 @@ export default function CrateMate() {
                                           </div>
                                         </div>
                                       ))}
-                                      {artists.length > 15 && (
+                                      {artists.length > 5 && (
                                         <button
                                           onClick={() => setShowAllSharedArtists(s => !s)}
                                           className="w-full px-3 py-2 text-stone-600 hover:text-stone-400 text-xs text-center transition-colors"
@@ -10687,15 +10687,15 @@ export default function CrateMate() {
                                     </div>
                                   )}
 
-                                  {/* Records they have that you don't */}
+                                  {/* Albums you're missing — by shared artists only */}
                                   {overlapData.theirUniqueRecords?.length > 0 && (() => {
                                     const unique = overlapData.theirUniqueRecords;
-                                    const visible = showAllUniqueRecords ? unique : unique.slice(0, 10);
+                                    const visible = showAllUniqueRecords ? unique : unique.slice(0, 5);
                                     return (
                                       <div className="border-t border-white/[0.04]">
                                         <div className="px-3 py-2">
-                                          <span className="text-stone-500 text-xs uppercase tracking-wider">Records you don&apos;t have</span>
-                                          <span className="text-stone-700 text-[10px] ml-2">{unique.length} records</span>
+                                          <span className="text-stone-500 text-xs uppercase tracking-wider">Albums you&apos;re missing</span>
+                                          <span className="text-stone-700 text-[10px] ml-2">{unique.length}</span>
                                         </div>
                                         <div className="px-3 pb-2 space-y-1">
                                           {visible.map((r, i) => (
@@ -10709,18 +10709,17 @@ export default function CrateMate() {
                                                 <div className="text-stone-300 text-xs truncate">{r.title}</div>
                                                 <div className="text-stone-600 text-[10px] truncate">
                                                   {stripArtistNum(r.artist)}{r.year ? ` · ${r.year}` : ""}
-                                                  {r.isNewArtist && <span className="text-amber-700/60 ml-1.5">new artist</span>}
                                                 </div>
                                               </div>
                                             </div>
                                           ))}
                                         </div>
-                                        {unique.length > 10 && (
+                                        {unique.length > 5 && (
                                           <button
                                             onClick={() => setShowAllUniqueRecords(s => !s)}
                                             className="w-full px-3 py-2 text-stone-600 hover:text-stone-400 text-xs text-center transition-colors border-t border-white/[0.04]"
                                           >
-                                            {showAllUniqueRecords ? "Show less" : `Show all ${unique.length} records`}
+                                            {showAllUniqueRecords ? "Show less" : `Show all ${unique.length} albums`}
                                           </button>
                                         )}
                                       </div>
