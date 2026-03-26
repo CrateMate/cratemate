@@ -6769,6 +6769,9 @@ export default function CrateMate() {
     if (honeycombSort === "az") {
       return [...filtered].sort((a, b) => dir * (a.artist || "").localeCompare(b.artist || ""));
     }
+    if (honeycombSort === "energy") {
+      return [...filtered].sort((a, b) => dir * ((spotifyFeatures[a.id]?.energy || 0) - (spotifyFeatures[b.id]?.energy || 0)));
+    }
     // Genre mode: biggest genre cluster first, most-played within genre first
     const primaryGenre = (r) => getGenres(r)[0] || "zzz";
     const genreCounts = {};
@@ -8202,14 +8205,14 @@ export default function CrateMate() {
                         {/* Sort */}
                         <button
                           onClick={() => {
-                            const order = ["year", "genre", "az"];
+                            const order = ["year", "genre", "az", "energy"];
                             setHoneycombSort(order[(order.indexOf(honeycombSort) + 1) % order.length]);
                             setHoneycombSortDir("asc");
                           }}
                           className="flex items-center gap-1 pl-3 pr-1 py-1.5 hover:text-amber-300 transition-colors"
                         >
                           <span>⇅</span>
-                          <span>{honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : "A–Z"}</span>
+                          <span>{honeycombSort === "year" ? "Year" : honeycombSort === "genre" ? "Genre" : honeycombSort === "energy" ? "Energy" : "A–Z"}</span>
                         </button>
                         <button
                           onClick={() => setHoneycombSortDir(d => d === "asc" ? "desc" : "asc")}
