@@ -825,7 +825,7 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm text-amber-50 truncate font-medium">{rep?.title || "Unknown"}</div>
-          <div className="text-xs text-stone-500 truncate">{rep?.artist}</div>
+          <div className="text-xs text-stone-500 truncate">{stripArtistNum(rep?.artist)}</div>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             {group.year_range && <span className="text-[10px] text-stone-600">{group.year_range}</span>}
             {genres.slice(0, 2).map((g) => (
@@ -2037,7 +2037,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                     }}
                   >
                     <p style={{ color: "#fef3c7", fontSize: 9, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.title}</p>
-                    <p style={{ color: "#a8a29e", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{record.artist}</p>
+                    <p style={{ color: "#a8a29e", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stripArtistNum(record.artist)}</p>
                     {plays > 0 && <p style={{ color: "#78716c", fontSize: 7, marginTop: 1 }}>{plays}×</p>}
                   </div>
                 )}
@@ -2305,7 +2305,7 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLog
           >
             {record.title}
           </div>
-          <div className="text-stone-400 text-sm">{record.artist}</div>
+          <div className="text-stone-400 text-sm">{stripArtistNum(record.artist)}</div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {(record.year_original || record.year_pressed) && (
               <span className="text-stone-500 text-xs">{record.year_original || record.year_pressed}</span>
@@ -3376,8 +3376,8 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                 background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)",
                 display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 8,
               }}>
-                <p style={{ color: "#fef3c7", fontSize: 13, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Fraunces', serif" }}>{centerRecord.title}</p>
-                <p style={{ color: "#a8a29e", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{centerRecord.artist}</p>
+                <p style={{ color: "#fef3c7", fontSize: 10, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{centerRecord.title}</p>
+                <p style={{ color: "#a8a29e", fontSize: 9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stripArtistNum(centerRecord.artist)}</p>
               </div>
             </div>
 
@@ -3396,8 +3396,9 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                   {/* Direction label — always above */}
                   <div style={{
                     position: "absolute",
-                    fontSize: 9, color, opacity: 0.7, whiteSpace: "nowrap",
-                    bottom: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)",
+                    fontSize: 14, fontFamily: "'Fraunces', serif", fontWeight: 700, letterSpacing: "0.02em",
+                    color, opacity: 0.85, whiteSpace: "nowrap",
+                    bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)",
                   }}>
                     {label}
                   </div>
@@ -3421,8 +3422,8 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                           {suggestion.estimated && (
                             <span style={{ position: "absolute", top: 4, right: 4, fontSize: 8, color: "#a8a29e", opacity: 0.7, background: "rgba(0,0,0,0.5)", borderRadius: 4, padding: "1px 3px" }}>~</span>
                           )}
-                          <p style={{ color: "#fef3c7", fontSize: 10, fontWeight: 700, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Fraunces', serif" }}>{rec.title}</p>
-                          <p style={{ color: "#a8a29e", fontSize: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.artist}</p>
+                          <p style={{ color: "#fef3c7", fontSize: 8, fontWeight: 600, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.title}</p>
+                          <p style={{ color: "#a8a29e", fontSize: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stripArtistNum(rec.artist)}</p>
                         </div>
                       </button>
                     ) : (
@@ -3455,7 +3456,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
 
             {/* DOWN slot — custom pick */}
             <div style={{ position: "absolute", left: (CENTER - SLOT) / 2, top: CENTER + GAP, width: SLOT }}>
-              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)", fontSize: 9, color: "#78716c", whiteSpace: "nowrap" }}>
+              <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", fontSize: 14, fontFamily: "'Fraunces', serif", fontWeight: 700, letterSpacing: "0.02em", color: "#78716c", whiteSpace: "nowrap" }}>
                 your pick
               </div>
               {searchOpen ? (
@@ -10578,7 +10579,7 @@ export default function VinylCrate() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
-                                  <div className="text-stone-500 text-[10px] truncate">{prev.record.artist}</div>
+                                  <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
                                 </div>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); navigateTrail(prev.record); setBannerPreviewDirection(null); }}
@@ -10662,7 +10663,7 @@ export default function VinylCrate() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
-                                <div className="text-stone-500 text-[10px] truncate">{prev.record.artist}</div>
+                                <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
                               </div>
                               <button
                                 onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record, true); setTimeout(() => navigateTrail(prev.record), 100); setBannerPreviewDirection(null); }}
