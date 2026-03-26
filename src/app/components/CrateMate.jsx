@@ -7748,15 +7748,7 @@ export default function CrateMate() {
       className="h-dvh flex flex-col max-w-md mx-auto"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
     >
-      {/* ── Compact header (fixed, no scroll-hide) ── */}
-      <div style={{
-        display: "grid",
-        gridTemplateRows: !controlsHidden ? "1fr" : "0fr",
-        opacity: !controlsHidden ? 1 : 0,
-        transition: "grid-template-rows 0.28s ease, opacity 0.22s ease",
-        pointerEvents: !controlsHidden ? "auto" : "none",
-      }}>
-      <div style={{ overflow: "hidden" }}>
+      {/* ── Compact header ── */}
       {(!selected || tab !== "crate") && viewMode !== "drift" && (
         <div className="px-4 pt-4 pb-1.5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -7807,31 +7799,6 @@ export default function CrateMate() {
             <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-7 h-7" } }} />
           </div>
         </div>
-      )}
-      </div>
-      </div>
-
-      {/* Focus mode: expand (bottom-right) / restore (same spot) */}
-      {viewMode !== "drift" && (
-        <button
-          onClick={() => {
-            if (controlsHidden) {
-              driftFullscreenRef.current = false;
-              setControlsHidden(false);
-            } else {
-              driftFullscreenRef.current = true;
-              setControlsHidden(true);
-            }
-          }}
-          className="fixed right-3 z-[195] w-9 h-9 rounded-full bg-black/25 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-600 hover:text-stone-300 transition-colors"
-          style={{ bottom: controlsHidden ? "calc(12px + env(safe-area-inset-bottom, 0px))" : "calc(56px + env(safe-area-inset-bottom, 0px))" }}
-          title={controlsHidden ? "Exit focus mode" : "Focus mode"}
-        >
-          {controlsHidden
-            ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
-            : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
-          }
-        </button>
       )}
 
       {tab === "crate" && (
