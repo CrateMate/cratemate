@@ -2160,7 +2160,7 @@ function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStar
   );
 }
 
-export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
+export function TileView({ records, playCounts, onSelect, onDoubleTap, screensaverEnabled = true }) {
   const containerRef = useRef(null); // outer scroll container
   const innerRef = useRef(null);     // inner grid (for width measurement)
   const [containerWidth, setContainerWidth] = useState(0);
@@ -2187,9 +2187,14 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
     clearTimeout(idleTimer.current);
   }
 
+  const screensaverEnabledRef = useRef(screensaverEnabled);
+  useEffect(() => { screensaverEnabledRef.current = screensaverEnabled; }, [screensaverEnabled]);
+
   function startIdleTimer() {
     stopScreensaver();
-    idleTimer.current = setTimeout(startScreensaver, 8000);
+    if (screensaverEnabledRef.current) {
+      idleTimer.current = setTimeout(startScreensaver, 8000);
+    }
   }
 
   function startScreensaver() {
@@ -2211,9 +2216,10 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap }) {
   }
 
   useEffect(() => {
-    startIdleTimer();
+    if (screensaverEnabled) startIdleTimer();
+    else stopScreensaver();
     return () => stopScreensaver();
-  }, [records.length]);
+  }, [records.length, screensaverEnabled]);
 
   const TOTAL_UNITS = 4;
   const GAP = 2;
@@ -8004,6 +8010,7 @@ export default function VinylCrate() {
                   playCounts={playCounts}
                   onSelect={(rec) => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
                   onDoubleTap={handleDoubleTap}
+                  screensaverEnabled={screensaverEnabled}
                 />
               ) : (
               <HoneycombView
@@ -8153,25 +8160,21 @@ export default function VinylCrate() {
                           onClick={() => setHoneycombZoom((z) => Math.min(1.8, parseFloat((z + 0.25).toFixed(2))))}
                           className="px-2 py-1.5 hover:text-amber-300 transition-colors"
                         >+</button>
-                        {/* Auto-pan — only for honeycomb/grid, not tiles */}
-                        {honeycombShape !== "tiles" && (
-                          <>
-                            <div className="w-px self-stretch bg-white/10" />
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const next = !screensaverEnabled;
-                                localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
-                                setScreensaverEnabled(next);
-                              }}
-                              className={`px-3.5 py-1.5 text-sm transition-colors relative ${screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-200"}`}
-                              title={screensaverEnabled ? "Auto-pan ON" : "Auto-pan OFF"}
-                            >
-                              ⟳
-                              {screensaverEnabled && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
-                            </button>
-                          </>
-                        )}
+                        {/* Auto-pan */}
+                        <div className="w-px self-stretch bg-white/10" />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const next = !screensaverEnabled;
+                            localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
+                            setScreensaverEnabled(next);
+                          }}
+                          className={`px-3.5 py-1.5 text-sm transition-colors relative ${screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-200"}`}
+                          title={screensaverEnabled ? "Auto-pan ON" : "Auto-pan OFF"}
+                        >
+                          ⟳
+                          {screensaverEnabled && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                        </button>
                         <div className="w-px self-stretch bg-white/10" />
                         {/* Fullscreen toggle — stays hidden until tap */}
                         <button
