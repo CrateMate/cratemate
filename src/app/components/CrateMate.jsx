@@ -3332,7 +3332,7 @@ function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playC
   );
 }
 
-function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, onMinimize, playCounts, savePrompt, saving, onSaveSession, onDiscardSession, onRefresh }) {
+function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, onMinimize, playCounts, savePrompt, saving, onSaveSession, onDiscardSession, onRefresh, onShareSession, shareLoading }) {
   const CENTER = 140;
   const SLOT = 100;
   const GAP = 18;
@@ -3538,7 +3538,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
           <div className="flex flex-col h-full px-5 pt-12 pb-8">
             <div className="text-stone-500 text-xs uppercase tracking-widest mb-1">Session complete</div>
             <div className="text-amber-50 text-2xl mb-4" style={{ fontFamily: "'Fraunces',serif" }}>
-              Your session is saved
+              {history.length} record{history.length !== 1 ? "s" : ""} logged
             </div>
             {/* Record list */}
             <div className="flex-1 overflow-y-auto space-y-1 mb-4">
@@ -3555,13 +3555,20 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                 </div>
               ))}
             </div>
-            <div className="text-stone-600 text-xs text-center mb-4">{history.length} record{history.length !== 1 ? "s" : ""}</div>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={onShareSession}
+                disabled={shareLoading}
+                className="w-full py-3 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-sm hover:bg-amber-900/40 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                {shareLoading ? "Generating…" : "Share session"}
+              </button>
               <button
                 onClick={onSaveSession}
-                className="flex-1 py-3 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-sm hover:bg-amber-900/40 transition-colors"
+                className="w-full py-2 text-stone-600 hover:text-stone-400 text-xs transition-colors"
               >
-                Done
+                Close
               </button>
             </div>
           </div>
@@ -11328,6 +11335,11 @@ export default function CrateMate() {
           onSaveSession={saveTrailSession}
           onDiscardSession={handleTrailDiscard}
           onRefresh={refreshTrailSuggestions}
+          shareLoading={storyGenerating}
+          onShareSession={() => {
+            const session = { records: trailHistory, startTime: Date.now() };
+            handleShareStory(session);
+          }}
         />
       )}
 
