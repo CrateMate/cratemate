@@ -7823,8 +7823,8 @@ export default function CrateMate() {
               setControlsHidden(true);
             }
           }}
-          className="fixed bottom-3 right-3 z-[195] w-9 h-9 rounded-full bg-black/25 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-600 hover:text-stone-300 transition-colors"
-          style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
+          className="fixed right-3 z-[195] w-9 h-9 rounded-full bg-black/25 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-600 hover:text-stone-300 transition-colors"
+          style={{ bottom: controlsHidden ? "calc(12px + env(safe-area-inset-bottom, 0px))" : "calc(56px + env(safe-area-inset-bottom, 0px))" }}
           title={controlsHidden ? "Exit focus mode" : "Focus mode"}
         >
           {controlsHidden
