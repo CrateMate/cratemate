@@ -11330,7 +11330,7 @@ export default function CrateMate() {
       )}
 
       {/* ── Bottom tab bar (static) ── */}
-      {viewMode !== "drift" && (
+      {(viewMode !== "drift" || tab !== "crate") && (
         <div ref={tabRowRef} className="shrink-0 border-t border-stone-800/40" style={{ background: "var(--bg-main, #0c0b09)" }}>
           <div className="flex px-2 py-1.5">
             {[
@@ -11368,7 +11368,7 @@ export default function CrateMate() {
       )}
 
       {/* Bottom tab bar for drift view */}
-      {viewMode === "drift" && !controlsHidden && (
+      {viewMode === "drift" && tab === "crate" && !controlsHidden && (
         <div className="shrink-0 relative z-[60]" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}>
           <div className="flex px-2 py-1.5">
             {[
