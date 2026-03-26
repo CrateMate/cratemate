@@ -10,6 +10,8 @@ type RecordRow = {
   style?: string | null;
   year_original?: number | null;
   year_pressed?: number | null;
+  master_id?: number | null;
+  discogs_id?: number | null;
 };
 
 type AudioProfile = {
@@ -144,10 +146,16 @@ export async function GET(request: Request) {
   sharedArtists.sort((a, b) => (b.myTitles.length + b.theirTitles.length) - (a.myTitles.length + a.theirTitles.length));
 
   // Albums you're missing — records they own by shared artists that you don't have.
-  // Only shared artists (not new artists) — these are the actionable discoveries.
+  // Compares at the master release level so different pressings of the same album
+  // don't show as "missing". Falls back to artist+title matching when master_id is absent.
+  const myMasterIds = new Set(
+    myRecords.filter(r => r.master_id).map(r => r.master_id!)
+  );
   const myTitleKeys = new Set(
     myRecords.map(r => `${(r.artist || "").toLowerCase().trim()}::${(r.title || "").toLowerCase().trim()}`)
   );
+  const seenMasters = new Set<number>();
+  const seenTitleKeys = new Set<string>();
   const theirUniqueRecords: Array<{
     artist: string;
     title: string;
@@ -159,8 +167,20 @@ export async function GET(request: Request) {
   for (const r of theirRecords) {
     const artistKey = (r.artist || "").toLowerCase().trim();
     if (!artistKey || !myByArtist.has(artistKey)) continue; // only shared artists
-    const titleKey = `${artistKey}::${(r.title || "").toLowerCase().trim()}`;
-    if (myTitleKeys.has(titleKey)) continue; // I already own this exact album
+
+    // Master-level dedup: if both have the same master_id, it's the same album
+    if (r.master_id) {
+      if (myMasterIds.has(r.master_id)) continue;
+      if (seenMasters.has(r.master_id)) continue;
+      seenMasters.add(r.master_id);
+    } else {
+      // Fallback: exact artist+title match
+      const titleKey = `${artistKey}::${(r.title || "").toLowerCase().trim()}`;
+      if (myTitleKeys.has(titleKey)) continue;
+      if (seenTitleKeys.has(titleKey)) continue;
+      seenTitleKeys.add(titleKey);
+    }
+
     theirUniqueRecords.push({
       artist: r.artist,
       title: r.title,
