@@ -5620,7 +5620,8 @@ export default function CrateMate() {
   const [recoLoading, setRecoLoading] = useState(false);
   const [autoTriggerReco, setAutoTriggerReco] = useState(false);
   const [recoError, setRecoError] = useState("");
-  const [dailyPickToast, setDailyPickToast] = useState(null); // { record } — shown once on app open
+  const [dailyPickToast, setDailyPickToast] = useState(null); // { record, reason } — shown once on app open
+  const [dailyPickToastMinimized, setDailyPickToastMinimized] = useState(false);
   const dailyPickToastShown = useRef(false);
   const [mood, setMood] = useState("");
   const [activeGenres, setActiveGenres] = useState(new Set());
@@ -7132,12 +7133,21 @@ export default function CrateMate() {
       if (dismissed === todayStr) return;
     } catch {}
     setDailyPickToast({ record: reco.record, reason: reco.reason });
+    setDailyPickToastMinimized(false);
   }, [reco]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-minimize full toast into header after 9 seconds
+  useEffect(() => {
+    if (!dailyPickToast || dailyPickToastMinimized) return;
+    const id = setTimeout(() => setDailyPickToastMinimized(true), 9000);
+    return () => clearTimeout(id);
+  }, [dailyPickToast, dailyPickToastMinimized]);
 
   // Dismiss daily toast when user visits Picks tab
   useEffect(() => {
-    if (tab === "reco" && dailyPickToast) {
+    if (tab === "reco" && (dailyPickToast || dailyPickToastMinimized)) {
       setDailyPickToast(null);
+      setDailyPickToastMinimized(false);
       try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {}
     }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -8014,6 +8024,16 @@ export default function CrateMate() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {dailyPickToastMinimized && dailyPickToast && (
+              <button
+                onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setDailyPickToastMinimized(false); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {} }}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 hover:bg-amber-900/50 transition-colors"
+                title="Today's Pick"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-amber-400 text-[10px] font-medium">Pick</span>
+              </button>
+            )}
             {!isOnline && (
               <div className="text-[10px] text-amber-700/80 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-700 animate-pulse inline-block" />
@@ -8040,10 +8060,11 @@ export default function CrateMate() {
         </div>
       )}
 
-      {/* Tab slide animation */}
+      {/* Tab slide animation + toast animation */}
       <style>{`
         @keyframes cm-slide-left { from { transform: translateX(40px); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
         @keyframes cm-slide-right { from { transform: translateX(-40px); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes cm-toast-in { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       `}</style>
 
       {tab === "crate" && (
@@ -10649,11 +10670,11 @@ export default function CrateMate() {
         );
       })()}
 
-      {/* Today's Pick toast */}
-      {dailyPickToast && (
+      {/* Today's Pick toast — full banner, auto-minimizes after 9s */}
+      {dailyPickToast && !dailyPickToastMinimized && (
         <div
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-sm w-full px-4"
-          onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {} }}
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-sm w-full px-4 animate-[cm-toast-in_400ms_ease-out]"
+          onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setDailyPickToastMinimized(false); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {} }}
         >
           <div className="bg-stone-900/95 backdrop-blur-md border border-amber-800/30 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-lg cursor-pointer">
             <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
