@@ -11145,7 +11145,7 @@ export default function CrateMate() {
         const color = dirColors[bannerPreviewDirection];
         const isSession = !!(trailCenter && !trailActive);
         return (
-          <div className="shrink-0 px-4 pb-1 flex justify-end max-w-md mx-auto w-full">
+          <div className="shrink-0 px-4 pb-1 flex justify-end max-w-md mx-auto w-full relative" style={{ zIndex: 186 }}>
             <div
               className="w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg"
               style={{ borderColor: `${color}44` }}
@@ -11177,8 +11177,8 @@ export default function CrateMate() {
       {/* Now Playing banner — sits above bottom tabs */}
       {nowPlaying && viewMode !== "drift" && (
         <div
-          className="shrink-0 border-t border-stone-800/60"
-          style={{ background: "var(--bg-main, #0c0b09)" }}
+          className="shrink-0 border-t border-stone-800/60 relative"
+          style={{ background: "var(--bg-main, #0c0b09)", zIndex: 186 }}
         >
           {(() => {
             const sessionMinimized = !!(trailCenter && !trailActive);
@@ -11270,7 +11270,7 @@ export default function CrateMate() {
                           return (
                             <button
                               key={key}
-                              onPointerDown={(e) => {
+                              onClick={(e) => {
                                 e.stopPropagation();
                                 setBannerPreviewDirection(prev => prev === key ? null : key);
                               }}
