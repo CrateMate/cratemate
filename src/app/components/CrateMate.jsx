@@ -6435,24 +6435,39 @@ export default function CrateMate() {
   // Keep ref in sync for background loops that need fresh feature data without stale closures
   useEffect(() => { spotifyFeaturesRef.current = spotifyFeatures; }, [spotifyFeatures]);
 
-  // Today's Pick toast — show once when app opens if a cached pick exists
+  // Today's Pick — auto-generate on first load of the day (after 6 AM)
+  const getRecoRef = useRef(null);
+  const dailyPickAutoTriggered = useRef(false);
   useEffect(() => {
-    if (dailyPickToastShown.current || !Array.isArray(collection) || collection.length === 0) return;
-    dailyPickToastShown.current = true;
+    if (dailyPickAutoTriggered.current || !Array.isArray(collection) || collection.length === 0) return;
+    if (new Date().getHours() < 6) return; // before 6 AM = still "yesterday"
+    const todayStr = new Date().toISOString().slice(0, 10);
+    try {
+      const dismissed = localStorage.getItem("cratemate_daily_toast_dismissed");
+      if (dismissed === todayStr) return; // user already clicked toast or visited Picks today
+    } catch {}
+    dailyPickAutoTriggered.current = true;
+
+    // Check if we already have a cached pick for today
     try {
       const raw = localStorage.getItem("cratemate_daily_picks");
-      if (!raw) return;
-      const cached = JSON.parse(raw);
-      const todayStr = new Date().toISOString().slice(0, 10);
-      if (cached.date !== todayStr || !Array.isArray(cached.picks) || cached.picks.length === 0) return;
-      const pick = cached.picks[Math.floor(Math.random() * cached.picks.length)];
-      const record = collection.find(r => String(r.id) === String(pick.recordId));
-      if (record) {
-        setDailyPickToast({ record, reason: pick.reason });
-        setTimeout(() => setDailyPickToast(null), 6000);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached.date === todayStr && Array.isArray(cached.picks) && cached.picks.length > 0) {
+          const pick = cached.picks[0];
+          const record = collection.find(r => String(r.id) === String(pick.recordId));
+          if (record) {
+            setReco({ record, reason: pick.reason, label: "Today's Pick" });
+            setDailyPickToast({ record, reason: pick.reason });
+            return;
+          }
+        }
       }
     } catch {}
-  }, [collection]);
+
+    // No cached pick — auto-generate in background (getRecoRef set after getReco defined)
+    setTimeout(() => { if (getRecoRef.current) getRecoRef.current("daily"); }, 0);
+  }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Background audio-features enrichment: runs once after collection + initial features load
   useEffect(() => {
@@ -7104,6 +7119,28 @@ export default function CrateMate() {
     },
     [myRecords, mood, lastPlayed, lastPlayedDates, playCounts, spotifyFeatures, recoFilterGenres, recoFilterDecades]
   );
+
+  // Keep getRecoRef current (declared before getReco, assigned here after)
+  useEffect(() => { getRecoRef.current = getReco; }, [getReco]);
+
+  // Show toast when daily pick auto-generates (no cached pick existed)
+  useEffect(() => {
+    if (!reco || reco.label !== "Today's Pick" || dailyPickToast) return;
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const dismissed = localStorage.getItem("cratemate_daily_toast_dismissed");
+      if (dismissed === todayStr) return;
+    } catch {}
+    setDailyPickToast({ record: reco.record, reason: reco.reason });
+  }, [reco]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dismiss daily toast when user visits Picks tab
+  useEffect(() => {
+    if (tab === "reco" && dailyPickToast) {
+      setDailyPickToast(null);
+      try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {}
+    }
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-run "Play Next" when navigating to Picks tab via "▶︎ Picks" from a record detail
   useEffect(() => {
@@ -10616,7 +10653,7 @@ export default function CrateMate() {
       {dailyPickToast && (
         <div
           className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-sm w-full px-4"
-          onClick={() => { setDailyPickToast(null); setTab("reco"); }}
+          onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {} }}
         >
           <div className="bg-stone-900/95 backdrop-blur-md border border-amber-800/30 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-lg cursor-pointer">
             <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
