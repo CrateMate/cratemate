@@ -8030,7 +8030,7 @@ export default function CrateMate() {
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 hover:bg-amber-900/50 transition-colors"
                 title="Today's Pick"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 text-amber-400 animate-pulse"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                 <span className="text-amber-400 text-[10px] font-medium">Pick</span>
               </button>
             )}
