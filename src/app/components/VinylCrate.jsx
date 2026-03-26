@@ -1688,7 +1688,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   );
 }
 
-export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onDoubleTap, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb" }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onDoubleTap, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb", onDragStart }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -1923,6 +1923,7 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
     cancelAnimationFrame(rafRef.current);
     const pos = e.touches ? e.touches[0] : e;
     lastPos.current = { x: pos.clientX, y: pos.clientY };
+    if (onDragStart) onDragStart();
   }
 
   function onPointerMove(e) {
@@ -2160,7 +2161,7 @@ function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStar
   );
 }
 
-export function TileView({ records, playCounts, onSelect, onDoubleTap, screensaverEnabled = true }) {
+export function TileView({ records, playCounts, onSelect, onDoubleTap, screensaverEnabled = true, onDragStart }) {
   const containerRef = useRef(null); // outer scroll container
   const innerRef = useRef(null);     // inner grid (for width measurement)
   const [containerWidth, setContainerWidth] = useState(0);
@@ -2251,7 +2252,7 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap, screensav
         scrollbarWidth: "none",
       }}
       onScroll={() => { if (!screensaverActive.current) startIdleTimer(); }}
-      onPointerDown={(e) => { stopScreensaver(); pointerStartY.current = e.clientY; startIdleTimer(); }}
+      onPointerDown={(e) => { stopScreensaver(); pointerStartY.current = e.clientY; startIdleTimer(); if (onDragStart) onDragStart(); }}
     >
       {/* Inner: CSS grid — measured for width */}
       <div
@@ -5801,7 +5802,8 @@ export default function VinylCrate() {
   const driftFullscreenRef = useRef(false); // true = user explicitly chose fullscreen
   const inDrift = viewMode === "drift" && tab === "crate";
 
-  // Auto-fade drift controls after 3s — only when actually in drift view
+  const DRIFT_FADE_MS = 6000;
+  // Auto-fade drift controls — only when actually in drift view
   useEffect(() => {
     if (!inDrift || controlsHidden) {
       if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
@@ -5809,17 +5811,23 @@ export default function VinylCrate() {
     }
     driftFadeTimerRef.current = setTimeout(() => {
       if (!driftFullscreenRef.current) setControlsHidden(true);
-    }, 3000);
+    }, DRIFT_FADE_MS);
     return () => { if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current); };
   }, [inDrift, controlsHidden]);
-
 
   function driftResetFade() {
     if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
     if (!inDrift) return;
     driftFadeTimerRef.current = setTimeout(() => {
       if (!driftFullscreenRef.current) setControlsHidden(true);
-    }, 3000);
+    }, DRIFT_FADE_MS);
+  }
+
+  // Hide controls immediately when user starts dragging/scrolling in drift
+  function driftHideOnInteract() {
+    if (!inDrift || controlsHidden || driftFullscreenRef.current) return;
+    if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
+    setControlsHidden(true);
   }
   const tabRowRef = useRef(null);
   const forSaleRef = useRef(null);
@@ -8051,6 +8059,7 @@ export default function VinylCrate() {
                   onSelect={(rec) => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
                   onDoubleTap={handleDoubleTap}
                   screensaverEnabled={screensaverEnabled}
+                  onDragStart={driftHideOnInteract}
                 />
               ) : (
               <HoneycombView
@@ -8064,6 +8073,7 @@ export default function VinylCrate() {
                   if (!rec.for_sale) setLastPlayed(rec);
                 }}
                 onLogPlay={handleLogPlay}
+                onDragStart={driftHideOnInteract}
                 onDoubleTap={handleDoubleTap}
                 screensaverEnabled={screensaverEnabled}
                 onToggleScreensaver={() => {
