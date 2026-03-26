@@ -4431,11 +4431,19 @@ async function generateCollectionDNA(stats, username) {
     if (curY > H - 480) break;
     const cleanName = artist.replace(/\s*\(\d+\)\s*$/, '').trim();
     ctx.fillStyle = '#fef3c7';
-    ctx.font = `700 58px "Fraunces", serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText(cleanName.length > 22 ? cleanName.slice(0, 20) + '…' : cleanName, TX, curY + 10);
-
+    // Auto-size to fit — accommodates long names like Creedence Clearwater Revival
     const thumbs = artistThumbsMap[artist] || [];
+    const thumbsW = thumbs.length > 0 ? thumbs.length * (ARTIST_THUMB + ARTIST_THUMB_GAP) + 20 : 0;
+    const maxNameW = W - TX * 2 - thumbsW;
+    let artistFontSize = 48;
+    ctx.font = `700 ${artistFontSize}px "Fraunces", serif`;
+    while (ctx.measureText(cleanName).width > maxNameW && artistFontSize > 32) {
+      artistFontSize -= 2;
+      ctx.font = `700 ${artistFontSize}px "Fraunces", serif`;
+    }
+    ctx.textAlign = 'left';
+    ctx.fillText(cleanName, TX, curY + 10);
+
     const thumbStartX = W - TX - (thumbs.length * (ARTIST_THUMB + ARTIST_THUMB_GAP) - ARTIST_THUMB_GAP);
     thumbs.forEach((img, ti) => {
       const ttx = thumbStartX + ti * (ARTIST_THUMB + ARTIST_THUMB_GAP);
@@ -4701,13 +4709,21 @@ async function generateListeningDNA(stats, username) {
     for (const { artist, count } of stats.topPlayedArtists.slice(0, 5)) {
       if (curY > H - 600) break;
       const cleanName = artist.replace(/\s*\(\d+\)\s*$/, '').trim();
-      const displayName = cleanName.length > 18 ? cleanName.slice(0, 16) + '…' : cleanName;
       ctx.fillStyle = '#fef3c7';
-      ctx.font = `700 58px "Fraunces", serif`;
+      // Auto-size to fit — leave room for play count + thumbnails
+      const thumbs = artistThumbsMap[artist] || [];
+      const thumbsW = thumbs.length > 0 ? thumbs.length * (ARTIST_THUMB + ARTIST_THUMB_GAP) + 20 : 0;
+      const maxNameW = W - TX * 2 - thumbsW - 80; // 80 for play count
+      let artistFontSize = 48;
+      ctx.font = `700 ${artistFontSize}px "Fraunces", serif`;
+      while (ctx.measureText(cleanName).width > maxNameW && artistFontSize > 32) {
+        artistFontSize -= 2;
+        ctx.font = `700 ${artistFontSize}px "Fraunces", serif`;
+      }
       ctx.textAlign = 'left';
-      ctx.fillText(displayName, TX, curY + 10);
+      ctx.fillText(cleanName, TX, curY + 10);
       // Play count next to name
-      const nameW = ctx.measureText(displayName).width;
+      const nameW = ctx.measureText(cleanName).width;
       ctx.fillStyle = 'rgba(255,255,255,0.40)';
       ctx.font = `300 24px "DM Sans", sans-serif`;
       ctx.fillText(`${count}×`, TX + nameW + 14, curY + 6);
@@ -9848,6 +9864,39 @@ export default function VinylCrate() {
                     </button>
                   </div>
                 )}
+                {/* Collection summary tiles */}
+                {myRecords.length > 0 && (() => {
+                  const uniqueArtists = new Set(myRecords.map(r => r.artist).filter(Boolean)).size;
+                  const totalDurationSecs = myRecords.reduce((s, r) => s + (r.duration_secs || 0), 0);
+                  const totalDurationLabel = totalDurationSecs > 0 ? formatListeningTime(totalDurationSecs) : null;
+                  const oldestYear = Math.min(...myRecords.map(r => r.year_original || r.year_pressed || 9999).filter(y => y < 9999));
+                  const newestYear = Math.max(...myRecords.map(r => r.year_original || r.year_pressed || 0).filter(y => y > 0));
+                  return (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-white/[0.04] rounded-xl p-3 text-center">
+                        <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{myRecords.length}</div>
+                        <div className="text-stone-500 text-xs mt-0.5">records</div>
+                      </div>
+                      <div className="bg-white/[0.04] rounded-xl p-3 text-center">
+                        <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{uniqueArtists}</div>
+                        <div className="text-stone-500 text-xs mt-0.5">artists</div>
+                      </div>
+                      {totalDurationLabel && (
+                        <div className="bg-white/[0.04] rounded-xl p-3 text-center">
+                          <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{totalDurationLabel}</div>
+                          <div className="text-stone-500 text-xs mt-0.5">of music</div>
+                        </div>
+                      )}
+                      {oldestYear < 9999 && newestYear > 0 && (
+                        <div className="bg-white/[0.04] rounded-xl p-3 text-center">
+                          <div className="text-amber-200 text-lg font-light" style={{ fontFamily: "'Fraunces',serif" }}>{oldestYear}–{String(newestYear).slice(-2)}</div>
+                          <div className="text-stone-500 text-xs mt-0.5">year range</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* By Decade */}
                 {sortedDecades.length > 0 && (
                   <div>
