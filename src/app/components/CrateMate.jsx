@@ -5576,7 +5576,20 @@ export default function CrateMate() {
   const { theme, setTheme } = useTheme();
   const [collection, setCollection] = useState(null);
   const [collectionError, setCollectionError] = useState("");
-  const [tab, setTab] = useState("crate");
+  const TAB_ORDER = ["crate", "history", "reco", "wants", "stats", "hearts", "discover"];
+  const [tab, setTabRaw] = useState("crate");
+  const [tabSlide, setTabSlide] = useState(null); // "left" | "right" | null
+  const tabSlideTimer = useRef(null);
+  function setTab(nextTab) {
+    if (nextTab === tab) return;
+    const idx = TAB_ORDER.indexOf(tab);
+    const nextIdx = TAB_ORDER.indexOf(nextTab);
+    const dir = nextIdx > idx ? "left" : "right";
+    setTabSlide(dir);
+    setTabRaw(nextTab);
+    if (tabSlideTimer.current) clearTimeout(tabSlideTimer.current);
+    tabSlideTimer.current = setTimeout(() => setTabSlide(null), 250);
+  }
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("artist");
   const [sortDir, setSortDir] = useState("asc");
@@ -5938,7 +5951,6 @@ export default function CrateMate() {
   const [searchFocused, setSearchFocused] = useState(false);
 
   // Swipe between tabs
-  const TAB_ORDER = ["crate", "history", "reco", "wants", "stats", "hearts", "discover"];
   const swipeStartRef = useRef(null);
   function onSwipeStart(e) {
     if (viewMode === "drift") return;
@@ -7829,8 +7841,15 @@ export default function CrateMate() {
         </div>
       )}
 
+      {/* Tab slide animation */}
+      <style>{`
+        @keyframes cm-slide-left { from { transform: translateX(40px); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes cm-slide-right { from { transform: translateX(-40px); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
+      `}</style>
+
       {tab === "crate" && (
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="flex-1 flex flex-col overflow-hidden relative"
+          style={tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : undefined}>
           {!seenHints["crate_play"] && collection.length > 0 && collection.length <= 10 && (
             <HintBanner onDismiss={() => dismissHint("crate_play")}>
               Long-press any record or tap the play button in list view to log a play and start your streak.
@@ -8493,7 +8512,7 @@ export default function CrateMate() {
         };
 
         return (
-          <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 flex flex-col min-h-0" style={tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : undefined}>
             <div className="flex-1 overflow-y-auto">
             {!seenHints["hearts"] && (
               <HintBanner onDismiss={() => dismissHint("hearts")}>
@@ -8861,7 +8880,7 @@ export default function CrateMate() {
       })()}
 
       {tab === "reco" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           <div className="px-4 space-y-3 pt-0">
 
           {/* Genre + Decade filters */}
@@ -9020,7 +9039,7 @@ export default function CrateMate() {
       )}
 
       {tab === "history" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
               Long-press any record in visual views, tap the play button in list view, or use the Log button in the detail card to log a play.
@@ -9215,7 +9234,7 @@ export default function CrateMate() {
       )}
 
       {tab === "wants" && (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden" style={tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : undefined}>
           {/* Subtab pills */}
           <div className="px-4 pt-2 pb-1 flex gap-2 shrink-0">
             <button
@@ -9440,7 +9459,7 @@ export default function CrateMate() {
       )}
 
       {tab === "stats" && (
-        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: 16 }}>
+        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           {(() => {
             const { decades, genres, formats, styles } = buildCollectionStats(myRecords);
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
@@ -10104,7 +10123,7 @@ export default function CrateMate() {
       )}
 
       {tab === "discover" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           {!seenHints["discover"] && (
             <HintBanner onDismiss={() => dismissHint("discover")}>
               Toggle discoverability above to find other collectors who share your taste.
