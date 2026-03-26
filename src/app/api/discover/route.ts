@@ -46,14 +46,15 @@ export async function GET() {
         .eq("user_id", profile.user_id)
         .eq("for_sale", false);
 
-      const theirArtists = (theirRecords || [])
-        .map((r) => (r.artist || "").toLowerCase().trim())
-        .filter(Boolean);
+      const theirArtists = new Set(
+        (theirRecords || []).map((r) => (r.artist || "").toLowerCase().trim()).filter(Boolean)
+      );
 
-      const sharedArtists = theirArtists.filter((a) => myArtists.has(a)).length;
-      const recordCount = theirArtists.length;
+      const sharedArtists = [...theirArtists].filter((a) => myArtists.has(a)).length;
+      const recordCount = (theirRecords || []).length;
+      const unionSize = new Set([...myArtists, ...theirArtists]).size;
       const similarityPct =
-        myArtists.size > 0 ? Math.round((sharedArtists / myArtists.size) * 100) : 0;
+        unionSize > 0 ? Math.round((sharedArtists / unionSize) * 100) : 0;
 
       return {
         username: profile.display_name,

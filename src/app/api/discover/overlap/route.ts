@@ -146,16 +146,30 @@ export async function GET(request: Request) {
   sharedArtists.sort((a, b) => (b.myTitles.length + b.theirTitles.length) - (a.myTitles.length + a.theirTitles.length));
 
   // Albums you're missing — records they own by shared artists that you don't have.
-  // Compares at the master release level so different pressings of the same album
-  // don't show as "missing". Falls back to artist+title matching when master_id is absent.
+  // Compares at master release level, then normalized title, then exact title.
   const myMasterIds = new Set(
     myRecords.filter(r => r.master_id).map(r => r.master_id!)
   );
-  const myTitleKeys = new Set(
-    myRecords.map(r => `${(r.artist || "").toLowerCase().trim()}::${(r.title || "").toLowerCase().trim()}`)
-  );
+  // Normalize: strip parentheticals, volume/disc markers, punctuation — catches "Greatest Hits" variants
+  function normalizeTitle(t: string) {
+    return (t || "").toLowerCase()
+      .replace(/\(.*?\)/g, "")
+      .replace(/\[.*?\]/g, "")
+      .replace(/\b(vol\.?|volume|disc|cd|lp|part)\s*\d*/gi, "")
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  // Build lookup: artist key → set of normalized titles I own
+  const myNormalizedByArtist = new Map<string, Set<string>>();
+  for (const r of myRecords) {
+    const aKey = (r.artist || "").toLowerCase().trim();
+    if (!aKey) continue;
+    if (!myNormalizedByArtist.has(aKey)) myNormalizedByArtist.set(aKey, new Set());
+    myNormalizedByArtist.get(aKey)!.add(normalizeTitle(r.title));
+  }
   const seenMasters = new Set<number>();
-  const seenTitleKeys = new Set<string>();
+  const seenNormKeys = new Set<string>();
   const theirUniqueRecords: Array<{
     artist: string;
     title: string;
@@ -169,17 +183,18 @@ export async function GET(request: Request) {
     if (!artistKey || !myByArtist.has(artistKey)) continue; // only shared artists
 
     // Master-level dedup: if both have the same master_id, it's the same album
-    if (r.master_id) {
-      if (myMasterIds.has(r.master_id)) continue;
-      if (seenMasters.has(r.master_id)) continue;
-      seenMasters.add(r.master_id);
-    } else {
-      // Fallback: exact artist+title match
-      const titleKey = `${artistKey}::${(r.title || "").toLowerCase().trim()}`;
-      if (myTitleKeys.has(titleKey)) continue;
-      if (seenTitleKeys.has(titleKey)) continue;
-      seenTitleKeys.add(titleKey);
-    }
+    if (r.master_id && myMasterIds.has(r.master_id)) continue;
+    if (r.master_id && seenMasters.has(r.master_id)) continue;
+
+    // Normalized title dedup: catches "Greatest Hits" / "Greatest Hits Vol. 2" / "Greatest Hits (Remastered)"
+    const normTitle = normalizeTitle(r.title);
+    const normKey = `${artistKey}::${normTitle}`;
+    const myTitles = myNormalizedByArtist.get(artistKey);
+    if (myTitles?.has(normTitle)) continue;
+    if (seenNormKeys.has(normKey)) continue;
+
+    if (r.master_id) seenMasters.add(r.master_id);
+    seenNormKeys.add(normKey);
 
     theirUniqueRecords.push({
       artist: r.artist,
