@@ -5854,16 +5854,19 @@ export default function CrateMate() {
     if (!inDrift || driftFullscreenRef.current) return;
     if (driftRestoreTimerRef.current) clearTimeout(driftRestoreTimerRef.current);
     if (!controlsHidden) {
+      // Currently visible — hide on drag
       if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
       driftHiddenByDragRef.current = true;
       setControlsHidden(true);
+    } else {
+      // Currently hidden (idle fade or drag) — mark for restore on stop
+      driftHiddenByDragRef.current = true;
     }
     // Reset the restore timer — fires when interaction stops
     driftRestoreTimerRef.current = setTimeout(() => {
       if (driftHiddenByDragRef.current) {
         driftHiddenByDragRef.current = false;
         setControlsHidden(false);
-        // After restoring, start the idle fade timer
         driftResetFade();
       }
     }, DRIFT_RESTORE_MS);
