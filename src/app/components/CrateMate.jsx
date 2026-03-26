@@ -5606,7 +5606,7 @@ export default function CrateMate() {
   const toggleStyle = (s) =>
     setActiveStyles((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
   const [bubbleView, setBubbleView] = useState("genres");
-  const [statsSubTab, setStatsSubTab] = useState("listening");
+  const [statsSubTab, setStatsSubTab] = useState("collection");
   const [recoFilterGenres, setRecoFilterGenres] = useState(new Set());
   const [recoFilterDecades, setRecoFilterDecades] = useState(new Set());
   const [spotifyLinked, setSpotifyLinked] = useState(null); // null=unknown, true/false
@@ -9511,7 +9511,7 @@ export default function CrateMate() {
               <div className="space-y-6 pt-2">
                 {/* Subtab pills */}
                 <div className="flex gap-1.5">
-                  {[["listening", "◷ Listening"], ["collection", "◎ Collection"]].map(([id, label]) => (
+                  {[["collection", "◎ Collection"], ["listening", "◷ Listening"]].map(([id, label]) => (
                     <button
                       key={id}
                       onClick={() => setStatsSubTab(id)}
