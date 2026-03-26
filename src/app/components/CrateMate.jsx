@@ -11165,12 +11165,7 @@ export default function CrateMate() {
                                 key={key}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (bannerPreviewDirection === key) {
-                                    navigateTrail(s.record);
-                                    setBannerPreviewDirection(null);
-                                  } else {
-                                    setBannerPreviewDirection(key);
-                                  }
+                                  setBannerPreviewDirection(bannerPreviewDirection === key ? null : key);
                                 }}
                                 title={label}
                                 className="w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 transition-all"
