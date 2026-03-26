@@ -6608,10 +6608,11 @@ export default function CrateMate() {
     const needsBackfill = collection.some(r => r.discogs_id && !r.master_id);
     if (!needsBackfill) return;
     masterBackfillRef.current = true;
+    console.log("[backfill-master] starting, records needing backfill:", collection.filter(r => r.discogs_id && !r.master_id).length);
     fetch("/api/discogs/enrich/backfill-master", { method: "POST" })
       .then(r => r.json())
-      .then(d => { if (d.updated > 0) refreshRecords(); })
-      .catch(() => {});
+      .then(d => { console.log("[backfill-master] result:", d); if (d.updated > 0) refreshRecords(); })
+      .catch(e => console.error("[backfill-master] error:", e));
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Background cover upgrade: upgrade low-res thumbs to full-res Discogs covers
