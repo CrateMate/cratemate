@@ -91,14 +91,26 @@ export async function GET(request: Request) {
   const profileRow = profileRows?.[0];
   if (!profileRow) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  // Fetch both collections — select("*") to avoid failing if optional columns are missing
-  const [{ data: myRaw }, { data: theirRaw }] = await Promise.all([
+  // Fetch both collections + their recent plays
+  const [{ data: myRaw }, { data: theirRaw }, { data: theirPlaysRaw }] = await Promise.all([
     supabase.from("records").select("*").eq("user_id", userId).eq("for_sale", false),
     supabase.from("records").select("*").eq("user_id", profileRow.user_id).eq("for_sale", false),
+    supabase.from("play_sessions").select("record_id, played_at").eq("user_id", profileRow.user_id).order("played_at", { ascending: false }).limit(10),
   ]);
 
   const myRecords: RecordRow[] = myRaw || [];
   const theirRecords: RecordRow[] = theirRaw || [];
+
+  // Dedupe recent plays to unique records (most recent play per record, up to 5)
+  const seenPlayIds = new Set<string>();
+  const theirRecentPlays: Array<{ artist: string; title: string; thumb: string | null; played_at: string }> = [];
+  for (const play of theirPlaysRaw || []) {
+    if (seenPlayIds.has(String(play.record_id))) continue;
+    seenPlayIds.add(String(play.record_id));
+    const rec = theirRecords.find(r => String((r as any).id) === String(play.record_id));
+    if (rec) theirRecentPlays.push({ artist: rec.artist, title: rec.title, thumb: rec.thumb, played_at: play.played_at });
+    if (theirRecentPlays.length >= 5) break;
+  }
 
   // Build artist maps: artist -> list of titles
   const myByArtist = new Map<string, string[]>();
@@ -211,6 +223,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     sharedArtists,
     theirUniqueRecords: theirUniqueRecords.slice(0, 50),
+    theirRecentPlays,
     myTotal: myRecords.length,
     theirTotal: theirRecords.length,
     myProfile: avgProfile(myRecords),

@@ -10631,6 +10631,26 @@ export default function CrateMate() {
 
                               return (
                                 <>
+                                  {/* Recent plays */}
+                                  {overlapData.theirRecentPlays?.length > 0 && (
+                                    <div className="px-3 pt-3 pb-2">
+                                      <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Recently Played</div>
+                                      <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                                        {overlapData.theirRecentPlays.map((p, i) => (
+                                          <div key={`${p.title}-${i}`} className="shrink-0 text-center" style={{ width: 56 }}>
+                                            <div className="w-11 h-11 mx-auto rounded-lg overflow-hidden bg-stone-800 mb-1">
+                                              {p.thumb
+                                                ? <img src={p.thumb} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                                : <div className="w-full h-full bg-stone-700" />}
+                                            </div>
+                                            <div className="text-stone-300 text-[9px] truncate">{p.title}</div>
+                                            <div className="text-stone-700 text-[8px] truncate">{stripArtistNum(p.artist)}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* Spider chart */}
                                   {overlapData.theirProfile && (
                                     <div className="px-3 pt-3 pb-1">
