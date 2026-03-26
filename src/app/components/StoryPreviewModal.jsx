@@ -66,7 +66,7 @@ export default function StoryPreviewModal({ canvases, onClose }) {
   if (dataURLs.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] flex flex-col bg-black/95 backdrop-blur-md">
+    <div className="fixed inset-0 z-[400] flex flex-col bg-black/95 backdrop-blur-md">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
         <div className="text-stone-400 text-sm">{index + 1} / {canvases.length}</div>
