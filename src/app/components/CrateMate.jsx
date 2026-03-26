@@ -5603,13 +5603,7 @@ export default function CrateMate() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [compareBase, setCompareBase] = useState(null);   // record A
   const [compareTarget, setCompareTarget] = useState(null); // record B (null = picker mode)
-  const [userLocation, setUserLocationRaw] = useState(() => {
-    try { const s = localStorage.getItem("cratemate_location"); return s ? JSON.parse(s) : null; } catch { return null; }
-  }); // { city_name, latitude, longitude }
-  function setUserLocation(loc) {
-    setUserLocationRaw(loc);
-    try { if (loc) localStorage.setItem("cratemate_location", JSON.stringify(loc)); else localStorage.removeItem("cratemate_location"); } catch {}
-  }
+  const [userLocation, setUserLocation] = useState(null); // { city_name, latitude, longitude } — loaded from DB on mount
   const [todayWeather, setTodayWeather] = useState(null); // { condition, label, mood, temperature_c, city_name }
   const [citySearch, setCitySearch] = useState({ query: "", results: [], open: false, loading: false });
   const [selected, setSelected] = useState(null);
@@ -5845,8 +5839,8 @@ export default function CrateMate() {
   const driftHiddenByDragRef = useRef(false); // true = hidden by drag, should restore on stop
   const inDrift = viewMode === "drift" && tab === "crate";
 
-  const DRIFT_FADE_MS = 6000;
-  const DRIFT_RESTORE_MS = 800; // show controls after stopping drag/scroll
+  const DRIFT_FADE_MS = 8000;
+  const DRIFT_RESTORE_MS = 1000; // show controls after stopping drag/scroll
 
   // Auto-fade drift controls — only when actually in drift view
   useEffect(() => {
@@ -8118,6 +8112,21 @@ export default function CrateMate() {
                 const hasFilter = statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null;
                 return (
                   <>
+                    {/* Persistent restore button — always visible in drift when controls are hidden */}
+                    {controlsHidden && (
+                      <button
+                        onClick={() => {
+                          driftFullscreenRef.current = false;
+                          driftHiddenByDragRef.current = false;
+                          setControlsHidden(false);
+                          driftResetFade();
+                        }}
+                        className="absolute bottom-4 right-4 z-50 w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+                      </button>
+                    )}
+
                     {/* Top-left: back + share + downloads */}
                     <div className="absolute top-4 left-4 z-50 flex flex-col items-start gap-2"
                       style={{ opacity: driftVisible ? 1 : 0, pointerEvents: driftVisible ? "auto" : "none", transition: "opacity 0.4s ease" }}>
