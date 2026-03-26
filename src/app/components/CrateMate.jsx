@@ -11093,7 +11093,10 @@ export default function CrateMate() {
         </div>
       )}
 
-      {/* Dismiss direction preview on any tab content tap */}
+      {/* Dismiss direction preview on outside tap — transparent backdrop */}
+      {bannerPreviewDirection && (
+        <div className="fixed inset-0 z-[185]" onClick={() => setBannerPreviewDirection(null)} />
+      )}
 
       {/* Session toast — add to session or start fresh when logging while trail active */}
       {sessionToast && (
@@ -11133,50 +11136,46 @@ export default function CrateMate() {
         </div>
       )}
 
-      {/* Direction preview popup — rendered outside banner to avoid blocking button taps */}
-      {nowPlaying && bannerPreviewDirection && (() => {
-        const suggestions = (trailCenter && !trailActive) ? trailSuggestions : bannerSuggestions;
-        const prev = suggestions?.[bannerPreviewDirection];
-        if (!prev) return null;
-        const dirColors = { windDown: "#60a5fa", liftUp: "#f87171", sideways: "#a78bfa" };
-        const color = dirColors[bannerPreviewDirection];
-        const isSession = !!(trailCenter && !trailActive);
-        return (
-          <div className="shrink-0 px-4 pb-1 flex justify-end max-w-md mx-auto w-full relative">
-            <div
-              className="w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg"
-              style={{ borderColor: `${color}44` }}
-            >
-              <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
-                {prev.record.thumb
-                  ? <img src={proxyArtUrl(upgradeDiscogsThumb(prev.record.thumb) || prev.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-                  : <div className="w-full h-full bg-stone-700" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
-                <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
-              </div>
-              <button
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  setBannerPreviewDirection(null);
-                  if (isSession) navigateTrail(prev.record);
-                  else await logPlay(prev.record.id);
-                }}
-                className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
-                style={{ color, background: `${color}22` }}
-              >{isSession ? "→" : "▶"}</button>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Now Playing banner — sits above bottom tabs */}
       {nowPlaying && viewMode !== "drift" && (
         <div
-          className="shrink-0 border-t border-stone-800/60"
-          style={{ background: "var(--bg-main, #0c0b09)" }}
+          className="shrink-0 border-t border-stone-800/60 relative"
+          style={{ background: "var(--bg-main, #0c0b09)", zIndex: 186 }}
         >
+          {/* Direction preview popup — floats above banner */}
+          {bannerPreviewDirection && (() => {
+            const suggestions = (trailCenter && !trailActive) ? trailSuggestions : bannerSuggestions;
+            const prev = suggestions?.[bannerPreviewDirection];
+            if (!prev) return null;
+            const dirColors = { windDown: "#60a5fa", liftUp: "#f87171", sideways: "#a78bfa" };
+            const color = dirColors[bannerPreviewDirection];
+            const isSession = !!(trailCenter && !trailActive);
+            return (
+              <div className="absolute bottom-full right-4 mb-2 w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg"
+                style={{ borderColor: `${color}44` }}
+              >
+                <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                  {prev.record.thumb
+                    ? <img src={proxyArtUrl(upgradeDiscogsThumb(prev.record.thumb) || prev.record.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    : <div className="w-full h-full bg-stone-700" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-stone-200 text-xs leading-tight truncate">{prev.record.title}</div>
+                  <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
+                </div>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setBannerPreviewDirection(null);
+                    if (isSession) navigateTrail(prev.record);
+                    else await logPlay(prev.record.id);
+                  }}
+                  className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
+                  style={{ color, background: `${color}22` }}
+                >{isSession ? "→" : "▶"}</button>
+              </div>
+            );
+          })()}
           {(() => {
             const sessionMinimized = !!(trailCenter && !trailActive);
             const bannerRecord = sessionMinimized ? trailCenter : nowPlaying.record;
@@ -11185,7 +11184,7 @@ export default function CrateMate() {
               <div className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto">
                 <div
                   className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
-                  onClick={() => { setBannerPreviewDirection(null); setSelected(bannerRecord); }}
+                  onClick={() => setSelected(bannerRecord)}
                 >
                   <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
                     {bannerRecord.thumb
@@ -11204,7 +11203,7 @@ export default function CrateMate() {
                   <>
                     {trailSuggestions && !trailLoading && (
                       hasSpotifyFeatures ? (
-                        <div className="shrink-0 flex items-center gap-1">
+                        <div className="shrink-0 flex items-center gap-1 relative" style={{ zIndex: 187 }}>
                           {[
                             { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Cool off" },
                             { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Turn it up" },
@@ -11256,7 +11255,7 @@ export default function CrateMate() {
                   <>
                     {/* Trail direction buttons — visible even without active session */}
                     {bannerSuggestions && hasSpotifyFeatures && (
-                      <div className="shrink-0 flex items-center gap-1">
+                      <div className="shrink-0 flex items-center gap-1 relative" style={{ zIndex: 187 }}>
                         {[
                           { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Cool off" },
                           { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Turn it up" },
@@ -11359,7 +11358,7 @@ export default function CrateMate() {
               return (
                 <button
                   key={id}
-                  onClick={() => { setTab(id); setSelected(null); setBannerPreviewDirection(null); }}
+                  onClick={() => { setTab(id); setSelected(null); }}
                   className={`flex-1 min-h-[40px] flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
                     active
                       ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
@@ -11397,7 +11396,7 @@ export default function CrateMate() {
               return (
                 <button
                   key={id}
-                  onClick={() => { setTab(id); setSelected(null); setBannerPreviewDirection(null); }}
+                  onClick={() => { setTab(id); setSelected(null); }}
                   className={`flex-1 min-h-[40px] flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
                     active
                       ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
