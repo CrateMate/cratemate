@@ -5079,8 +5079,9 @@ async function generateStoryCards(session, username) {
   // ── 6. Text panel content ──
   const textBottom = H - BRANDING_H - 20;
   let ty = actualWallBottom + 62;
-  const maxArtists = isLong ? 2 : 3;
-  const maxTracksPerArtist = isLong ? 2 : 3;
+  const isSmall = artCount <= 2;
+  const maxArtists = isLong ? 2 : isSmall ? 5 : 3;
+  const maxTracksPerArtist = isLong ? 2 : isSmall ? 5 : 3;
 
   // Build hearted groups with vinyl position format (A2 · Dreams)
   const heartedGroups = records
@@ -5769,9 +5770,11 @@ export default function CrateMate() {
   const enrichingRef = useRef(new Set()); // deduplicate in-flight calls
   function silentEnrich(recordId) {
     const key = String(recordId);
-    if (enrichingRef.current.has(key)) { console.log("[enrich] skip (in-flight)", key); return; }
+    if (enrichingRef.current.has(key)) return;
+    // Skip if record is already fully enriched (avoid unnecessary network call)
+    const rec = (collection || []).find(r => String(r.id) === key);
+    if (rec && rec.discogs_id && rec.year_original != null && rec.release_month != null && rec.artist_birth_month != null) return;
     enrichingRef.current.add(key);
-    console.log("[enrich] firing for", key);
     fetch("/api/discogs/enrich/record", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -5814,6 +5817,7 @@ export default function CrateMate() {
   const [tileExporting, setTileExporting] = useState(null); // "square" | "full" | null
   const [dnaGenerating, setDnaGenerating] = useState(false);
   const [controlsHidden, setControlsHidden] = useState(false);
+  const [driftFilterExpanded, setDriftFilterExpanded] = useState(false);
   const driftFadeTimerRef = useRef(null);
   const driftRestoreTimerRef = useRef(null);
   const driftFullscreenRef = useRef(false); // true = user explicitly chose fullscreen
@@ -6916,16 +6920,31 @@ export default function CrateMate() {
           const randomPool = dedupeByAlbum(activePool, playCounts);
           const weights = randomPool.map(r => 1 / ((playCounts[r.id] || 0) + 1));
           const total = weights.reduce((a, b) => a + b, 0);
-          let rand = Math.random() * total;
           let picked = randomPool[randomPool.length - 1];
+          let rand = Math.random() * total;
           for (let i = 0; i < randomPool.length; i++) {
             rand -= weights[i];
             if (rand <= 0) { picked = randomPool[i]; break; }
           }
-          const plays = playCounts[picked.id] || 0;
-          const SYSTEM = "You are a passionate music obsessive. Write exactly ONE casual sentence (under 20 words) about why to spin this record right now. Be specific to the artist, era, or sound — not generic. Return plain text only, no quotes.";
-          const prompt = `The wheel landed on: ${describeRecord(picked)}.${plays === 0 ? " Never played." : ` Played ${plays} time${plays > 1 ? "s" : ""}.`}`;
-          const reason = (await callClaude([{ role: "user", content: prompt }], 80, SYSTEM)).trim();
+          // Check cache — serve existing reason if we've already generated one for this record
+          const RANDOM_CACHE_KEY = "cratemate_random_picks";
+          let reason;
+          try {
+            const cached = JSON.parse(localStorage.getItem(RANDOM_CACHE_KEY) || "[]");
+            const hit = cached.find(c => c.recordId === picked.id);
+            if (hit) { reason = hit.reason; }
+          } catch {}
+          if (!reason) {
+            const plays = playCounts[picked.id] || 0;
+            const SYSTEM = "You are a passionate music obsessive. Write exactly ONE casual sentence (under 20 words) about why to spin this record right now. Be specific to the artist, era, or sound — not generic. Return plain text only, no quotes.";
+            const prompt = `The wheel landed on: ${describeRecord(picked)}.${plays === 0 ? " Never played." : ` Played ${plays} time${plays > 1 ? "s" : ""}.`}`;
+            reason = (await callClaude([{ role: "user", content: prompt }], 80, SYSTEM)).trim();
+            try {
+              const cached = JSON.parse(localStorage.getItem(RANDOM_CACHE_KEY) || "[]");
+              cached.unshift({ recordId: picked.id, reason });
+              localStorage.setItem(RANDOM_CACHE_KEY, JSON.stringify(cached.slice(0, 10)));
+            } catch {}
+          }
           setReco({ record: picked, reason, label: "Random Pick" });
 
         } else if (type === "next") {
@@ -8272,7 +8291,14 @@ export default function CrateMate() {
 
                     {/* Genre/decade filter strip — visible when controls are shown */}
                     {driftVisible && (() => {
-                      const genres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
+                      const allGenres = [...new Set(pool.flatMap((r) => getGenres(r)))].sort();
+                      // Sort by frequency, show top 8 by default
+                      const genreFreq = {};
+                      pool.forEach(r => getGenres(r).forEach(g => { genreFreq[g] = (genreFreq[g] || 0) + 1; }));
+                      const genresByFreq = allGenres.sort((a, b) => (genreFreq[b] || 0) - (genreFreq[a] || 0));
+                      const GENRE_LIMIT = 8;
+                      const hasMore = genresByFreq.length > GENRE_LIMIT;
+                      const genres = driftFilterExpanded ? genresByFreq : genresByFreq.slice(0, GENRE_LIMIT);
                       const hasGenres = genres.length > 0;
                       const hasDecades = decades.length > 0;
                       if (!hasGenres && !hasDecades) return null;
@@ -8294,6 +8320,12 @@ export default function CrateMate() {
                                 active={activeGenres.has(g)}
                               />
                             ))}
+                            {hasMore && !driftFilterExpanded && (
+                              <button
+                                onClick={() => setDriftFilterExpanded(true)}
+                                className="px-2.5 py-1 rounded-full text-xs shrink-0 border border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+                              >+{genresByFreq.length - GENRE_LIMIT}</button>
+                            )}
                             {hasGenres && hasDecades && (
                               <span className="text-stone-700 text-xs shrink-0 px-1">|</span>
                             )}
