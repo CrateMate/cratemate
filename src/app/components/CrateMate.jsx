@@ -7811,16 +7811,26 @@ export default function CrateMate() {
       </div>
       </div>
 
-      {/* Global fullscreen restore button */}
-      {controlsHidden && viewMode !== "drift" && (
+      {/* Focus mode: expand (bottom-right) / restore (same spot) */}
+      {viewMode !== "drift" && (
         <button
           onClick={() => {
-            driftFullscreenRef.current = false;
-            setControlsHidden(false);
+            if (controlsHidden) {
+              driftFullscreenRef.current = false;
+              setControlsHidden(false);
+            } else {
+              driftFullscreenRef.current = true;
+              setControlsHidden(true);
+            }
           }}
-          className="absolute top-3 right-4 z-50 w-9 h-9 rounded-full bg-black/20 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors"
+          className="fixed bottom-3 right-3 z-[195] w-9 h-9 rounded-full bg-black/25 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-600 hover:text-stone-300 transition-colors"
+          style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
+          title={controlsHidden ? "Exit focus mode" : "Focus mode"}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+          {controlsHidden
+            ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+            : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
+          }
         </button>
       )}
 
@@ -10893,14 +10903,10 @@ export default function CrateMate() {
         />
       )}
 
-      {/* ── Bottom tab bar (scrollable) ── */}
+      {/* ── Bottom tab bar (static) ── */}
       {viewMode !== "drift" && (
-        <div className="shrink-0 border-t border-stone-800/40" style={{ background: "var(--bg-main, #0c0b09)" }}>
-          <div
-            ref={tabRowRef}
-            className="flex gap-1 px-3 py-1.5 overflow-x-auto relative"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}
-          >
+        <div ref={tabRowRef} className="shrink-0 border-t border-stone-800/40" style={{ background: "var(--bg-main, #0c0b09)" }}>
+          <div className="flex px-2 py-1.5">
             {[
               ["crate",    "⏺", "Crate"],
               ["history",  "▷", "Log"],
@@ -10915,7 +10921,7 @@ export default function CrateMate() {
                 <button
                   key={id}
                   onClick={() => { setTab(id); setSelected(null); }}
-                  className={`shrink-0 min-h-[40px] px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
+                  className={`flex-1 min-h-[40px] flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
                     active
                       ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
                       : "text-stone-500 hover:text-stone-300"
@@ -10930,16 +10936,6 @@ export default function CrateMate() {
                 </button>
               );
             })}
-            {/* Focus mode toggle */}
-            {!controlsHidden && (
-              <button
-                onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
-                className="shrink-0 min-h-[40px] px-2 flex items-center justify-center text-stone-700 hover:text-stone-400 transition-colors"
-                title="Focus mode"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
-              </button>
-            )}
           </div>
           <div style={{ height: "env(safe-area-inset-bottom, 0px)" }} />
         </div>
@@ -10948,10 +10944,7 @@ export default function CrateMate() {
       {/* Bottom tab bar for drift view */}
       {viewMode === "drift" && !controlsHidden && (
         <div className="shrink-0 relative z-[60]" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}>
-          <div
-            className="flex gap-1 px-3 py-1.5 overflow-x-auto"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
+          <div className="flex px-2 py-1.5">
             {[
               ["crate",    "⏺", "Crate"],
               ["history",  "▷", "Log"],
@@ -10966,7 +10959,7 @@ export default function CrateMate() {
                 <button
                   key={id}
                   onClick={() => { setTab(id); setSelected(null); }}
-                  className={`shrink-0 min-h-[40px] px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
+                  className={`flex-1 min-h-[40px] flex items-center justify-center rounded-xl text-xs font-medium transition-all ${
                     active
                       ? "bg-amber-900/25 text-amber-400 border border-amber-800/35"
                       : "text-stone-600 hover:text-stone-400"
@@ -10981,12 +10974,6 @@ export default function CrateMate() {
                 </button>
               );
             })}
-            <button
-              onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
-              className="shrink-0 min-h-[40px] px-2 flex items-center justify-center text-stone-700 hover:text-stone-400 transition-colors"
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
-            </button>
           </div>
           <div style={{ height: "env(safe-area-inset-bottom, 0px)" }} />
         </div>
