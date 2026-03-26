@@ -529,6 +529,10 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
       if (pressedYear != null) patch.year_pressed = pressedYear;
       if (originalYear != null) patch.year_original = originalYear;
       if (compilation != null) patch.is_compilation = compilation;
+      // Write master_id to the record for cross-user album dedup
+      const masterId = release && typeof (release as { master_id?: unknown }).master_id === "number"
+        ? (release as { master_id: number }).master_id : null;
+      if (masterId != null && masterId > 0) patch.master_id = masterId;
     }
 
     if (release) {
@@ -781,6 +785,10 @@ export async function enrichSingleRecord(
         if (pressedYear != null) patch.year_pressed = pressedYear;
         if (originalYear != null) patch.year_original = originalYear;
         if (compilation != null) patch.is_compilation = compilation;
+        // Write master_id to the record for cross-user album dedup
+        const masterId = release && typeof (release as { master_id?: unknown }).master_id === "number"
+          ? (release as { master_id: number }).master_id : null;
+        if (masterId != null && masterId > 0) patch.master_id = masterId;
       }
 
       if (release) {

@@ -137,6 +137,7 @@ export function mapCollectionRelease(release: Record<string, unknown>, mediaFiel
     is_compilation: descLower.includes("comp"),
     discogs_id: (info.id as number) || null,
     discogs_instance_id: (release.id as number) || null,
+    master_id: (info.master_id as number) || null,
     thumb: cover,
   };
 }
