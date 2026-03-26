@@ -8302,7 +8302,7 @@ export default function CrateMate() {
               })()}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
+            <div className="flex-1 overflow-y-auto px-3 space-y-0.5" style={{ paddingBottom: 16 }}>
               {pagedRecords.map((r) => (
                 <RecordRow
                   key={r.id}
@@ -8488,8 +8488,8 @@ export default function CrateMate() {
         };
 
         return (
-          <div className="flex-1 flex flex-col min-h-0" style={{ paddingBottom: nowPlaying ? 96 : 0 }}>
-            <div className="flex-1 overflow-y-auto" onScroll={handleTabScroll}>
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto">
             {!seenHints["hearts"] && (
               <HintBanner onDismiss={() => dismissHint("hearts")}>
                 Open a record, expand its tracklist, and tap ♥ next to any track to save it here.
@@ -8856,7 +8856,7 @@ export default function CrateMate() {
       })()}
 
       {tab === "reco" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
           <div className="px-4 space-y-3 pt-0">
 
           {/* Genre + Decade filters */}
@@ -9015,7 +9015,7 @@ export default function CrateMate() {
       )}
 
       {tab === "history" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
               Long-press any record in visual views, tap the play button in list view, or use the Log button in the detail card to log a play.
@@ -9258,7 +9258,7 @@ export default function CrateMate() {
           )}
 
           {wantsSubTab === "discover" && (
-            <div className="flex-1 overflow-y-auto px-4 space-y-3 pt-2" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
+            <div className="flex-1 overflow-y-auto px-4 space-y-3 pt-2" style={{ paddingBottom: 16 }}>
 
               {myRecords.length === 0 && (
                 <div className="text-center py-10 px-4">
@@ -9435,7 +9435,7 @@ export default function CrateMate() {
       )}
 
       {tab === "stats" && (
-        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
+        <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: 16 }}>
           {(() => {
             const { decades, genres, formats, styles } = buildCollectionStats(myRecords);
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
@@ -10099,7 +10099,7 @@ export default function CrateMate() {
       )}
 
       {tab === "discover" && (
-        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }} onScroll={handleTabScroll}>
+        <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16 }}>
           {!seenHints["discover"] && (
             <HintBanner onDismiss={() => dismissHint("discover")}>
               Toggle discoverability above to find other collectors who share your taste.
@@ -10448,7 +10448,7 @@ export default function CrateMate() {
         <div className="fixed inset-0 z-[200] flex flex-col justify-end" onClick={() => setShowSettings(false)}>
           <div
             className="w-full max-w-md mx-auto rounded-t-3xl border border-stone-800/60 pt-5 px-5 overflow-y-auto"
-            style={{ background: "var(--bg-surface, #0c0b09)", maxHeight: "80vh", paddingBottom: nowPlaying ? 96 : 40 }}
+            style={{ background: "var(--bg-surface, #0c0b09)", maxHeight: "80vh", paddingBottom: 40 }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
