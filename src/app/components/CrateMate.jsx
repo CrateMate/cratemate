@@ -3477,7 +3477,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                         <CoverArt record={r} size={28} />
                         <div className="flex-1 min-w-0">
                           <div className="text-stone-200 text-xs truncate">{r.title}</div>
-                          <div className="text-stone-600 text-[10px] truncate">{r.artist}</div>
+                          <div className="text-stone-600 text-[10px] truncate">{stripArtistNum(r.artist)}</div>
                         </div>
                       </button>
                     ))}
@@ -5653,7 +5653,7 @@ export default function CrateMate() {
   const [lastPlayedDates, setLastPlayedDates] = useState({});
   const [playSessions, setPlaySessions] = useState([]);
   const [viewMode, setViewMode] = useState("list");
-  const [honeycombSort, setHoneycombSort] = useState("year");
+  const [honeycombSort, setHoneycombSort] = useState("az");
   const [honeycombSortDir, setHoneycombSortDir] = useState("asc");
   const [honeycombZoom, setHoneycombZoom] = useState(1.0);
   const [honeycombShape, setHoneycombShape] = useState(() => {
@@ -8686,7 +8686,7 @@ export default function CrateMate() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <span className="text-amber-50 text-sm truncate block" style={{ fontFamily: "'Fraunces',serif" }}>
-                              {r.artist} — {r.title}
+                              {stripArtistNum(r.artist)} — {r.title}
                             </span>
                           </div>
                           <span className="text-rose-400 text-xs shrink-0 mr-1">♥ {heartCount}</span>
