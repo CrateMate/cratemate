@@ -6600,6 +6600,20 @@ export default function CrateMate() {
     runDiscogsQueue();
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // One-time backfill: write master_id from cache to records (for existing enriched records)
+  const masterBackfillRef = useRef(false);
+  useEffect(() => {
+    if (!Array.isArray(collection) || collection.length === 0) return;
+    if (masterBackfillRef.current) return;
+    const needsBackfill = collection.some(r => r.discogs_id && !r.master_id);
+    if (!needsBackfill) return;
+    masterBackfillRef.current = true;
+    fetch("/api/discogs/enrich/backfill-master", { method: "POST" })
+      .then(r => r.json())
+      .then(d => { if (d.updated > 0) refreshRecords(); })
+      .catch(() => {});
+  }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Background cover upgrade: upgrade low-res thumbs to full-res Discogs covers
   const coverUpgradeRef = useRef(false);
   useEffect(() => {
