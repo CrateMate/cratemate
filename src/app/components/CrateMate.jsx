@@ -6918,16 +6918,17 @@ export default function CrateMate() {
           const hooks = buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures, artistMembers, todayWeather, playSessions, lastfmVibeData);
 
           if (hooks.length > 0) {
-            // Generate Claude reasons sequentially (parallel hits rate limits)
-            const picks = [];
-            for (const hook of hooks) {
-              const reason = await generateHookReason(hook);
-              picks.push({ recordId: hook.record.id, reason, hookType: hook.type });
-            }
-            try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks })); } catch {}
-            const chosen = picks[Math.floor(Math.random() * picks.length)];
-            const record = myRecords.find((r) => String(r.id) === String(chosen.recordId));
-            setReco({ record, reason: chosen.reason, label: "Today's Pick" });
+            // Pick one hook, generate one reason — cache it. On re-tap, pick a different one.
+            let cached = [];
+            try { cached = JSON.parse(localStorage.getItem(DAILY_CACHE_KEY) || "{}").picks || []; } catch {}
+            const cachedIds = new Set(cached.map(p => p.recordId));
+            // Prefer a hook we haven't cached yet
+            let hook = hooks.find(h => !cachedIds.has(h.record.id)) || hooks[Math.floor(Math.random() * hooks.length)];
+            const reason = await generateHookReason(hook);
+            const newPick = { recordId: hook.record.id, reason, hookType: hook.type };
+            cached.push(newPick);
+            try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks: cached })); } catch {}
+            setReco({ record: hook.record, reason, label: "Today's Pick" });
             return;
           }
 
