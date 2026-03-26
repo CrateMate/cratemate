@@ -6526,6 +6526,7 @@ export default function CrateMate() {
       }
       const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]);
       if (uncached.length === 0) return;
+      console.log("[audio-enrich] uncached records:", uncached.map(r => `${r.artist} - ${r.title} (id:${r.id})`));
       setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
       let done = 0;
       const CONCURRENCY = 2;
