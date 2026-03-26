@@ -7742,13 +7742,6 @@ export default function VinylCrate() {
               {theme === "dark" ? "🌑" : theme === "light" ? "☀" : theme === "system" ? "⊙" : "🎵"}
             </button>
             <button
-              onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
-              className="text-stone-600 hover:text-stone-400 transition-colors leading-none"
-              title="Focus mode"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
-            </button>
-            <button
               onClick={() => setShowSettings(true)}
               className="text-stone-600 hover:text-stone-400 text-base transition-colors leading-none"
               title="Settings"
@@ -7773,7 +7766,17 @@ export default function VinylCrate() {
         </button>
       )}
 
-      <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
+      <div ref={tabRowRef} className={`relative flex px-4 pr-10 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
+        {/* Focus mode toggle — absolute right, doesn't take tab space */}
+        {!controlsHidden && viewMode !== "drift" && (
+          <button
+            onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-400 transition-colors"
+            title="Focus mode"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
+          </button>
+        )}
         {[
           ["crate",    "⏺", "Crate"],
           ["history",  "▷", "Log"],
