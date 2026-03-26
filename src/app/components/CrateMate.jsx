@@ -5599,6 +5599,8 @@ export default function CrateMate() {
   const [recoLoading, setRecoLoading] = useState(false);
   const [autoTriggerReco, setAutoTriggerReco] = useState(false);
   const [recoError, setRecoError] = useState("");
+  const [dailyPickToast, setDailyPickToast] = useState(null); // { record } — shown once on app open
+  const dailyPickToastShown = useRef(false);
   const [mood, setMood] = useState("");
   const [activeGenres, setActiveGenres] = useState(new Set());
   const toggleGenre = (g) =>
@@ -6381,6 +6383,25 @@ export default function CrateMate() {
   // Keep ref in sync for background loops that need fresh feature data without stale closures
   useEffect(() => { spotifyFeaturesRef.current = spotifyFeatures; }, [spotifyFeatures]);
 
+  // Today's Pick toast — show once when app opens if a cached pick exists
+  useEffect(() => {
+    if (dailyPickToastShown.current || !Array.isArray(collection) || collection.length === 0) return;
+    dailyPickToastShown.current = true;
+    try {
+      const raw = localStorage.getItem("cratemate_daily_picks");
+      if (!raw) return;
+      const cached = JSON.parse(raw);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (cached.date !== todayStr || !Array.isArray(cached.picks) || cached.picks.length === 0) return;
+      const pick = cached.picks[Math.floor(Math.random() * cached.picks.length)];
+      const record = collection.find(r => String(r.id) === String(pick.recordId));
+      if (record) {
+        setDailyPickToast({ record, reason: pick.reason });
+        setTimeout(() => setDailyPickToast(null), 6000);
+      }
+    } catch {}
+  }, [collection]);
+
   // Background audio-features enrichment: runs once after collection + initial features load
   useEffect(() => {
     if (!Array.isArray(collection) || collection.length === 0) return;
@@ -6409,7 +6430,20 @@ export default function CrateMate() {
       setEnrichmentProgress(null);
     }
 
-    runFeaturesQueue();
+    runFeaturesQueue().then(async () => {
+      // Second pass: backfill track_features for records that have album features but missing per-track data
+      if (enrichmentAbort.current) return;
+      const needsTrackFeatures = collection.filter(r => {
+        const f = spotifyFeaturesRef.current[r.id];
+        return f && f.energy != null && !f.track_features;
+      });
+      if (needsTrackFeatures.length === 0) return;
+      for (const record of needsTrackFeatures) {
+        if (enrichmentAbort.current) break;
+        await fetchOneFeature(record, { force: true });
+        await new Promise(res => setTimeout(res, 1200));
+      }
+    });
     return () => { enrichmentAbort.current = true; };
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -10404,6 +10438,65 @@ export default function CrateMate() {
         />
       )}
 
+      {/* Quick-start onboarding overlay — shows once for users with records */}
+      {!seenHints["onboarding_tour"] && collection.length > 0 && !showOnboarding && tab === "crate" && (() => {
+        const steps = [
+          { icon: "▷", label: "Log plays", desc: "Long-press a record to log what you're spinning" },
+          { icon: "✦", label: "Get picks", desc: "Today's Pick and Mood Match find your next record" },
+          { icon: "◎", label: "See stats", desc: "Track your listening habits and share your taste" },
+        ];
+        return (
+          <div className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-sm flex items-center justify-center px-6"
+            onClick={() => dismissHint("onboarding_tour")}
+          >
+            <div className="bg-stone-900 border border-stone-700/50 rounded-2xl p-6 max-w-sm w-full space-y-5"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="text-center">
+                <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }} className="text-amber-50 mb-1">Welcome to CrateMate</div>
+                <div className="text-stone-500 text-xs">Here's how to get started</div>
+              </div>
+              {steps.map(({ icon, label, desc }) => (
+                <div key={label} className="flex items-start gap-3">
+                  <span className="text-amber-400 text-lg w-6 text-center shrink-0">{icon}</span>
+                  <div>
+                    <div className="text-stone-200 text-sm font-medium">{label}</div>
+                    <div className="text-stone-500 text-xs">{desc}</div>
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={() => dismissHint("onboarding_tour")}
+                className="w-full py-2.5 rounded-xl bg-amber-900/30 border border-amber-800/40 text-amber-300 text-sm hover:bg-amber-900/50 transition-colors"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Today's Pick toast */}
+      {dailyPickToast && (
+        <div
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-sm w-full px-4"
+          onClick={() => { setDailyPickToast(null); setTab("reco"); }}
+        >
+          <div className="bg-stone-900/95 backdrop-blur-md border border-amber-800/30 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-lg cursor-pointer">
+            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+              {dailyPickToast.record.thumb
+                ? <img src={proxyArtUrl(upgradeDiscogsThumb(dailyPickToast.record.thumb) || dailyPickToast.record.thumb)} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-stone-700" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-amber-400 text-[10px] uppercase tracking-widest">Today&apos;s Pick</div>
+              <div className="text-amber-50 text-sm truncate">{dailyPickToast.record.title}</div>
+            </div>
+            <span className="text-stone-600 text-xs shrink-0">→</span>
+          </div>
+        </div>
+      )}
+
       {showStoryPreview && storyCanvases && (
         <StoryPreviewModal
           canvases={storyCanvases}
@@ -10513,6 +10606,46 @@ export default function CrateMate() {
                   Now: {todayWeather.label} · {todayWeather.temperature_c}°C
                 </div>
               )}
+            </div>
+
+            {/* Export data */}
+            <div className="mt-6 pt-4 border-t border-stone-800/40">
+              <div className="text-stone-700 text-[10px] uppercase tracking-widest mb-3">Your Data</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const headers = ["Title","Artist","Year","Genre","Label","Discogs ID"];
+                    const rows = myRecords.map(r => [
+                      r.title || "", stripArtistNum(r.artist || ""), r.year_original || r.year_pressed || "",
+                      r.genre || "", r.label || "", r.discogs_id || "",
+                    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+                    const csv = [headers.join(","), ...rows].join("\n");
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+                    a.download = "cratemate-collection.csv"; a.click(); URL.revokeObjectURL(a.href);
+                  }}
+                  className="flex-1 py-2 rounded-xl border border-stone-800/60 text-stone-400 text-xs hover:text-amber-300 hover:border-amber-900/50 transition-colors"
+                >
+                  Export collection
+                </button>
+                <button
+                  onClick={() => {
+                    const headers = ["Title","Artist","Played At"];
+                    const rows = playSessions.map(s => {
+                      const rec = (collection || []).find(r => String(r.id) === String(s.record_id));
+                      return [rec?.title || "", stripArtistNum(rec?.artist || ""), s.played_at || ""]
+                        .map(v => `"${String(v).replace(/"/g, '""')}"`).join(",");
+                    });
+                    const csv = [headers.join(","), ...rows].join("\n");
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+                    a.download = "cratemate-plays.csv"; a.click(); URL.revokeObjectURL(a.href);
+                  }}
+                  className="flex-1 py-2 rounded-xl border border-stone-800/60 text-stone-400 text-xs hover:text-amber-300 hover:border-amber-900/50 transition-colors"
+                >
+                  Export plays
+                </button>
+              </div>
             </div>
 
             {/* Developer tools */}
