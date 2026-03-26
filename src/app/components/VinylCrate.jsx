@@ -3314,9 +3314,9 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
   const GAP = 18;
 
   const directions = [
-    { key: "windDown", label: "wind down", offsetX: -(SLOT + GAP), offsetY: (CENTER - SLOT) / 2, color: "#60a5fa" },
-    { key: "liftUp",  label: "lift up",   offsetX: CENTER + GAP,    offsetY: (CENTER - SLOT) / 2, color: "#f87171" },
-    { key: "sideways",label: "detour",    offsetX: (CENTER - SLOT) / 2, offsetY: -(SLOT + GAP),  color: "#a78bfa" },
+    { key: "windDown", label: "cool off",    offsetX: -(SLOT + GAP), offsetY: (CENTER - SLOT) / 2, color: "#60a5fa" },
+    { key: "liftUp",  label: "turn it up", offsetX: CENTER + GAP,    offsetY: (CENTER - SLOT) / 2, color: "#f87171" },
+    { key: "sideways",label: "left turn",  offsetX: (CENTER - SLOT) / 2, offsetY: -(SLOT + GAP),  color: "#a78bfa" },
   ];
 
   const filteredSearch = searchQuery
@@ -7742,6 +7742,13 @@ export default function VinylCrate() {
               {theme === "dark" ? "🌑" : theme === "light" ? "☀" : theme === "system" ? "⊙" : "🎵"}
             </button>
             <button
+              onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
+              className="text-stone-600 hover:text-stone-400 transition-colors leading-none"
+              title="Focus mode"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
+            </button>
+            <button
               onClick={() => setShowSettings(true)}
               className="text-stone-600 hover:text-stone-400 text-base transition-colors leading-none"
               title="Settings"
@@ -7804,16 +7811,6 @@ export default function VinylCrate() {
             </button>
           );
         })}
-        {/* Fullscreen toggle — hide header, keep tabs */}
-        {!controlsHidden && viewMode !== "drift" && (
-          <button
-            onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
-            className="min-h-[44px] px-2 flex items-center justify-center text-stone-600 hover:text-stone-400 transition-colors"
-            title="Hide header"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
-          </button>
-        )}
       </div>
 
       {tab === "crate" && (
@@ -10597,9 +10594,9 @@ export default function VinylCrate() {
                             );
                           })()}
                           {[
-                            { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Wind down" },
-                            { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Lift up" },
-                            { key: "sideways", color: "#a78bfa", symbol: "↔", label: "Detour" },
+                            { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Cool off" },
+                            { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Turn it up" },
+                            { key: "sideways", color: "#a78bfa", symbol: "↔", label: "Left turn" },
                           ].map(({ key, color, symbol, label }) => {
                             const s = trailSuggestions[key];
                             if (!s) return null;
