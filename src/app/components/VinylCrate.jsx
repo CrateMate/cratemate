@@ -5785,9 +5785,11 @@ export default function VinylCrate() {
   const [controlsHidden, setControlsHidden] = useState(false);
   const driftFadeTimerRef = useRef(null);
   const driftFullscreenRef = useRef(false); // true = user explicitly chose fullscreen
-  // Auto-fade drift controls after 3s of no interaction
+  const inDrift = viewMode === "drift" && tab === "crate";
+
+  // Auto-fade drift controls after 3s — only when actually in drift view
   useEffect(() => {
-    if (viewMode !== "drift" || controlsHidden) {
+    if (!inDrift || controlsHidden) {
       if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
       return;
     }
@@ -5795,10 +5797,19 @@ export default function VinylCrate() {
       if (!driftFullscreenRef.current) setControlsHidden(true);
     }, 3000);
     return () => { if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current); };
-  }, [viewMode, controlsHidden]);
+  }, [inDrift, controlsHidden]);
+
+  // Force-reset controlsHidden whenever leaving drift
+  useEffect(() => {
+    if (!inDrift && controlsHidden) {
+      driftFullscreenRef.current = false;
+      setControlsHidden(false);
+    }
+  }, [inDrift, controlsHidden]);
 
   function driftResetFade() {
     if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
+    if (!inDrift) return;
     driftFadeTimerRef.current = setTimeout(() => {
       if (!driftFullscreenRef.current) setControlsHidden(true);
     }, 3000);
