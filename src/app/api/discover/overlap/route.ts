@@ -143,8 +143,43 @@ export async function GET(request: Request) {
   // Sort by combined record count desc
   sharedArtists.sort((a, b) => (b.myTitles.length + b.theirTitles.length) - (a.myTitles.length + a.theirTitles.length));
 
+  // Records they have that I don't — by artists I don't own at all (true discovery)
+  // Plus records by shared artists that I don't have (different albums)
+  const myTitleKeys = new Set(
+    myRecords.map(r => `${(r.artist || "").toLowerCase().trim()}::${(r.title || "").toLowerCase().trim()}`)
+  );
+  const theirUniqueRecords: Array<{
+    artist: string;
+    title: string;
+    thumb: string | null;
+    year: number | null;
+    genre: string | null;
+    isNewArtist: boolean;
+  }> = [];
+
+  for (const r of theirRecords) {
+    const artistKey = (r.artist || "").toLowerCase().trim();
+    const titleKey = `${artistKey}::${(r.title || "").toLowerCase().trim()}`;
+    if (!artistKey || myTitleKeys.has(titleKey)) continue;
+    const isNewArtist = !myByArtist.has(artistKey);
+    theirUniqueRecords.push({
+      artist: r.artist,
+      title: r.title,
+      thumb: r.thumb,
+      year: r.year_original || r.year_pressed || null,
+      genre: r.genre || r.style || null,
+      isNewArtist,
+    });
+  }
+  // Sort: shared-artist records first (more relevant), then new artists. Within each group, alphabetical.
+  theirUniqueRecords.sort((a, b) => {
+    if (a.isNewArtist !== b.isNewArtist) return a.isNewArtist ? 1 : -1;
+    return (a.artist || "").localeCompare(b.artist || "") || (a.title || "").localeCompare(b.title || "");
+  });
+
   return NextResponse.json({
     sharedArtists,
+    theirUniqueRecords: theirUniqueRecords.slice(0, 50),
     myTotal: myRecords.length,
     theirTotal: theirRecords.length,
     myProfile: avgProfile(myRecords),

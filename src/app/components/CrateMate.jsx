@@ -385,18 +385,30 @@ async function fetchITunesArt(artist, title) {
     if (!res.ok) return "";
     const data = await res.json();
     const results = data?.results || [];
+    const normalize = (s) => (s || "").toLowerCase().replace(/\(.*?\)/g, "").replace(/[^\w\s]/g, "").trim();
+    const ra = normalize(artist);
+    const rt = normalize(title);
+    if (!ra || !rt) return "";
     let best = null, bestScore = 0;
     for (const r of results) {
-      const a = (r.artistName || "").toLowerCase();
-      const t = (r.collectionName || "").toLowerCase();
-      const ra = (artist || "").toLowerCase().replace(/\(.*?\)/g, "").trim();
-      const rt = (title || "").toLowerCase().replace(/\(.*?\)/g, "").trim();
+      const a = normalize(r.artistName);
+      const t = normalize(r.collectionName);
       let score = 0;
-      if (a && ra && (a.includes(ra) || ra.includes(a))) score += 2;
-      if (t && rt && (t.includes(rt) || rt.includes(t))) score += 2;
+      // Artist: require one to fully contain the other AND share >60% length
+      if (a && ra && (a.includes(ra) || ra.includes(a))) {
+        const ratio = Math.min(a.length, ra.length) / Math.max(a.length, ra.length);
+        if (ratio > 0.6) score += 2;
+        else score += 1;
+      }
+      // Title: same — full containment + length ratio check
+      if (t && rt && (t.includes(rt) || rt.includes(t))) {
+        const ratio = Math.min(t.length, rt.length) / Math.max(t.length, rt.length);
+        if (ratio > 0.6) score += 2;
+        else score += 1;
+      }
       if (score > bestScore) { bestScore = score; best = r; }
     }
-    if (!best || bestScore < 4) return ""; // require both artist AND title to match
+    if (!best || bestScore < 4) return ""; // require strong match on both artist AND title
     return (best.artworkUrl100 || "").replace(/\d+x\d+bb(\.(jpe?g|png|webp))?$/i, "1000x1000bb.jpg");
   } catch {
     return "";
@@ -434,24 +446,29 @@ export function CoverArt({ record, size = 64 }) {
   const isUpload = isUserPhoto(raw);
   // For real Discogs images, apply any free URL upgrades (strip -150, upgrade iTunes resolution)
   const upgraded = isUpload ? "" : upgradeDiscogsThumb(raw);
+  // The original thumb (before upgrade) is a reliable fallback — it may be low-res but it's the correct cover
+  const hasOriginalThumb = !isUpload && !!raw && raw !== upgraded;
   // Only use iTunes for confirmed bad images (user photos) or truly missing covers.
-  // Blurry-but-correct Discogs images stay as-is — wrong iTunes art is worse than low-res correct art.
   const needsITunes = isUpload || !upgraded;
 
   const [fallback, setFallback] = useState(() => _artCache.get(record.id) || null);
   const [imgError, setImgError] = useState(false);
+  const [thumbError, setThumbError] = useState(false);
 
   useEffect(() => {
-    // Enqueue iTunes art if: no Discogs URL, user photo, or primary URL failed to load
+    // Enqueue iTunes art if: no Discogs URL, user photo, or both upgraded + original thumb failed
     if (!needsITunes && !imgError) return;
+    if (imgError && hasOriginalThumb && !thumbError) return; // still trying original thumb
     return _enqueueArt(record, (url) => {
-      if (url) { setFallback(url); setImgError(false); }
+      if (url) { setFallback(url); setImgError(false); setThumbError(false); }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record.id, imgError]);
+  }, [record.id, imgError, thumbError]);
 
-  // Prefer iTunes art (higher quality); fall back to the Discogs URL so nothing goes blank
-  const src = fallback || (imgError ? null : upgraded);
+  // Priority: iTunes fallback > upgraded Discogs > original thumb > null
+  let src = fallback;
+  if (!src && !imgError) src = upgraded;
+  if (!src && imgError && hasOriginalThumb && !thumbError) src = raw;
 
   if (src) {
     return (
@@ -464,7 +481,10 @@ export function CoverArt({ record, size = 64 }) {
           alt=""
           loading="lazy"
           className="w-full h-full object-cover opacity-90"
-          onError={() => setImgError(true)}
+          onError={() => {
+            if (!imgError) setImgError(true);
+            else if (!thumbError) setThumbError(true);
+          }}
         />
       </div>
     );
@@ -6027,6 +6047,7 @@ export default function CrateMate() {
   const [overlapData, setOverlapData] = useState(null);
   const [overlapLoading, setOverlapLoading] = useState(false);
   const [showAllSharedArtists, setShowAllSharedArtists] = useState(false);
+  const [showAllUniqueRecords, setShowAllUniqueRecords] = useState(false);
   const [enrichmentProgress, setEnrichmentProgress] = useState(null); // null | { done, total, type }
   const enrichmentAbort = useRef(false);
   const spotifyFeaturesRef = useRef({});
@@ -10510,10 +10531,11 @@ export default function CrateMate() {
                       <div key={u.username}>
                         <button
                           onClick={async () => {
-                            if (isSelected) { setSelectedDiscoverUser(null); setOverlapData(null); setShowAllSharedArtists(false); return; }
+                            if (isSelected) { setSelectedDiscoverUser(null); setOverlapData(null); setShowAllSharedArtists(false); setShowAllUniqueRecords(false); return; }
                             setSelectedDiscoverUser(u.username);
                             setOverlapData(null);
                             setShowAllSharedArtists(false);
+                            setShowAllUniqueRecords(false);
                             setOverlapLoading(true);
                             try {
                               const res = await fetch(`/api/discover/overlap?username=${encodeURIComponent(u.username)}`);
@@ -10624,6 +10646,46 @@ export default function CrateMate() {
                                       )}
                                     </div>
                                   )}
+
+                                  {/* Records they have that you don't */}
+                                  {overlapData.theirUniqueRecords?.length > 0 && (() => {
+                                    const unique = overlapData.theirUniqueRecords;
+                                    const visible = showAllUniqueRecords ? unique : unique.slice(0, 10);
+                                    return (
+                                      <div className="border-t border-white/[0.04]">
+                                        <div className="px-3 py-2">
+                                          <span className="text-stone-500 text-xs uppercase tracking-wider">Records you don&apos;t have</span>
+                                          <span className="text-stone-700 text-[10px] ml-2">{unique.length} records</span>
+                                        </div>
+                                        <div className="px-3 pb-2 space-y-1">
+                                          {visible.map((r, i) => (
+                                            <div key={`${r.artist}-${r.title}-${i}`} className="flex items-center gap-2.5 py-1.5">
+                                              <div className="w-8 h-8 rounded-lg overflow-hidden bg-stone-800 shrink-0">
+                                                {r.thumb
+                                                  ? <img src={r.thumb} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                                  : <div className="w-full h-full bg-stone-700" />}
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="text-stone-300 text-xs truncate">{r.title}</div>
+                                                <div className="text-stone-600 text-[10px] truncate">
+                                                  {stripArtistNum(r.artist)}{r.year ? ` · ${r.year}` : ""}
+                                                  {r.isNewArtist && <span className="text-amber-700/60 ml-1.5">new artist</span>}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        {unique.length > 10 && (
+                                          <button
+                                            onClick={() => setShowAllUniqueRecords(s => !s)}
+                                            className="w-full px-3 py-2 text-stone-600 hover:text-stone-400 text-xs text-center transition-colors border-t border-white/[0.04]"
+                                          >
+                                            {showAllUniqueRecords ? "Show less" : `Show all ${unique.length} records`}
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
 
                                   <div className="px-3 py-2.5 border-t border-white/[0.04] flex justify-end">
                                     <a
