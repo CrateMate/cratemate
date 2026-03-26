@@ -6600,7 +6600,7 @@ export default function CrateMate() {
       if (s.includes("/userimages/") || s.includes("/user-image/")) return true;
       return false;
     };
-    const needsUpgrade = collection.filter(r => r.discogs_id && (!r.thumb || isLowRes(r.thumb)));
+    const needsUpgrade = collection.filter(r => !r.for_sale && r.discogs_id && (!r.thumb || isLowRes(r.thumb)));
     if (needsUpgrade.length === 0) return;
     coverUpgradeRef.current = true;
 
