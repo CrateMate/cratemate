@@ -5603,7 +5603,13 @@ export default function CrateMate() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [compareBase, setCompareBase] = useState(null);   // record A
   const [compareTarget, setCompareTarget] = useState(null); // record B (null = picker mode)
-  const [userLocation, setUserLocation] = useState(null); // { city_name, latitude, longitude }
+  const [userLocation, setUserLocationRaw] = useState(() => {
+    try { const s = localStorage.getItem("cratemate_location"); return s ? JSON.parse(s) : null; } catch { return null; }
+  }); // { city_name, latitude, longitude }
+  function setUserLocation(loc) {
+    setUserLocationRaw(loc);
+    try { if (loc) localStorage.setItem("cratemate_location", JSON.stringify(loc)); else localStorage.removeItem("cratemate_location"); } catch {}
+  }
   const [todayWeather, setTodayWeather] = useState(null); // { condition, label, mood, temperature_c, city_name }
   const [citySearch, setCitySearch] = useState({ query: "", results: [], open: false, loading: false });
   const [selected, setSelected] = useState(null);
