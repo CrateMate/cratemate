@@ -8208,11 +8208,11 @@ export default function VinylCrate() {
                             localStorage.setItem("cratemate_screensaver", next ? "1" : "0");
                             setScreensaverEnabled(next);
                           }}
-                          className={`px-3.5 py-1.5 text-sm transition-colors relative ${screensaverEnabled ? "text-amber-300" : "text-stone-500 hover:text-stone-200"}`}
+                          className={`px-3.5 py-1.5 text-sm transition-colors relative ${screensaverEnabled ? "text-stone-200" : "text-stone-600 hover:text-stone-400"}`}
                           title={screensaverEnabled ? "Auto-pan ON" : "Auto-pan OFF"}
                         >
                           ⟳
-                          {screensaverEnabled && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                          {screensaverEnabled && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />}
                         </button>
                         <div className="w-px self-stretch bg-white/10" />
                         {/* Fullscreen toggle — stays hidden until tap */}
@@ -8950,14 +8950,9 @@ export default function VinylCrate() {
           })()}
 
           {[
-            { type: "random", icon: "🎲", title: "Random Pick", sub: "Surprise me from the crate" },
-            {
-              type: "daily",
-              icon: "📅",
-              title: "Today's Pick",
-              sub: `Seasonal & cultural fit for ${new Date().toLocaleString("default", { month: "long", day: "numeric" })}`,
-            },
-          ].map(({ type, icon, title, sub, disabled }) => (
+            { type: "random", icon: "🎲", title: "Random Pick" },
+            { type: "daily",  icon: "📅", title: "Today's Pick" },
+          ].map(({ type, icon, title, disabled }) => (
             <button
               key={type}
               onClick={() => !disabled && !recoLoading && getReco(type)}
@@ -8969,10 +8964,7 @@ export default function VinylCrate() {
               }`}
             >
               <span className="text-xl w-8 text-center">{icon}</span>
-              <div>
-                <div className="font-medium text-stone-200 text-sm">{title}</div>
-                <div className="text-xs text-stone-600">{sub}</div>
-              </div>
+              <div className="font-medium text-stone-200 text-sm">{title}</div>
             </button>
           ))}
 
@@ -8981,7 +8973,7 @@ export default function VinylCrate() {
               <span className="text-xl w-8 text-center">🌙</span>
               <div>
                 <div className="font-medium text-stone-200 text-sm">Mood Match</div>
-                <div className="text-xs text-stone-600">Describe how you&apos;re feeling or what you need</div>
+                <div className="text-xs text-stone-600">What&apos;s the vibe?</div>
               </div>
             </div>
             <input
@@ -10558,7 +10550,7 @@ export default function VinylCrate() {
                       : <div className="w-full h-full bg-stone-700" />}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-amber-50 text-sm truncate leading-tight">{bannerRecord.title}</div>
+                    <MarqueeTitle style={{ fontSize: 14, color: "#fef3c7", lineHeight: 1.3 }}>{bannerRecord.title}</MarqueeTitle>
                     <div className="text-stone-500 text-xs">
                       {sessionMinimized ? `${trailHistory.length} in session` : relativePlayTime(nowPlaying.loggedAt)}
                     </div>
