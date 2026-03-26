@@ -5745,9 +5745,23 @@ export default function CrateMate() {
   const sentinelRef = useRef(null);
 
   // Now Playing — derived from playSessions (DB-backed, cross-browser)
-  // Only the dismissed session ID is local (per-device UI hint)
+  // Dismissed session ID + timestamp stored locally — auto-restores after 6 hours
+  const BANNER_RESTORE_MS = 6 * 60 * 60 * 1000; // 6 hours
   const [dismissedSessionId, setDismissedSessionId] = useState(() => {
-    try { return localStorage.getItem("cratemate_np_dismissed") || null; } catch { return null; }
+    try {
+      const raw = localStorage.getItem("cratemate_np_dismissed");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed.ts && Date.now() - parsed.ts > 6 * 60 * 60 * 1000) {
+        localStorage.removeItem("cratemate_np_dismissed");
+        return null;
+      }
+      return parsed.id || null;
+    } catch {
+      // Legacy format (plain string) — clear it
+      localStorage.removeItem("cratemate_np_dismissed");
+      return null;
+    }
   });
   const [, setNowPlayingTick] = useState(0); // force re-render every minute for relative time
   const nowPlaying = useMemo(() => {
@@ -5761,6 +5775,27 @@ export default function CrateMate() {
     const id = setInterval(() => setNowPlayingTick(t => t + 1), 60000);
     return () => clearInterval(id);
   }, [nowPlaying]);
+  // Auto-restore dismissed banner after 6 hours
+  useEffect(() => {
+    if (!dismissedSessionId) return;
+    try {
+      const raw = localStorage.getItem("cratemate_np_dismissed");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed.ts) return;
+      const remaining = BANNER_RESTORE_MS - (Date.now() - parsed.ts);
+      if (remaining <= 0) {
+        setDismissedSessionId(null);
+        localStorage.removeItem("cratemate_np_dismissed");
+        return;
+      }
+      const id = setTimeout(() => {
+        setDismissedSessionId(null);
+        localStorage.removeItem("cratemate_np_dismissed");
+      }, remaining);
+      return () => clearTimeout(id);
+    } catch {}
+  }, [dismissedSessionId]);
 
   // Undo pending
   const [undoPending, setUndoPending] = useState(null); // { record, sessionId }
@@ -5946,6 +5981,7 @@ export default function CrateMate() {
   const [historyPage, setHistoryPage] = useState(1);
   const [historyInfiniteScroll, setHistoryInfiniteScroll] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(20);
+  const [historySearch, setHistorySearch] = useState("");
   const HISTORY_PAGE_SIZE = 20;
   const historySentinelRef = useRef(null);
 
@@ -9106,6 +9142,19 @@ export default function CrateMate() {
                 ) : (
                   <>
                     <div className="flex items-center gap-2 mb-3">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={historySearch}
+                          onChange={(e) => { setHistorySearch(e.target.value); setHistoryPage(1); setHistoryVisible(HISTORY_PAGE_SIZE); }}
+                          placeholder="Search plays…"
+                          className="w-full bg-stone-900/60 border border-stone-800 rounded-full pl-8 pr-3 py-1.5 text-xs text-stone-300 placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                        />
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5 text-stone-600 absolute left-2.5 top-1/2 -translate-y-1/2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        {historySearch && (
+                          <button onClick={() => setHistorySearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-400 text-xs">×</button>
+                        )}
+                      </div>
                       <button
                         onClick={() => { setHistoryInfiniteScroll(s => !s); setHistoryPage(1); setHistoryVisible(HISTORY_PAGE_SIZE); }}
                         className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${historyInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
@@ -9115,11 +9164,18 @@ export default function CrateMate() {
                     </div>
                   <div className="space-y-1">
                     {(() => {
-                      const historyTotalPages = Math.ceil(allSessions.length / HISTORY_PAGE_SIZE);
+                      const q = historySearch.toLowerCase().trim();
+                      const filtered = q
+                        ? allSessions.filter(s => s.records.some(r =>
+                            (r.title || "").toLowerCase().includes(q) ||
+                            (r.artist || "").toLowerCase().includes(q)
+                          ))
+                        : allSessions;
+                      const historyTotalPages = Math.ceil(filtered.length / HISTORY_PAGE_SIZE);
                       const visibleSessions = historyInfiniteScroll
-                        ? allSessions.slice(0, historyVisible)
-                        : allSessions.slice((historyPage - 1) * HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE);
-                      const historyHasMore = historyInfiniteScroll && historyVisible < allSessions.length;
+                        ? filtered.slice(0, historyVisible)
+                        : filtered.slice((historyPage - 1) * HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE);
+                      const historyHasMore = historyInfiniteScroll && historyVisible < filtered.length;
                       // Group visible sessions by calendar day
                       const sessionsByDay = [];
                       visibleSessions.forEach(session => {
@@ -9137,6 +9193,9 @@ export default function CrateMate() {
                         return "Night";
                       };
                       return (<>
+                        {q && filtered.length === 0 && (
+                          <div className="text-stone-600 text-sm text-center py-8">No plays matching "{historySearch}"</div>
+                        )}
                         {sessionsByDay.map(({ dayKey, label, sessions: daySessions }, dayIdx) => (
                           <div key={dayKey}>
                             {/* Day header */}
@@ -9246,7 +9305,7 @@ export default function CrateMate() {
                         ))}
                         {historyInfiniteScroll
                           ? (historyHasMore && <div ref={historySentinelRef} className="py-4 text-center text-stone-700 text-xs">Loading more…</div>)
-                          : allSessions.length > HISTORY_PAGE_SIZE && (
+                          : filtered.length > HISTORY_PAGE_SIZE && (
                             <div className="flex items-center justify-center gap-3 py-4">
                               <button onClick={() => setHistoryPage(p => Math.max(1, p - 1))} disabled={historyPage === 1}
                                 className="px-3 py-1.5 rounded-lg text-xs border border-stone-800 text-stone-500 disabled:opacity-30 hover:text-stone-300 transition-colors">
@@ -10859,10 +10918,10 @@ export default function CrateMate() {
                                 <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(prev.record.artist)}</div>
                               </div>
                               <button
-                                onClick={(e) => { e.stopPropagation(); enterTrail(nowPlaying.record, true); setTimeout(() => navigateTrail(prev.record), 100); setBannerPreviewDirection(null); }}
+                                onClick={async (e) => { e.stopPropagation(); setBannerPreviewDirection(null); await logPlay(prev.record.id); }}
                                 className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
                                 style={{ color, background: `${color}22` }}
-                              >→</button>
+                              >▶</button>
                             </div>
                           );
                         })()}
@@ -10921,7 +10980,7 @@ export default function CrateMate() {
                     } else {
                       const sid = playSessions[0]?.id;
                       setDismissedSessionId(sid);
-                      try { localStorage.setItem("cratemate_np_dismissed", sid || ""); } catch {}
+                      try { localStorage.setItem("cratemate_np_dismissed", JSON.stringify({ id: sid, ts: Date.now() })); } catch {}
                     }
                   }}
                   className="text-stone-600 hover:text-stone-400 text-lg leading-none shrink-0 transition-colors"
