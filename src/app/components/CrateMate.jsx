@@ -5118,7 +5118,8 @@ async function generateStoryCards(session, username) {
       if (ty > textBottom - 120) break;
       ctx.fillStyle = '#fef3c7';
       ctx.font = `700 70px "Fraunces", serif`;
-      ctx.fillText(group.artist.length > 26 ? group.artist.slice(0, 24) + '…' : group.artist, TX, ty);
+      const cleanArtist = group.artist.replace(/\s*\(\d+\)\s*$/, '').trim();
+      ctx.fillText(cleanArtist.length > 26 ? cleanArtist.slice(0, 24) + '…' : cleanArtist, TX, ty);
       ty += 78;
       ctx.fillStyle = 'rgba(255,255,255,0.56)';
       ctx.font = `300 38px "DM Sans", sans-serif`;
@@ -5131,7 +5132,7 @@ async function generateStoryCards(session, username) {
     }
   } else {
     // Fallback — artists from the session
-    const uniqueArtists = [...new Set(records.map(r => r.artist).filter(Boolean))].slice(0, isLong ? 3 : 5);
+    const uniqueArtists = [...new Set(records.map(r => (r.artist || "").replace(/\s*\(\d+\)\s*$/, '').trim()).filter(Boolean))].slice(0, isSmall ? 5 : isLong ? 3 : 5);
     if (uniqueArtists.length > 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.40)';
       ctx.font = `300 36px "DM Sans", sans-serif`;
@@ -5463,7 +5464,7 @@ async function generateCrateStory(session, username) {
     ctx.fillText(title.length > 30 ? title.slice(0, 28) + '…' : title, W / 2, textStartY);
     ctx.fillStyle = '#78716c';
     ctx.font = `40px Georgia, serif`;
-    ctx.fillText((records[0].artist || '').slice(0, 36), W / 2, textStartY + 60);
+    ctx.fillText((records[0].artist || '').replace(/\s*\(\d+\)\s*$/, '').slice(0, 36), W / 2, textStartY + 60);
     textStartY += 130;
   } else {
     textStartY = Math.round(clusterBottom) + 56;
@@ -10852,9 +10853,9 @@ export default function CrateMate() {
                           );
                         })()}
                         {[
-                          { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Wind down" },
-                          { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Lift up" },
-                          { key: "sideways", color: "#a78bfa", symbol: "↔", label: "Detour" },
+                          { key: "windDown", color: "#60a5fa", symbol: "↓", label: "Cool off" },
+                          { key: "liftUp",   color: "#f87171", symbol: "↑", label: "Turn it up" },
+                          { key: "sideways", color: "#a78bfa", symbol: "↔", label: "Left turn" },
                         ].map(({ key, color, symbol, label }) => {
                           const s = bannerSuggestions[key];
                           if (!s) return null;
