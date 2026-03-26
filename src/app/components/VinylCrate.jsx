@@ -4956,7 +4956,8 @@ async function generateStoryCards(session, username) {
   const cols = displayTiles <= 1 ? 1 : displayTiles <= 2 ? 2 : 3;
   const GAP = 6;
   const WALL_INSET = 12;
-  const CELL = Math.floor((W - 2 * WALL_INSET - GAP * (cols - 1)) / cols);
+  const rawCell = Math.floor((W - 2 * WALL_INSET - GAP * (cols - 1)) / cols);
+  const CELL = cols === 1 ? Math.min(rawCell, 520) : rawCell; // cap single-record art
   const BRANDING_H = 142;
   const isLong = artCount > 4;
   const MIN_TEXT_H = isLong ? 340 : 460;
@@ -5009,7 +5010,13 @@ async function generateStoryCards(session, username) {
   ctx.textAlign = 'left';
 
   ctx.fillStyle = 'rgba(255,255,255,0.93)';
-  ctx.font = `700 78px "Fraunces", serif`;
+  // Auto-size title to fit — "Wednesday Afternoon Session" is the longest
+  let titleFontSize = 78;
+  ctx.font = `700 ${titleFontSize}px "Fraunces", serif`;
+  while (ctx.measureText(sessionTitle).width > W - TX * 2 && titleFontSize > 48) {
+    titleFontSize -= 2;
+    ctx.font = `700 ${titleFontSize}px "Fraunces", serif`;
+  }
   ctx.fillText(sessionTitle, TX, 112);
 
   // Decade badge + genre pills on the same row
