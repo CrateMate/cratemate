@@ -6605,10 +6605,10 @@ export default function CrateMate() {
   useEffect(() => {
     if (!Array.isArray(collection) || collection.length === 0) return;
     if (masterBackfillRef.current) return;
-    const needsBackfill = collection.some(r => r.discogs_id && !r.master_id);
-    if (!needsBackfill) return;
+    const needsBackfill = collection.filter(r => r.discogs_id && (r.master_id == null || r.master_id === 0));
+    console.log("[backfill-master] check:", collection.length, "records,", needsBackfill.length, "need backfill, sample master_ids:", collection.slice(0, 5).map(r => r.master_id));
+    if (needsBackfill.length === 0) return;
     masterBackfillRef.current = true;
-    console.log("[backfill-master] starting, records needing backfill:", collection.filter(r => r.discogs_id && !r.master_id).length);
     fetch("/api/discogs/enrich/backfill-master", { method: "POST" })
       .then(r => r.json())
       .then(d => { console.log("[backfill-master] result:", d); if (d.updated > 0) refreshRecords(); })
