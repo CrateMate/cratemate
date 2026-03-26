@@ -23,10 +23,12 @@ export async function POST(request) {
 
     return Response.json({ content: response.content });
   } catch (error) {
-    console.error("Anthropic API error:", error);
+    console.error("Anthropic API error:", error?.status, error?.message || error);
+    const status = error?.status || 500;
+    const detail = error?.error?.type || error?.message || "unknown";
     return Response.json(
-      { error: "Failed to get response from Claude" },
-      { status: 500 }
+      { error: `Claude API error (${status}): ${detail}` },
+      { status }
     );
   }
 }

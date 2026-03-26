@@ -6881,15 +6881,19 @@ export default function CrateMate() {
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
 
           async function generateHookReason(hook) {
-            const text = await callClaude(
-              [{ role: "user", content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: ${describeRecord(hook.record)}.\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}` }],
-              80, SYSTEM
-            );
-            const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
-            let parsed;
-            try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
-            if (Array.isArray(parsed)) parsed = parsed[0];
-            return parsed?.reason || hook.fact;
+            try {
+              const text = await callClaude(
+                [{ role: "user", content: `Here's a fun fact about a record in my collection:\n\n${hook.fact}\n\nThe record: ${describeRecord(hook.record)}.\n\nWrite 1-2 casual conversational sentences that surface this fact and make me want to pull it out right now.\n\nRespond ONLY with JSON: {"reason":"..."}` }],
+                80, SYSTEM
+              );
+              const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+              let parsed;
+              try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+              if (Array.isArray(parsed)) parsed = parsed[0];
+              return parsed?.reason || hook.fact;
+            } catch {
+              return hook.fact;
+            }
           }
 
           let artistMembers = {};
@@ -6958,13 +6962,23 @@ export default function CrateMate() {
           const deduped = dedupeByAlbum(activePool, playCounts);
           const scored = (pool.length ? pool : deduped).map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
-          const text = await callClaude([{ role: "user", content: `The record: ${describeRecord(picked)}.\n\nIt was chosen because it hasn't been played recently and fits the collection's sound. Write 1-2 warm casual sentences about why to put it on now — mention the genre or era if it helps.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 100, SYSTEM);
-          const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
-          let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
-          if (Array.isArray(parsed)) parsed = parsed[0];
-          if (!parsed?.reason) throw new Error("bad-schema");
-          try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks: [{ recordId: picked.id, reason: parsed.reason, hookType: "heuristic" }] })); } catch {}
-          setReco({ record: picked, reason: parsed.reason, label: "Today's Pick" });
+          let reason;
+          try {
+            const text = await callClaude([{ role: "user", content: `The record: ${describeRecord(picked)}.\n\nIt was chosen because it hasn't been played recently and fits the collection's sound. Write 1-2 warm casual sentences about why to put it on now — mention the genre or era if it helps.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 100, SYSTEM);
+            const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+            let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+            if (Array.isArray(parsed)) parsed = parsed[0];
+            if (parsed?.reason) reason = parsed.reason;
+          } catch {}
+          if (!reason) {
+            const genres = (picked.styles || picked.genres || picked.genre || "").split(",").map(g => g.trim()).filter(Boolean);
+            const year = picked.year_original || picked.year_pressed;
+            reason = genres.length && year
+              ? `A ${genres[0].toLowerCase()} gem from ${year} that deserves another spin.`
+              : `Haven't played this one in a while — time to revisit.`;
+          }
+          try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks: [{ recordId: picked.id, reason, hookType: "heuristic" }] })); } catch {}
+          setReco({ record: picked, reason, label: "Today's Pick" });
 
         } else if (type === "random") {
           // Weighted random: less-played records get higher weight.
