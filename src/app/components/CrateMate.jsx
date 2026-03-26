@@ -2687,10 +2687,10 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
   // birthday / death / release anniversary each get equal chance on days when
   // more than one applies. If none fire, we fall through to the lower hooks.
   const mainHookCandidates = [];
+  const isVA = (a) => /^various(\s+artists?)?$/i.test((a || "").trim());
 
   // ─── Hook 1a: Artist or band member birthday ±1 day ──────────────────────
   {
-    const isVA = (a) => /^various(\s+artists?)?$/i.test((a || "").trim());
     const soloBirthday = myRecords.filter(
       (r) => !isVA(r.artist) && withinDayWindow(r.artist_birth_month, r.artist_birth_day)
     ).filter(notPlayedVeryRecently);
