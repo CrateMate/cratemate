@@ -5937,6 +5937,29 @@ export default function CrateMate() {
 
   const [searchFocused, setSearchFocused] = useState(false);
 
+  // Swipe between tabs
+  const TAB_ORDER = ["crate", "history", "reco", "wants", "stats", "hearts", "discover"];
+  const swipeStartRef = useRef(null);
+  function onSwipeStart(e) {
+    if (viewMode === "drift") return;
+    const t = e.touches?.[0];
+    if (t) swipeStartRef.current = { x: t.clientX, y: t.clientY };
+  }
+  function onSwipeEnd(e) {
+    if (!swipeStartRef.current || viewMode === "drift") return;
+    const t = e.changedTouches?.[0];
+    if (!t) return;
+    const dx = t.clientX - swipeStartRef.current.x;
+    const dy = t.clientY - swipeStartRef.current.y;
+    swipeStartRef.current = null;
+    // Only trigger if horizontal > 80px and more horizontal than vertical
+    if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const idx = TAB_ORDER.indexOf(tab);
+    if (idx === -1) return;
+    const nextIdx = dx < 0 ? Math.min(idx + 1, TAB_ORDER.length - 1) : Math.max(idx - 1, 0);
+    if (nextIdx !== idx) { setTab(TAB_ORDER[nextIdx]); setSelected(null); }
+  }
+
   const [isDiscoverable, setIsDiscoverable] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null);
   const [discoverLoading, setDiscoverLoading] = useState(false);
@@ -7750,6 +7773,8 @@ export default function CrateMate() {
     <div
       className="h-dvh flex flex-col max-w-md mx-auto"
       style={{ fontFamily: "'DM Sans',sans-serif" }}
+      onTouchStart={onSwipeStart}
+      onTouchEnd={onSwipeEnd}
     >
       {/* ── Compact header ── */}
       {(!selected || tab !== "crate") && viewMode !== "drift" && (
