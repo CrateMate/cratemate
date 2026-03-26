@@ -5805,13 +5805,6 @@ export default function VinylCrate() {
     return () => { if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current); };
   }, [inDrift, controlsHidden]);
 
-  // Force-reset controlsHidden whenever leaving drift
-  useEffect(() => {
-    if (!inDrift && controlsHidden) {
-      driftFullscreenRef.current = false;
-      setControlsHidden(false);
-    }
-  }, [inDrift, controlsHidden]);
 
   function driftResetFade() {
     if (driftFadeTimerRef.current) clearTimeout(driftFadeTimerRef.current);
@@ -5911,14 +5904,9 @@ export default function VinylCrate() {
     }
   }
   useEffect(() => {
-    setHeaderVisible(true);
+    if (!controlsHidden) setHeaderVisible(true);
     lastScrollY.current = 0;
     upScrollAccum.current = 0;
-    // Exit fullscreen when switching tabs or leaving drift
-    if (controlsHidden) {
-      driftFullscreenRef.current = false;
-      setControlsHidden(false);
-    }
   }, [tab, page]); // reset on tab change AND page change
 
   const [isDiscoverable, setIsDiscoverable] = useState(false);
@@ -7671,10 +7659,10 @@ export default function VinylCrate() {
     >
       <div style={{
         display: "grid",
-        gridTemplateRows: (headerVisible && !(viewMode === "drift" && controlsHidden)) ? "1fr" : "0fr",
-        opacity: (headerVisible && !(viewMode === "drift" && controlsHidden)) ? 1 : 0,
+        gridTemplateRows: (headerVisible && !controlsHidden) ? "1fr" : "0fr",
+        opacity: (headerVisible && !controlsHidden) ? 1 : 0,
         transition: "grid-template-rows 0.28s ease, opacity 0.22s ease",
-        pointerEvents: (headerVisible && !(viewMode === "drift" && controlsHidden)) ? "auto" : "none",
+        pointerEvents: (headerVisible && !controlsHidden) ? "auto" : "none",
       }}>
       <div style={{ overflow: "hidden" }}>
       {(!selected || tab !== "crate") && viewMode !== "drift" && (
@@ -7737,6 +7725,19 @@ export default function VinylCrate() {
       </div>
       </div>
 
+      {/* Global fullscreen restore button — shows on ALL tabs when header is hidden */}
+      {controlsHidden && viewMode !== "drift" && (
+        <button
+          onClick={() => {
+            driftFullscreenRef.current = false;
+            setControlsHidden(false);
+          }}
+          className="absolute top-3 right-4 z-50 w-9 h-9 rounded-full bg-black/20 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+        </button>
+      )}
+
       <div ref={tabRowRef} className={`flex px-4 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "relative z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {[
           ["crate",    "⏺", "Crate"],
@@ -7775,6 +7776,16 @@ export default function VinylCrate() {
             </button>
           );
         })}
+        {/* Fullscreen toggle — hide header, keep tabs */}
+        {!controlsHidden && viewMode !== "drift" && (
+          <button
+            onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
+            className="min-h-[44px] px-2 flex items-center justify-center text-stone-600 hover:text-stone-400 transition-colors"
+            title="Hide header"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
+          </button>
+        )}
       </div>
 
       {tab === "crate" && (
