@@ -3538,7 +3538,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
           <div className="flex flex-col h-full px-5 pt-12 pb-8">
             <div className="text-stone-500 text-xs uppercase tracking-widest mb-1">Session complete</div>
             <div className="text-amber-50 text-2xl mb-4" style={{ fontFamily: "'Fraunces',serif" }}>
-              Save this listening session?
+              Your session is saved
             </div>
             {/* Record list */}
             <div className="flex-1 overflow-y-auto space-y-1 mb-4">
@@ -3558,17 +3558,10 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
             <div className="text-stone-600 text-xs text-center mb-4">{history.length} record{history.length !== 1 ? "s" : ""}</div>
             <div className="flex gap-3">
               <button
-                onClick={onDiscardSession}
-                className="flex-1 py-3 rounded-xl border border-stone-700 text-stone-400 text-sm hover:border-stone-600 hover:text-stone-300 transition-colors"
-              >
-                Discard
-              </button>
-              <button
                 onClick={onSaveSession}
-                disabled={saving}
-                className="flex-1 py-3 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-sm hover:bg-amber-900/40 transition-colors disabled:opacity-60"
+                className="flex-1 py-3 rounded-xl border border-amber-800/60 bg-amber-900/20 text-amber-300 text-sm hover:bg-amber-900/40 transition-colors"
               >
-                {saving ? "Saving…" : "Save session"}
+                Done
               </button>
             </div>
           </div>
@@ -7832,6 +7825,11 @@ export default function CrateMate() {
     setTrailSearchOpen(false);
     setTrailError("");
     setTrailLoading(true);
+    // Auto-log the play immediately — the session IS the listening
+    if (!trailAlreadyLoggedIds.has(String(record.id))) {
+      logPlay(record.id);
+      setTrailAlreadyLoggedIds(prev => new Set([...prev, String(record.id)]));
+    }
     try {
       const centerFeatures = await fetchAndCacheFeatures(record);
       const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [record.id]: centerFeatures } : {}) };
@@ -7865,20 +7863,11 @@ export default function CrateMate() {
   }
 
   async function saveTrailSession() {
-    setTrailSaving(true);
-    try {
-      for (const record of trailHistory) {
-        if (!trailAlreadyLoggedIds.has(String(record.id))) {
-          await logPlay(record.id);
-        }
-      }
-    } finally {
-      setTrailSaving(false);
-      setTrailSavePrompt(false);
-      setTrailActive(false);
-      setTrailSearchOpen(false);
-      setTrailAlreadyLoggedIds(new Set());
-    }
+    // Plays are already logged during navigation — just close the session
+    setTrailSavePrompt(false);
+    setTrailActive(false);
+    setTrailSearchOpen(false);
+    setTrailAlreadyLoggedIds(new Set());
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -11151,8 +11140,9 @@ export default function CrateMate() {
             const color = dirColors[bannerPreviewDirection];
             const isSession = !!(trailCenter && !trailActive);
             return (
-              <div className="absolute bottom-full right-4 mb-2 w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg"
+              <div className="absolute bottom-full right-4 mb-2 w-48 rounded-xl border bg-stone-950/98 backdrop-blur-md p-2 flex items-center gap-2 shadow-lg cursor-pointer"
                 style={{ borderColor: `${color}44` }}
+                onClick={() => { setBannerPreviewDirection(null); setSelected(prev.record); }}
               >
                 <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
                   {prev.record.thumb
@@ -11172,7 +11162,7 @@ export default function CrateMate() {
                   }}
                   className="text-xs font-medium shrink-0 px-1.5 py-1 rounded-lg transition-colors"
                   style={{ color, background: `${color}22` }}
-                >{isSession ? "→" : "▶"}</button>
+                >▶</button>
               </div>
             );
           })()}
