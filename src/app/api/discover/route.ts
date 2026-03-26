@@ -25,10 +25,10 @@ const GENRE_PROFILES: Record<string, { energy: number; valence: number; danceabi
   "disco": { energy: 0.80, valence: 0.78, danceability: 0.88, acousticness: 0.08, loudness: 0.78 },
 };
 
-type RecordSlim = { artist: string; genre?: string | null; style?: string | null; year_original?: number | null; year_pressed?: number | null };
+type RecordSlim = { artist: string; genre?: string | null; genres?: string | null; styles?: string | null; year_original?: number | null; year_pressed?: number | null };
 
 function estimateFeatures(r: RecordSlim) {
-  const combined = `${r.genre || ""} ${r.style || ""}`.toLowerCase();
+  const combined = `${r.genre || ""} ${r.genres || ""} ${r.styles || ""}`.toLowerCase();
   const match = Object.entries(GENRE_PROFILES).find(([key]) => combined.includes(key));
   const base = match ? { ...match[1] } : { energy: 0.60, valence: 0.55, danceability: 0.60, acousticness: 0.40, loudness: 0.70 };
   const year = r.year_original || r.year_pressed;
@@ -58,7 +58,7 @@ export async function GET() {
 
   const { data: myRecords } = await supabase
     .from("records")
-    .select("artist, genre, style, year_original, year_pressed")
+    .select("artist, genre, genres, styles, year_original, year_pressed")
     .eq("user_id", userId)
     .eq("for_sale", false);
 
@@ -87,7 +87,7 @@ export async function GET() {
     discoverableProfiles.map(async (profile) => {
       const { data: theirRecords } = await supabase
         .from("records")
-        .select("artist, genre, style, year_original, year_pressed")
+        .select("artist, genre, genres, styles, year_original, year_pressed")
         .eq("user_id", profile.user_id)
         .eq("for_sale", false);
 
