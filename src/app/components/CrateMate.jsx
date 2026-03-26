@@ -6526,14 +6526,22 @@ export default function CrateMate() {
       }
       const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]);
       if (uncached.length === 0) return;
-      console.log("[audio-enrich] uncached records:", uncached.map(r => `${r.artist} - ${r.title} (id:${r.id})`));
       setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
       let done = 0;
       const CONCURRENCY = 2;
       for (let i = 0; i < uncached.length; i += CONCURRENCY) {
         if (enrichmentAbort.current) break;
         const batch = uncached.slice(i, i + CONCURRENCY);
-        await Promise.allSettled(batch.map(r => fetchAndCacheFeatures(r)));
+        const results = await Promise.allSettled(batch.map(r => fetchAndCacheFeatures(r)));
+        // Mark failed records so we don't retry them on next load
+        batch.forEach((r, idx) => {
+          const result = results[idx];
+          if (!spotifyFeaturesRef.current[r.id] && (result.status === "rejected" || !result.value)) {
+            const sentinel = { _notFound: true };
+            spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: sentinel };
+            setSpotifyFeatures(prev => ({ ...prev, [r.id]: sentinel }));
+          }
+        });
         done += batch.length;
         setEnrichmentProgress({ done: Math.min(done, uncached.length), total: uncached.length, type: "audio" });
         if (i + CONCURRENCY < uncached.length) await new Promise(res => setTimeout(res, 800));
@@ -7536,10 +7544,12 @@ export default function CrateMate() {
 
     // Resolve features: real Spotify data first, then genre-based estimate
     function resolveFeatures(r) {
-      return features[r.id] || estimateFeaturesFromRecord(r);
+      const f = features[r.id];
+      return (f && f.energy != null) ? f : estimateFeaturesFromRecord(r);
     }
     function hasRealFeatures(r) {
-      return !!features[r.id];
+      const f = features[r.id];
+      return !!(f && f.energy != null);
     }
 
     // Build micro-explanation pills for a suggestion
