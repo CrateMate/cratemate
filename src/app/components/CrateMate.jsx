@@ -3310,7 +3310,7 @@ function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playC
   );
 }
 
-function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, onMinimize, playCounts, savePrompt, saving, onSaveSession, onDiscardSession }) {
+function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, onMinimize, playCounts, savePrompt, saving, onSaveSession, onDiscardSession, onRefresh }) {
   const CENTER = 140;
   const SLOT = 100;
   const GAP = 18;
@@ -3336,9 +3336,16 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
           ← Close
         </button>
         <span className="text-stone-600 text-xs uppercase tracking-widest">Your Session</span>
-        <button onClick={onMinimize} className="w-12 flex justify-end text-stone-500 hover:text-stone-300 transition-colors" title="Minimize session">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-5 h-5"><path d="M19 15l-7 7-7-7"/></svg>
-        </button>
+        <div className="flex items-center gap-3">
+          {onRefresh && !loading && suggestions && (
+            <button onClick={onRefresh} className="text-stone-500 hover:text-stone-300 transition-colors" title="Shuffle suggestions">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15A9 9 0 0 0 18.36 18.36L23 14"/></svg>
+            </button>
+          )}
+          <button onClick={onMinimize} className="text-stone-500 hover:text-stone-300 transition-colors" title="Minimize session">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-5 h-5"><path d="M19 15l-7 7-7-7"/></svg>
+          </button>
+        </div>
       </div>
 
       {/* History strip */}
@@ -5807,6 +5814,7 @@ export default function CrateMate() {
   const [trailCenter, setTrailCenter] = useState(null);
   const [trailHistory, setTrailHistory] = useState([]);
   const [trailSuggestions, setTrailSuggestions] = useState(null); // { windDown, liftUp, sideways } each { record, score }
+  const sessionRestoredRef = useRef(false);
   const [trailLoading, setTrailLoading] = useState(false);
   const [trailError, setTrailError] = useState("");
   const [trailSearchOpen, setTrailSearchOpen] = useState(false);
@@ -7542,10 +7550,87 @@ export default function CrateMate() {
       try {
         const f = spotifyFeatures[nowPlaying.record.id] || await fetchAndCacheFeatures(nowPlaying.record);
         const allFeatures = { ...spotifyFeatures, ...(f ? { [nowPlaying.record.id]: f } : {}) };
-        setBannerSuggestions(computeTrailSuggestions(nowPlaying.record, allFeatures));
+        const sug = computeTrailSuggestions(nowPlaying.record, allFeatures);
+        setBannerSuggestions(sug);
+        // Cache for refresh persistence
+        try {
+          const toCache = {};
+          for (const k of ["windDown", "liftUp", "sideways"]) {
+            if (sug?.[k]?.record) toCache[k] = { recordId: sug[k].record.id, explanation: sug[k].explanation, estimated: sug[k].estimated };
+          }
+          localStorage.setItem("cratemate_banner_sug", JSON.stringify({ recordId: nowPlaying.record.id, suggestions: toCache, ts: Date.now() }));
+        } catch {}
       } catch { setBannerSuggestions(null); }
     })();
   }, [nowPlaying?.record?.id, trailCenter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Restore cached banner suggestions on mount (survives refresh)
+  useEffect(() => {
+    if (bannerSuggestions || !nowPlaying?.record?.id || !collection?.length) return;
+    try {
+      const raw = localStorage.getItem("cratemate_banner_sug");
+      if (!raw) return;
+      const cached = JSON.parse(raw);
+      if (cached.recordId !== nowPlaying.record.id) return;
+      if (Date.now() - cached.ts > SESSION_GAP_MS) { localStorage.removeItem("cratemate_banner_sug"); return; }
+      const restored = {};
+      for (const k of ["windDown", "liftUp", "sideways"]) {
+        if (cached.suggestions[k]) {
+          const rec = collection.find(r => r.id === cached.suggestions[k].recordId);
+          if (rec) restored[k] = { record: rec, explanation: cached.suggestions[k].explanation, estimated: cached.suggestions[k].estimated };
+        }
+      }
+      if (Object.keys(restored).length > 0) {
+        setBannerSuggestions(restored);
+        bannerSuggestionsRecordRef.current = nowPlaying.record.id;
+      }
+    } catch {}
+  }, [nowPlaying?.record?.id, collection?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist active trail session to localStorage
+  useEffect(() => {
+    if (!trailCenter) {
+      try { localStorage.removeItem("cratemate_trail_session"); } catch {}
+      return;
+    }
+    try {
+      localStorage.setItem("cratemate_trail_session", JSON.stringify({
+        centerId: trailCenter.id,
+        historyIds: trailHistory.map(r => r.id),
+        loggedIds: [...trailAlreadyLoggedIds],
+        ts: Date.now(),
+      }));
+    } catch {}
+  }, [trailCenter, trailHistory, trailAlreadyLoggedIds]);
+
+  // Restore trail session on mount (within SESSION_GAP_MS)
+  useEffect(() => {
+    if (sessionRestoredRef.current || !collection?.length || trailCenter) return;
+    sessionRestoredRef.current = true;
+    try {
+      const raw = localStorage.getItem("cratemate_trail_session");
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (Date.now() - saved.ts > SESSION_GAP_MS) { localStorage.removeItem("cratemate_trail_session"); return; }
+      const center = collection.find(r => r.id === saved.centerId);
+      if (!center) return;
+      const history = saved.historyIds.map(id => collection.find(r => r.id === id)).filter(Boolean);
+      if (history.length === 0) return;
+      setTrailCenter(center);
+      setTrailHistory(history);
+      setTrailAlreadyLoggedIds(new Set(saved.loggedIds || []));
+      // Recompute suggestions for the current center
+      (async () => {
+        setTrailLoading(true);
+        try {
+          const seenKeys = new Set(history.map(r => getCanonicalKey(r)));
+          const centerFeatures = await fetchAndCacheFeatures(center);
+          const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [center.id]: centerFeatures } : {}) };
+          setTrailSuggestions(computeTrailSuggestions(center, allFeatures, seenKeys));
+        } catch {} finally { setTrailLoading(false); }
+      })();
+    } catch {}
+  }, [collection?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function enterTrail(record, seedAlreadyLogged = false) {
     setTrailCenter(record);
@@ -7577,6 +7662,23 @@ export default function CrateMate() {
 
   function minimizeTrail() {
     setTrailActive(false);
+  }
+
+  async function refreshTrailSuggestions() {
+    if (!trailCenter) return;
+    setTrailSuggestions(null);
+    setTrailLoading(true);
+    try {
+      const seenKeys = new Set(trailHistory.map(r => getCanonicalKey(r)));
+      const centerFeatures = await fetchAndCacheFeatures(trailCenter);
+      const allFeatures = { ...spotifyFeatures, ...(centerFeatures ? { [trailCenter.id]: centerFeatures } : {}) };
+      setTrailSuggestions(computeTrailSuggestions(trailCenter, allFeatures, seenKeys));
+      fetchLastfmNextSuggestion(trailCenter, seenKeys);
+    } catch {
+      setTrailError("Couldn't refresh suggestions — try again.");
+    } finally {
+      setTrailLoading(false);
+    }
   }
 
   async function navigateTrail(record) {
@@ -10937,13 +11039,7 @@ export default function CrateMate() {
                               key={key}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (bannerPreviewDirection === key) {
-                                  enterTrail(nowPlaying.record, true);
-                                  setTimeout(() => navigateTrail(s.record), 100);
-                                  setBannerPreviewDirection(null);
-                                } else {
-                                  setBannerPreviewDirection(key);
-                                }
+                                setBannerPreviewDirection(bannerPreviewDirection === key ? null : key);
                               }}
                               title={label}
                               className="w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 transition-all"
@@ -11012,6 +11108,7 @@ export default function CrateMate() {
           saving={trailSaving}
           onSaveSession={saveTrailSession}
           onDiscardSession={handleTrailDiscard}
+          onRefresh={refreshTrailSuggestions}
         />
       )}
 
