@@ -6045,11 +6045,24 @@ export default function CrateMate() {
   const [isDiscoverable, setIsDiscoverable] = useState(false);
   const [discoverResults, setDiscoverResults] = useState(null);
   const [discoverLoading, setDiscoverLoading] = useState(false);
+  const discoverFetchedRef = useRef(false);
   const [selectedDiscoverUser, setSelectedDiscoverUser] = useState(null);
   const [overlapData, setOverlapData] = useState(null);
   const [overlapLoading, setOverlapLoading] = useState(false);
   const [showAllSharedArtists, setShowAllSharedArtists] = useState(false);
   const [showAllUniqueRecords, setShowAllUniqueRecords] = useState(false);
+  // Auto-fetch discover results when tab opens
+  useEffect(() => {
+    if (tab !== "discover" || !isDiscoverable || discoverFetchedRef.current || discoverLoading) return;
+    discoverFetchedRef.current = true;
+    setDiscoverLoading(true);
+    fetch("/api/discover")
+      .then(r => r.json())
+      .then(data => setDiscoverResults(Array.isArray(data) ? data : []))
+      .catch(() => setDiscoverResults([]))
+      .finally(() => setDiscoverLoading(false));
+  }, [tab, isDiscoverable]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [enrichmentProgress, setEnrichmentProgress] = useState(null); // null | { done, total, type }
   const enrichmentAbort = useRef(false);
   const spotifyFeaturesRef = useRef({});
@@ -10550,9 +10563,7 @@ export default function CrateMate() {
               </div>
 
               {discoverResults === null && !discoverLoading && (
-                <div className="text-center py-8">
-                  <div className="text-stone-600 text-sm">Hit Refresh to find users with similar taste</div>
-                </div>
+                <div className="text-center py-8 text-stone-600 text-sm">Loading…</div>
               )}
               {discoverLoading && (
                 <div className="text-center py-8 text-stone-600 text-sm">Finding similar crates…</div>
