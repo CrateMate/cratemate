@@ -4728,8 +4728,7 @@ async function generateListeningDNA(stats, username) {
       ctx.font = `300 24px "DM Sans", sans-serif`;
       ctx.fillText(`${count}×`, TX + nameW + 14, curY + 6);
 
-      // Record thumbnails on the right
-      const thumbs = artistThumbsMap[artist] || [];
+      // Record thumbnails on the right (thumbs already defined above for sizing)
       const thumbStartX = W - TX - (thumbs.length * (ARTIST_THUMB + ARTIST_THUMB_GAP) - ARTIST_THUMB_GAP);
       thumbs.forEach((img, ti) => {
         const ttx = thumbStartX + ti * (ARTIST_THUMB + ARTIST_THUMB_GAP);
