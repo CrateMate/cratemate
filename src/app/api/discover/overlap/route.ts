@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { DISCOGS_API, discogsRequest } from "@/lib/discogs";
 
 type RecordRow = {
   artist: string;
@@ -100,6 +101,49 @@ export async function GET(request: Request) {
 
   const myRecords: RecordRow[] = myRaw || [];
   const theirRecords: RecordRow[] = theirRaw || [];
+
+  // On-the-fly backfill: if the other user's records are missing master_id,
+  // fetch from their Discogs collection and update in the background.
+  const theirMissing = theirRecords.filter(r => (r as any).discogs_id && !(r as any).master_id);
+  if (theirMissing.length > 0) {
+    const { data: theirToken } = await supabase
+      .from("discogs_tokens")
+      .select("access_token, access_token_secret, discogs_username")
+      .eq("user_id", profileRow.user_id)
+      .maybeSingle();
+
+    if (theirToken?.discogs_username) {
+      const needsIds = new Set(theirMissing.map(r => (r as any).discogs_id as number));
+      let page = 1;
+      while (needsIds.size > 0) {
+        try {
+          const url = `${DISCOGS_API}/users/${theirToken.discogs_username}/collection/folders/0/releases?per_page=100&page=${page}`;
+          const res = await discogsRequest("GET", url, {
+            tokenKey: theirToken.access_token,
+            tokenSecret: theirToken.access_token_secret,
+          });
+          if (!res.ok) break;
+          const data = await res.json();
+          const releases = data?.releases || [];
+          if (releases.length === 0) break;
+          for (const rel of releases) {
+            const info = rel.basic_information || {};
+            const releaseId = Number(info.id);
+            const masterId = Number(info.master_id);
+            if (releaseId && masterId > 0 && needsIds.has(releaseId)) {
+              // Update DB and local array
+              await supabase.from("records").update({ master_id: masterId }).eq("discogs_id", releaseId).eq("user_id", profileRow.user_id);
+              const rec = theirRecords.find(r => (r as any).discogs_id === releaseId);
+              if (rec) (rec as any).master_id = masterId;
+              needsIds.delete(releaseId);
+            }
+          }
+          if (!data.pagination || page >= data.pagination.pages) break;
+          page++;
+        } catch { break; }
+      }
+    }
+  }
 
   // Dedupe recent plays to unique records (most recent play per record, up to 5)
   const seenPlayIds = new Set<string>();
