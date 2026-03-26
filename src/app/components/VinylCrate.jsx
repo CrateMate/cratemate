@@ -7754,11 +7754,12 @@ export default function VinylCrate() {
       </div>
 
       {/* Global fullscreen restore button — shows on ALL tabs when header is hidden */}
-      {controlsHidden && viewMode !== "drift" && (
+      {controlsHidden && (
         <button
           onClick={() => {
             driftFullscreenRef.current = false;
             setControlsHidden(false);
+            if (viewMode === "drift") driftResetFade();
           }}
           className="absolute top-3 right-4 z-50 w-9 h-9 rounded-full bg-black/20 backdrop-blur-sm border border-white/8 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors"
         >
@@ -7768,7 +7769,7 @@ export default function VinylCrate() {
 
       <div ref={tabRowRef} className={`relative flex px-4 pr-10 gap-0.5 mt-3 mb-2 ${viewMode === "drift" ? "z-[60]" : ""} ${viewMode === "drift" && controlsHidden ? "hidden" : ""}`}>
         {/* Focus mode toggle — absolute right, doesn't take tab space */}
-        {!controlsHidden && viewMode !== "drift" && (
+        {!controlsHidden && (
           <button
             onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
             className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-400 transition-colors"
@@ -8078,20 +8079,6 @@ export default function VinylCrate() {
                 const hasFilter = statFilterLabel || activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null;
                 return (
                   <>
-                    {/* Small corner button to restore controls when faded — doesn't block scroll */}
-                    {controlsHidden && (
-                      <button
-                        onClick={() => {
-                          driftFullscreenRef.current = false;
-                          setControlsHidden(false);
-                          driftResetFade();
-                        }}
-                        className="absolute top-4 right-4 z-50 w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
-                      </button>
-                    )}
-
                     {/* Top-left: back + share + downloads */}
                     <div className="absolute top-4 left-4 z-50 flex flex-col items-start gap-2"
                       style={{ opacity: driftVisible ? 1 : 0, pointerEvents: driftVisible ? "auto" : "none", transition: "opacity 0.4s ease" }}>
@@ -8213,15 +8200,6 @@ export default function VinylCrate() {
                         >
                           ⟳
                           {screensaverEnabled && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />}
-                        </button>
-                        <div className="w-px self-stretch bg-white/10" />
-                        {/* Fullscreen toggle — stays hidden until tap */}
-                        <button
-                          onClick={() => { driftFullscreenRef.current = true; setControlsHidden(true); }}
-                          className="px-2.5 py-1.5 hover:text-amber-300 transition-colors"
-                          title="Fullscreen"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M8 3H5a2 2 0 00-2 2v3m18-5h-3a2 2 0 00-2 2v3m0 8v3a2 2 0 01-2 2h-3m-10 0h3a2 2 0 002-2v-3"/></svg>
                         </button>
                       </div>
                     </div>
