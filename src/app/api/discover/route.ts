@@ -113,7 +113,7 @@ export async function GET() {
 
   const top10 = results
     .filter((r) => r.username && r.username !== myDisplayName)
-    .sort((a, b) => b.shared_artists - a.shared_artists)
+    .sort((a, b) => b.similarity_pct - a.similarity_pct)
     .slice(0, 10);
 
   return NextResponse.json(top10);

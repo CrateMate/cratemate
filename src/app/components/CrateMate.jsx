@@ -2561,7 +2561,47 @@ function CrateSyncAnimation() {
   );
 }
 
+/** Generate a template reason without AI — used for free users and rate limit fallback */
+function templateReason(record, playCounts) {
+  const genres = getGenres(record);
+  const styles = getStyles(record);
+  const year = record.year_original || record.year_pressed;
+  const plays = playCounts?.[record.id] || 0;
+  const artist = stripArtistNum(record.artist);
+  const descriptor = styles[0] || genres[0] || "music";
+  const era = year ? (year < 1970 ? "vintage" : year < 1990 ? "classic" : year < 2010 ? "" : "modern") : "";
+  const templates = [
+    `${era ? era + " " : ""}${descriptor} from ${artist}${year ? `, ${year}` : ""}.`,
+    `A ${descriptor.toLowerCase()} pull from your crate${year ? ` — ${year}` : ""}.`,
+    plays === 0 ? `Never spun — time to give ${artist} a first play.` : null,
+    plays > 5 ? `A favorite — ${plays} plays and counting.` : null,
+    genres.includes("Jazz") ? `Dig into some ${styles[0] || "jazz"}${year ? ` from ${year}` : ""}.` : null,
+    year && year < 1975 ? `${artist}, ${year}. They don't press them like this anymore.` : null,
+  ].filter(Boolean);
+  return templates[Math.floor(Math.random() * templates.length)];
+}
+
+const CLAUDE_DAILY_LIMIT = 30;
+function getClaudeDailyCount() {
+  try {
+    const raw = localStorage.getItem("cratemate_claude_usage");
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    return parsed.date === localDateStr() ? (parsed.count || 0) : 0;
+  } catch { return 0; }
+}
+function incrementClaudeCount() {
+  try {
+    const today = localDateStr();
+    const raw = localStorage.getItem("cratemate_claude_usage");
+    const parsed = raw ? JSON.parse(raw) : {};
+    const count = parsed.date === today ? (parsed.count || 0) + 1 : 1;
+    localStorage.setItem("cratemate_claude_usage", JSON.stringify({ date: today, count }));
+  } catch {}
+}
+
 async function callClaude(messages, maxTokens = 400, system = null, model = "claude-haiku-4-5-20251001") {
+  incrementClaudeCount();
   const body = { messages, max_tokens: maxTokens, model };
   if (system) body.system = system;
   const res = await fetch("/api/claude", {
@@ -2569,6 +2609,7 @@ async function callClaude(messages, maxTokens = 400, system = null, model = "cla
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (res.status === 429) throw new Error("rate-limited");
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data.content?.[0]?.text || "";
@@ -7397,10 +7438,15 @@ export default function CrateMate() {
             if (hit) { reason = hit.reason; }
           } catch {}
           if (!reason) {
-            const plays = playCounts[picked.id] || 0;
-            const SYSTEM = "You are a passionate music obsessive. Write exactly ONE casual sentence (under 20 words) about why to spin this record right now. Be specific to the artist, era, or sound — not generic. Return plain text only, no quotes.";
-            const prompt = `The wheel landed on: ${describeRecord(picked)}.${plays === 0 ? " Never played." : ` Played ${plays} time${plays > 1 ? "s" : ""}.`}`;
-            reason = (await callClaude([{ role: "user", content: prompt }], 80, SYSTEM)).trim();
+            const useAI = effectiveIsPro && getClaudeDailyCount() < CLAUDE_DAILY_LIMIT;
+            if (useAI) {
+              const plays = playCounts[picked.id] || 0;
+              const SYSTEM = "You are a passionate music obsessive. Write exactly ONE casual sentence (under 20 words) about why to spin this record right now. Be specific to the artist, era, or sound — not generic. Return plain text only, no quotes.";
+              const prompt = `The wheel landed on: ${describeRecord(picked)}.${plays === 0 ? " Never played." : ` Played ${plays} time${plays > 1 ? "s" : ""}.`}`;
+              reason = (await callClaude([{ role: "user", content: prompt }], 80, SYSTEM)).trim();
+            } else {
+              reason = templateReason(picked, playCounts);
+            }
             try {
               const cached = JSON.parse(localStorage.getItem(RANDOM_CACHE_KEY) || "[]");
               cached.unshift({ recordId: picked.id, reason });

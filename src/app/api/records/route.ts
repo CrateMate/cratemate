@@ -56,6 +56,52 @@ export async function GET() {
   return NextResponse.json(enriched);
 }
 
+// Fields allowed in POST (create) payloads — anything else is silently dropped.
+const ALLOWED_CREATE_FIELDS = new Set([
+  "title",
+  "artist",
+  "label",
+  "year",
+  "year_pressed",
+  "year_original",
+  "genre",
+  "genres",
+  "styles",
+  "format",
+  "condition",
+  "for_sale",
+  "is_compilation",
+  "discogs_id",
+  "discogs_instance_id",
+  "discogs_url",
+  "master_id",
+  "thumb",
+  "country",
+  "duration_secs",
+  "favorite_tracks",
+  "notes",
+  "import_stage",
+  "release_month",
+  "release_day",
+  "artist_birth_month",
+  "artist_birth_year",
+  "artist_birth_day",
+  "artist_death_month",
+  "artist_death_year",
+  "artist_death_day",
+]);
+
+function pickAllowed<T extends Record<string, unknown>>(
+  obj: T,
+  allowed: Set<string>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (allowed.has(key)) out[key] = obj[key];
+  }
+  return out;
+}
+
 export async function POST(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -63,8 +109,10 @@ export async function POST(request: Request) {
   const body = await request.json();
   const records = Array.isArray(body) ? body : [body];
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const rows = records.map(({ id, ...rest }) => ({ ...rest, user_id: userId }));
+  const rows = records.map((rec: Record<string, unknown>) => ({
+    ...pickAllowed(rec, ALLOWED_CREATE_FIELDS),
+    user_id: userId,
+  }));
 
   let { data, error } = await supabase
     .from("records")

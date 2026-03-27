@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const LASTFM_API = "http://ws.audioscrobbler.com/2.0/";
+const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
 
 export async function GET(request: Request) {
   const { userId } = await auth();

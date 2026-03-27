@@ -5,10 +5,30 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const ALLOWED_MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS_CAP = 600;
 
+// Server-side rate limit: per-user, resets hourly
+const rateLimitMap = new Map(); // userId -> { count, resetAt }
+const RATE_LIMIT_PER_HOUR = 40;
+
+function checkRateLimit(userId) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(userId);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(userId, { count: 1, resetAt: now + 3600_000 });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_PER_HOUR) return false;
+  entry.count++;
+  return true;
+}
+
 export async function POST(request) {
   const { userId } = await auth();
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!checkRateLimit(userId)) {
+    return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
   try {
