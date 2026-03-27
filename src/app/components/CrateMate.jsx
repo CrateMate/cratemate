@@ -1646,8 +1646,10 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
           {/* Collapsible Sound Profile */}
           {(() => {
             const fromSpotify = spotifyFeatures?.[record.id];
-            const f = (fromSpotify?.energy != null) ? fromSpotify : estimateFeaturesFromRecord(record);
-            const isSpotify = !!(fromSpotify && !fromSpotify.not_found && !fromSpotify._estimated && fromSpotify.energy != null);
+            const hasRealData = !!(fromSpotify && !fromSpotify.not_found && !fromSpotify._estimated && fromSpotify.energy != null);
+            const f = hasRealData ? fromSpotify : estimateFeaturesFromRecord(record);
+            // Always prefer real Spotify tempo for the BPM indicator (even for free users)
+            const displayTempo = hasRealData ? fromSpotify.tempo : f.tempo;
             const bars = [
               { label: "Energy",       value: f.energy,       color: "bg-amber-600/70",    hint: f.energy > 0.7 ? "high" : f.energy < 0.4 ? "low" : null },
               { label: "Mood",         value: f.valence,      color: "bg-rose-600/60",     hint: f.valence > 0.6 ? "upbeat" : f.valence < 0.4 ? "melancholic" : null },
@@ -1671,7 +1673,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                     <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded-full border ${d.cls} shrink-0`}>{d.label}</span>
                   ))}
                   <span className="flex-1" />
-                  <span className={`text-xs shrink-0 ${isSpotify ? "text-emerald-700" : "text-stone-600"}`}>{isSpotify ? "" : "~"}{Math.round(f.tempo)} BPM</span>
+                  <span className={`text-xs shrink-0 ${hasRealData ? "text-emerald-700" : "text-stone-600"}`}>{hasRealData ? "" : "~"}{Math.round(displayTempo)} BPM</span>
                   <span className="text-stone-600 text-xs shrink-0">{soundProfileOpen ? "▲" : "▼"}</span>
                 </button>
                 {soundProfileOpen && (
