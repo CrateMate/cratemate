@@ -1667,7 +1667,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               <div className="mt-4 mb-2">
                 <button onClick={() => setSoundProfileOpen(o => !o)} className="flex items-center gap-2 w-full py-1 mb-2 flex-wrap">
                   <span className="text-stone-400 text-xs uppercase tracking-widest shrink-0">Sound Profile</span>
-                  {descriptors.map(d => (
+                  {isPro && descriptors.map(d => (
                     <span key={d.label} className={`text-[10px] px-2 py-0.5 rounded-full border ${d.cls} shrink-0`}>{d.label}</span>
                   ))}
                   <span className="flex-1" />
@@ -1691,11 +1691,10 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {bars.map(({ label, value, color, hint }) => (
+                      {bars.map(({ label, value, color }) => (
                         <div key={label} className="flex items-start gap-3">
-                          <div className="flex flex-col shrink-0 w-[76px]">
+                          <div className="shrink-0 w-[76px]">
                             <span className="text-stone-500 text-xs leading-tight">{label}</span>
-                            {hint && <span className="text-stone-700 text-[10px] leading-tight">{hint}</span>}
                           </div>
                           <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden mt-1.5 blur-sm">
                             <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }} />
@@ -10132,7 +10131,7 @@ export default function CrateMate() {
                                 wDance += f.danceability * count; wAcoustic += f.acousticness * count;
                                 wTempo += (f.tempo || 0) * count; wTotal += count;
                               }
-                              const playAudioProfile = wTotal > 0 ? {
+                              const playAudioProfile = effectiveIsPro && wTotal > 0 ? {
                                 energy: wEnergy / wTotal, valence: wValence / wTotal,
                                 danceability: wDance / wTotal, acousticness: wAcoustic / wTotal,
                                 tempo: wTempo / wTotal,
@@ -10380,7 +10379,7 @@ export default function CrateMate() {
                             .slice(0, 10)
                             .map(r => ({ id: r.id, title: r.title, artist: r.artist, thumb: r.thumb, heartCount: (r.favorite_tracks || []).length }));
                           const avg = (key) => spotifyData.reduce((s, f) => s + (f[key] || 0), 0) / (spotifyData.length || 1);
-                          const audioProfile = spotifyData.length > 0 ? { energy: avg("energy"), valence: avg("valence"), danceability: avg("danceability"), acousticness: avg("acousticness"), tempo: avg("tempo") } : null;
+                          const audioProfile = effectiveIsPro && spotifyData.length > 0 ? { energy: avg("energy"), valence: avg("valence"), danceability: avg("danceability"), acousticness: avg("acousticness"), tempo: avg("tempo") } : null;
                           const stats = {
                             topGenres: topGenresList,
                             topDecades: topDecadesList,
@@ -10630,9 +10629,9 @@ export default function CrateMate() {
                       ) : (
                         <div className="mb-3">
                           <div className="space-y-2">
-                            {bars.map(({ label, value, color, hint }) => (
+                            {bars.map(({ label, value, color }) => (
                               <div key={label} className="flex items-center gap-3">
-                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
+                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}</div>
                                 <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden blur-sm">
                                   <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.round(value * 100)}%` }} />
                                 </div>
