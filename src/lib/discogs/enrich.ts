@@ -338,7 +338,6 @@ export async function enrichPage({ userId, limit = 200, offset = 0, mode = "full
       needsThumb ||
       r.year_original == null ||
       r.year_pressed == null ||
-      (r.year_original != null && r.year_pressed != null && r.year_original === r.year_pressed) ||
       r.is_compilation == null ||
       r.release_month == null
     );

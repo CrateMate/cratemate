@@ -6630,7 +6630,7 @@ export default function CrateMate() {
       for (let i = 0; i < 30 && !initialFeaturesLoaded.current; i++) {
         await new Promise(res => setTimeout(res, 200));
       }
-      const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]);
+      const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]?.energy);
       if (uncached.length === 0) return;
       setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
       let done = 0;
@@ -6642,7 +6642,7 @@ export default function CrateMate() {
         // Mark failed records with genre-based estimates so we don't retry and UI stays clean
         batch.forEach((r, idx) => {
           const result = results[idx];
-          if (!spotifyFeaturesRef.current[r.id] && (result.status === "rejected" || !result.value)) {
+          if (!spotifyFeaturesRef.current[r.id]?.energy && (result.status === "rejected" || !result.value)) {
             const estimated = estimateFeaturesFromRecord(r);
             estimated._estimated = true;
             spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: estimated };
@@ -7654,7 +7654,8 @@ export default function CrateMate() {
   }
 
   async function fetchAndCacheFeatures(record) {
-    if (spotifyFeatures[record.id]) return spotifyFeatures[record.id];
+    const cached = spotifyFeatures[record.id];
+    if (cached && !cached.not_found) return cached;
     try {
       const res = await fetch("/api/spotify/features", {
         method: "POST",
@@ -7663,7 +7664,7 @@ export default function CrateMate() {
       });
       if (!res.ok) return null;
       const raw = await res.json();
-      if (!raw) return null;
+      if (!raw || raw.not_found) return null;
       // Normalize loudness from dB (typically -30..−3) to 0–1
       const f = raw.loudness != null
         ? { ...raw, loudness: Math.min(1, Math.max(0, (raw.loudness + 30) / 27)) }
@@ -10527,7 +10528,7 @@ export default function CrateMate() {
                 {(() => {
                   const myIds = new Set(myRecords.map(r => r.id));
                   const spotifyData = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
-                  const n = spotifyData.length;
+                  const n = spotifyData.filter(f => !f.not_found && !f._estimated && f.energy != null).length;
                   const usingSpotify = n > 0;
 
                   // Fall back to genre-based estimates when no Spotify data

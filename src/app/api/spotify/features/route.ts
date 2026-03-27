@@ -19,6 +19,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing record_id, artist, or title" }, { status: 400 });
   }
 
+  // Define cache key early — needed for not_found retry logic in step 1
+  const cacheKey = spotifyFeaturesKey(artist, title);
+
   // 1. Check per-record cache (spotify_features table)
   if (!force) {
     const { data: cached } = await supabase
@@ -27,7 +30,16 @@ export async function POST(request: Request) {
       .eq("record_id", record_id)
       .single();
 
-    if (cached) return NextResponse.json(cached);
+    if (cached) {
+      if (!cached.not_found) return NextResponse.json(cached);
+      // not_found row: only honour if the shared cache is still fresh (within 1 day).
+      // If the shared cache has expired, fall through and re-attempt — ReccoBeats may be back.
+      const sharedCheck = await getSpotifyFeaturesCache(cacheKey);
+      if (sharedCheck && isSpotifyFeaturesCacheFresh(sharedCheck)) {
+        return NextResponse.json(cached);
+      }
+      // Shared cache stale — re-attempt below
+    }
   }
 
   // 2. Look up the Discogs tracklist early — needed for Tier 2 and sentinel bypass
@@ -55,7 +67,6 @@ export async function POST(request: Request) {
   } catch { /* tracklist lookup is best-effort */ }
 
   // 3. Check shared features cache (spotify_features_cache) by artist|title key
-  const cacheKey = spotifyFeaturesKey(artist, title);
   if (!force) {
     const sharedCached = await getSpotifyFeaturesCache(cacheKey);
     if (sharedCached && isSpotifyFeaturesCacheFresh(sharedCached)) {
@@ -73,8 +84,9 @@ export async function POST(request: Request) {
           acousticness: sharedCached.acousticness,
           tempo: sharedCached.tempo,
           loudness: sharedCached.loudness,
+          not_found: false,
         };
-        await supabase.from("spotify_features").upsert(row);
+        await supabase.from("spotify_features").upsert(row, { onConflict: "record_id" });
         return NextResponse.json(row);
       }
     }
@@ -83,19 +95,26 @@ export async function POST(request: Request) {
   // 4. Fetch features from Spotify → Tier 1 (album) → Tier 2 (tracks) → Tier 3 (artist)
   const features = await fetchAlbumFeatures(artist, title, tracklist).catch(() => null);
   if (!features) {
-    // Cache "not found" sentinel for 2 days — short TTL so transient API
-    // failures (e.g. ReccoBeats outage) auto-retry on the next pass
-    await upsertSpotifyFeaturesCache(cacheKey, {}, 2);
-    // Also write a sentinel row to spotify_features so the per-record GET
-    // returns something — prevents the enrichment loop from firing on every refresh.
-    await supabase.from("spotify_features").upsert({ record_id, not_found: true });
+    // Cache "not found" sentinel for 1 day — retry daily in case ReccoBeats was having issues
+    await upsertSpotifyFeaturesCache(cacheKey, {}, 1);
+    // Only write the not_found sentinel if there are no real features already stored.
+    // This prevents a failed force-backfill from overwriting good existing data.
+    const { data: existing } = await supabase
+      .from("spotify_features")
+      .select("energy")
+      .eq("record_id", record_id)
+      .single();
+    if (!existing?.energy) {
+      await supabase.from("spotify_features").upsert({ record_id, not_found: true }, { onConflict: "record_id" });
+    }
     return NextResponse.json(null);
   }
 
   // `source` and `track_features` handled separately
   const { source, track_features, ...dbFields } = features;
-  const row = { record_id, ...dbFields, ...(track_features ? { track_features } : {}) };
-  const { error: upsertErr } = await supabase.from("spotify_features").upsert(row);
+  // Explicitly clear not_found so a previously-failed record is fully recovered
+  const row = { record_id, ...dbFields, not_found: false, ...(track_features ? { track_features } : {}) };
+  const { error: upsertErr } = await supabase.from("spotify_features").upsert(row, { onConflict: "record_id" });
   if (upsertErr) console.error(`[features] upsert failed for ${record_id}:`, upsertErr.message);
 
   // Store in shared features cache (without source)
