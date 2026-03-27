@@ -1251,7 +1251,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onCompare, onRecordUpdate, onEnrich, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures, isPro, onUpgrade }) {
+function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, onStyleClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onCompare, onRecordUpdate, onEnrich, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures, isPro, onUpgrade }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1516,7 +1516,8 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                       return (
                         <span
                           key={s}
-                          className="text-[9px] px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+                          onClick={onStyleClick ? (e) => { e.stopPropagation(); onStyleClick(s); } : undefined}
+                          className={`text-[9px] px-1.5 py-0.5 rounded-full border whitespace-nowrap${onStyleClick ? " cursor-pointer hover:brightness-125 transition-all" : ""}`}
                           style={{ background: hex + "15", borderColor: hex + "30", color: hex + "99" }}
                         >{s}</span>
                       );
@@ -11125,6 +11126,7 @@ export default function CrateMate() {
           hasNowPlaying={!!nowPlaying}
           onClose={() => setSelected(null)}
           onGenreClick={toggleGenre}
+          onStyleClick={(s) => { toggleStyle(s); setSelected(null); }}
           activeGenres={activeGenres}
           onToggleForSale={toggleForSale}
           onDelete={handleDelete}
