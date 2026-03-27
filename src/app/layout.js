@@ -28,7 +28,8 @@ export default function RootLayout({ children }) {
             href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&family=DM+Sans:wght@300;400;500&display=swap"
             rel="stylesheet"
           />
-          <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+          <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+          <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
         </head>
         <body>
           <ThemeProvider>{children}</ThemeProvider>

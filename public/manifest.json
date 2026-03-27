@@ -1,11 +1,14 @@
 {
+  "id": "/app",
   "name": "CrateMate",
   "short_name": "CrateMate",
   "description": "Your vinyl record companion",
   "start_url": "/app",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0c0b09",
   "theme_color": "#0c0b09",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/icon-192.png",
