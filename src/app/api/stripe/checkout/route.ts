@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       .eq("user_id", userId);
   }
 
-  const trialDays = interval === "year" ? 10 : interval === "6month" ? 7 : 3;
+  const trialDays = interval === "year" ? 21 : interval === "6month" ? 14 : 7;
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
