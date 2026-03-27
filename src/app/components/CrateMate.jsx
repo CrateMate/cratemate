@@ -1557,9 +1557,9 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               >⬡ Session</button>
             )}
             <button
-              onClick={() => onCompare?.(record)}
-              className="flex-1 py-2 rounded-xl border border-stone-800/40 text-stone-500 text-xs font-medium hover:text-stone-300 hover:border-stone-700/60 transition-colors"
-            >⇄ Compare</button>
+              onClick={() => isPro ? onCompare?.(record) : onUpgrade?.()}
+              className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-colors ${isPro ? "border-stone-800/40 text-stone-500 hover:text-stone-300 hover:border-stone-700/60" : "border-stone-800/30 text-stone-700"}`}
+            >{isPro ? "⇄ Compare" : "⇄ Compare ✦"}</button>
             <button
               onClick={() => onToggleForSale?.(record)}
               className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-colors ${
