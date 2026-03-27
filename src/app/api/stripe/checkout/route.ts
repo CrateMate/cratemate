@@ -17,8 +17,6 @@ export async function POST(request: Request) {
 
   const priceId = interval === "year"
     ? process.env.STRIPE_PRICE_ID_ANNUAL!
-    : interval === "6month"
-    ? process.env.STRIPE_PRICE_ID_6MONTH!
     : process.env.STRIPE_PRICE_ID_MONTHLY!;
 
   // Get or create Stripe customer linked to this user
@@ -41,7 +39,7 @@ export async function POST(request: Request) {
       .eq("user_id", userId);
   }
 
-  const trialDays = interval === "year" ? 21 : interval === "6month" ? 14 : 7;
+  const trialDays = interval === "year" ? 14 : 7;
 
   const session = await stripe.checkout.sessions.create({
     customer: customerId,

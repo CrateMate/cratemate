@@ -5861,6 +5861,8 @@ export default function CrateMate() {
   const [spotifyExpanded, setSpotifyExpanded] = useState(false);
   const [isPro, setIsPro] = useState(false);
   const [proLoading, setProLoading] = useState(true);
+  const [trialEnd, setTrialEnd] = useState(null); // ISO string or null
+  const [trialReminderDismissed, setTrialReminderDismissed] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeSource, setUpgradeSource] = useState(null); // "compare" | "soundProfile" | "trail" | "refresh" | "moodMatch" | "discover" | null
   const [upgradeLoading, setUpgradeLoading] = useState(false);
@@ -5910,8 +5912,13 @@ export default function CrateMate() {
       .then(r => r.ok ? r.json() : { isPro: false })
       .then(d => {
         setIsPro(d.isPro);
+        if (d.trialEnd) setTrialEnd(d.trialEnd);
         setProLoading(false);
         if (proParam === "success" && d.isPro) setShowUpgradeModal(false);
+        // Check if trial reminder was already dismissed today
+        try {
+          if (localStorage.getItem("cratemate_trial_reminder_dismissed") === localDateStr()) setTrialReminderDismissed(true);
+        } catch {}
       })
       .catch(() => setProLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -11554,14 +11561,13 @@ export default function CrateMate() {
             {/* Billing interval toggle */}
             <div className="flex rounded-xl overflow-hidden border border-stone-800 mb-4">
               {[
-                { value: "month",   label: "Monthly",  price: "$4.99",  badge: null },
-                { value: "6month",  label: "6 months", price: "$26.99", badge: "Save 10%" },
-                { value: "year",    label: "Annual",   price: "$49.99", badge: "Save 17%" },
+                { value: "month", label: "Monthly", price: "$3.99", badge: null },
+                { value: "year",  label: "Annual",  price: "$39.99", badge: "Best value" },
               ].map(({ value, label, price, badge }) => (
                 <button
                   key={value}
                   onClick={() => setUpgradeInterval(value)}
-                  className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors text-sm ${
+                  className={`flex-1 py-3.5 flex flex-col items-center gap-0.5 transition-colors text-sm ${
                     upgradeInterval === value
                       ? "bg-amber-900/30 text-amber-300"
                       : "text-stone-500 hover:text-stone-300"
@@ -11581,15 +11587,36 @@ export default function CrateMate() {
             >
               {upgradeLoading ? "Redirecting…" : `Start free trial`}
             </button>
-            <div className="text-center mt-3 text-stone-600 text-xs">
+            <div className="text-center mt-3 text-stone-500 text-xs leading-relaxed">
+              No commitment. Cancel anytime.
+              <br />
               {upgradeInterval === "year"
-                ? "21-day free trial · Billed annually · Cancel anytime"
-                : upgradeInterval === "6month"
-                ? "14-day free trial · Billed every 6 months · Cancel anytime"
-                : "7-day free trial · Billed monthly · Cancel anytime"}
+                ? "14-day free trial · We'll remind you 2 days before it ends."
+                : "7-day free trial · We'll remind you 2 days before it ends."}
             </div>
           </div>
         </div>
+        );
+      })()}
+
+      {/* Trial ending reminder — shows once per day in last 2 days of trial */}
+      {trialEnd && !trialReminderDismissed && isPro && (() => {
+        const msLeft = new Date(trialEnd).getTime() - Date.now();
+        const daysLeft = Math.ceil(msLeft / 86400000);
+        if (daysLeft > 2 || daysLeft < 0) return null;
+        return (
+          <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[200] w-[90%] max-w-sm">
+            <div className="bg-stone-950 border border-amber-800/40 rounded-2xl px-4 py-3 backdrop-blur-sm flex items-center gap-3 shadow-2xl">
+              <span className="text-amber-400 text-sm shrink-0">✦</span>
+              <span className="text-stone-300 text-sm flex-1">
+                {daysLeft <= 0 ? "Your trial ends today." : daysLeft === 1 ? "Your free trial ends tomorrow." : "Your free trial ends in 2 days."} No action needed to continue.
+              </span>
+              <button
+                onClick={() => { setTrialReminderDismissed(true); try { localStorage.setItem("cratemate_trial_reminder_dismissed", localDateStr()); } catch {} }}
+                className="text-stone-600 hover:text-stone-400 text-xs shrink-0 transition-colors"
+              >✕</button>
+            </div>
+          </div>
         );
       })()}
 
