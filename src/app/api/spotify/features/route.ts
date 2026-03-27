@@ -86,6 +86,9 @@ export async function POST(request: Request) {
     // Cache "not found" sentinel for 2 days — short TTL so transient API
     // failures (e.g. ReccoBeats outage) auto-retry on the next pass
     await upsertSpotifyFeaturesCache(cacheKey, {}, 2);
+    // Also write a sentinel row to spotify_features so the per-record GET
+    // returns something — prevents the enrichment loop from firing on every refresh.
+    await supabase.from("spotify_features").upsert({ record_id, not_found: true });
     return NextResponse.json(null);
   }
 

@@ -6389,7 +6389,8 @@ export default function CrateMate() {
     setCitySearch({ query: "", results: [], open: false, loading: false });
     setUserLocation(loc);
     try {
-      await fetch("/api/user/location", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(loc) });
+      const saveRes = await fetch("/api/user/location", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(loc) });
+      if (!saveRes.ok) console.error("Location save failed:", await saveRes.json().catch(() => null));
       const w = await fetch("/api/weather").then(r => r.ok ? r.json() : null);
       if (w && !w.error) setTodayWeather(w);
     } catch {}
@@ -7680,11 +7681,12 @@ export default function CrateMate() {
 
     // Resolve features: real Spotify data first, then genre-based estimate
     function resolveFeatures(r) {
-      return features[r.id] || estimateFeaturesFromRecord(r);
+      const f = features[r.id];
+      return (f && !f.not_found) ? f : estimateFeaturesFromRecord(r);
     }
     function hasRealFeatures(r) {
       const f = features[r.id];
-      return !!(f && !f._estimated);
+      return !!(f && !f._estimated && !f.not_found);
     }
 
     // Build micro-explanation pills for a suggestion
@@ -11255,7 +11257,7 @@ export default function CrateMate() {
             <div className="text-center mb-5">
               <div className="text-3xl mb-3">✦</div>
               <div className="text-stone-100 font-semibold text-lg mb-1">CrateMate Pro</div>
-              <div className="text-stone-500 text-sm">Unlock AI-powered crate digging</div>
+              <div className="text-stone-500 text-sm">Dig deeper into your crate</div>
             </div>
             <ul className="space-y-2.5 mb-6">
               {[
