@@ -1233,7 +1233,7 @@ function RecordRow({ record, onClick, onGenreClick, activeGenres = new Set(), pl
   );
 }
 
-function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onCompare, onRecordUpdate, onEnrich, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures }) {
+function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick, activeGenres = new Set(), onToggleForSale, onDelete, onLogPlay, onEnterTrail, onCompare, onRecordUpdate, onEnrich, playCount, playCountThisYear, lastPlayedDate, spotifyFeatures, isPro, onUpgrade }) {
   const [tracks, setTracks] = useState([]);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
@@ -1675,19 +1675,39 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   <span className="text-stone-600 text-xs shrink-0">{soundProfileOpen ? "▲" : "▼"}</span>
                 </button>
                 {soundProfileOpen && (
-                  <div className="space-y-2">
-                    {bars.map(({ label, value, color, hint }) => (
-                      <div key={label} className="flex items-start gap-3">
-                        <div className="flex flex-col shrink-0 w-[76px]">
-                          <span className="text-stone-500 text-xs leading-tight">{label}</span>
-                          {hint && <span className="text-stone-700 text-[10px] leading-tight">{hint}</span>}
+                  isPro ? (
+                    <div className="space-y-2">
+                      {bars.map(({ label, value, color, hint }) => (
+                        <div key={label} className="flex items-start gap-3">
+                          <div className="flex flex-col shrink-0 w-[76px]">
+                            <span className="text-stone-500 text-xs leading-tight">{label}</span>
+                            {hint && <span className="text-stone-700 text-[10px] leading-tight">{hint}</span>}
+                          </div>
+                          <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden mt-1.5">
+                            <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }} />
+                          </div>
                         </div>
-                        <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden mt-1.5">
-                          <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {bars.map(({ label, value, color, hint }) => (
+                        <div key={label} className="flex items-start gap-3">
+                          <div className="flex flex-col shrink-0 w-[76px]">
+                            <span className="text-stone-500 text-xs leading-tight">{label}</span>
+                            {hint && <span className="text-stone-700 text-[10px] leading-tight">{hint}</span>}
+                          </div>
+                          <div className="flex-1 bg-stone-800/50 rounded-full h-1.5 overflow-hidden mt-1.5 blur-sm">
+                            <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%` }} />
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                      <button
+                        onClick={onUpgrade}
+                        className="w-full mt-1 px-4 py-1.5 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-xs font-medium hover:bg-amber-900/50 transition-colors"
+                      >✦ Unlock with Pro</button>
+                    </div>
+                  )
                 )}
               </div>
             );
@@ -3395,6 +3415,18 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         </div>
       )}
 
+      {/* Upgrade CTA — above trail map for free users */}
+      {!isPro && !savePrompt && (
+        <div className="shrink-0 px-5 pt-1 pb-2">
+          <button
+            onClick={onUpgrade}
+            className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
+          >
+            ✦ Unlock 3-way trails with Pro
+          </button>
+        </div>
+      )}
+
       {/* Trail map */}
       <div className="flex-1 relative flex items-center justify-center">
         {/* Error */}
@@ -3453,14 +3485,15 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                           || blurFallbackPool[directions.findIndex(d => d.key === key)]
                           || centerRecord;
                         return (
-                          <div className="rounded-xl w-full h-full relative overflow-hidden" style={{ border: `1.5px solid ${color}30` }}>
+                          <button onClick={onUpgrade} className="rounded-xl w-full h-full relative overflow-hidden" style={{ border: `1.5px solid ${color}30` }}>
                             <div style={{ filter: "blur(4px)", transform: "scale(1.1)", width: "100%", height: "100%" }}>
                               <CoverArt record={blurRec} size={SLOT} />
                             </div>
-                            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.30)" }}>
-                              <span style={{ color, fontSize: 16, opacity: 0.7 }}>✦</span>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1" style={{ background: "rgba(0,0,0,0.45)" }}>
+                              <span style={{ color, fontSize: 13, opacity: 0.9 }}>✦</span>
+                              <span style={{ color, fontSize: 8, opacity: 0.7, fontWeight: 600 }}>Pro</span>
                             </div>
-                          </div>
+                          </button>
                         );
                       })()
                     ) : rec ? (
@@ -3576,12 +3609,6 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
               <span className="text-stone-400 text-xs shrink-0">Next →</span>
             </button>
           ) : null}
-          <button
-            onClick={onUpgrade}
-            className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
-          >
-            ✦ Unlock 3-way trails with Pro
-          </button>
         </div>
       )}
 
@@ -10571,31 +10598,55 @@ export default function CrateMate() {
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
-                        <div className="text-stone-600 text-xs">
-                          {usingSpotify
-                            ? `${Math.round(n / myRecords.length * 100)}% enriched (${n}/${myRecords.length}) · ${Math.round(tempo)} BPM`
-                            : `genre estimates · ${Math.round(tempo)} BPM avg`}
-                        </div>
-                      </div>
-                      {usingSpotify && n < myRecords.length && (
-                        <div className="mb-3">
-                          <div className="w-full bg-stone-800/50 rounded-full h-1.5 overflow-hidden">
-                            <div className="h-full bg-amber-700/50 rounded-full transition-all" style={{ width: `${Math.round(n / myRecords.length * 100)}%` }} />
+                        {effectiveIsPro && (
+                          <div className="text-stone-600 text-xs">
+                            {usingSpotify
+                              ? `${Math.round(n / myRecords.length * 100)}% enriched (${n}/${myRecords.length}) · ${Math.round(tempo)} BPM`
+                              : `genre estimates · ${Math.round(tempo)} BPM avg`}
                           </div>
+                        )}
+                      </div>
+                      {effectiveIsPro ? (
+                        <>
+                          {usingSpotify && n < myRecords.length && (
+                            <div className="mb-3">
+                              <div className="w-full bg-stone-800/50 rounded-full h-1.5 overflow-hidden">
+                                <div className="h-full bg-amber-700/50 rounded-full transition-all" style={{ width: `${Math.round(n / myRecords.length * 100)}%` }} />
+                              </div>
+                            </div>
+                          )}
+                          <div className="space-y-2 mb-3">
+                            {bars.map(({ label, value, color, hint }) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
+                                <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden">
+                                  <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${Math.round(value * 100)}%` }} />
+                                </div>
+                                <div className="text-stone-600 text-xs w-8 text-right">{Math.round(value * 100)}%</div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mb-3">
+                          <div className="space-y-2">
+                            {bars.map(({ label, value, color, hint }) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
+                                <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden blur-sm">
+                                  <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.round(value * 100)}%` }} />
+                                </div>
+                                <div className="text-stone-600 text-xs w-8 text-right blur-sm select-none">{Math.round(value * 100)}%</div>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setShowUpgradeModal(true)}
+                            className="w-full mt-3 px-4 py-2 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors"
+                          >✦ Unlock with Pro</button>
                         </div>
                       )}
-                      <div className="space-y-2 mb-3">
-                        {bars.map(({ label, value, color, hint }) => (
-                          <div key={label} className="flex items-center gap-3">
-                            <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
-                            <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden">
-                              <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${Math.round(value * 100)}%` }} />
-                            </div>
-                            <div className="text-stone-600 text-xs w-8 text-right">{Math.round(value * 100)}%</div>
-                          </div>
-                        ))}
-                      </div>
-                      {!usingSpotify ? (
+                      {effectiveIsPro && (!usingSpotify ? (
                         <button
                           onClick={analyzeCollection}
                           disabled={spotifyAnalyzing}
@@ -10611,7 +10662,7 @@ export default function CrateMate() {
                         >
                           {spotifyAnalyzing ? `Analyzing… (${n} done)` : `↑ Analyze next 10 (${myRecords.length - n} remaining)`}
                         </button>
-                      ) : null}
+                      ) : null)}
                     </div>
                   );
                 })()}
@@ -11000,6 +11051,8 @@ export default function CrateMate() {
             setAutoTriggerReco(true);
           }}
           spotifyFeatures={spotifyFeatures}
+          isPro={effectiveIsPro}
+          onUpgrade={() => setShowUpgradeModal(true)}
         />
       )}
 
