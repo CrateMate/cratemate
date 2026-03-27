@@ -1486,6 +1486,25 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
                 ))}
               </div>
+              {/* Sound profile descriptor pills — visible to all users as teaser */}
+              {(() => {
+                const sf = spotifyFeatures?.[record.id];
+                const feat = (sf?.energy != null && !sf.not_found) ? sf : null;
+                if (!feat) return null;
+                const pills = [];
+                if (feat.energy > 0.7) pills.push({ label: "High Energy", cls: "bg-amber-900/20 border-amber-800/30 text-amber-500/80" });
+                else if (feat.energy < 0.4) pills.push({ label: "Laid Back", cls: "bg-stone-800/30 border-stone-700/30 text-stone-500" });
+                if (feat.valence > 0.6) pills.push({ label: "Feel Good", cls: "bg-rose-900/20 border-rose-800/30 text-rose-400/80" });
+                else if (feat.valence < 0.35) pills.push({ label: "Melancholic", cls: "bg-indigo-900/20 border-indigo-800/30 text-indigo-400/80" });
+                if (feat.danceability > 0.65) pills.push({ label: "Danceable", cls: "bg-emerald-900/20 border-emerald-800/30 text-emerald-500/80" });
+                return pills.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {pills.map(p => (
+                      <span key={p.label} className={`text-[9px] px-1.5 py-0.5 rounded-full border ${p.cls}`}>{p.label}</span>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
               {/* Play count + last played together */}
               {(playCount > 0 || lastPlayedDate) && (
                 <div className="flex flex-col gap-0.5">
@@ -6686,18 +6705,35 @@ export default function CrateMate() {
         await new Promise(res => setTimeout(res, 200));
       }
 
-      // Apply genre estimates immediately to not_found records (no pill needed)
+      // Check if we should retry not_found records today (once per day)
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let retryNotFound = false;
+      try { retryNotFound = localStorage.getItem('cratemate_notfound_retry') !== todayStr; } catch {}
+
+      // Apply genre estimates immediately to not_found records that won't be retried
       const notFoundRecords = collection.filter(r => spotifyFeaturesRef.current[r.id]?.not_found);
-      for (const r of notFoundRecords) {
-        const estimated = estimateFeaturesFromRecord(r);
-        estimated._estimated = true;
-        spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: estimated };
-        setSpotifyFeatures(prev => ({ ...prev, [r.id]: estimated }));
+      if (!retryNotFound) {
+        for (const r of notFoundRecords) {
+          const estimated = estimateFeaturesFromRecord(r);
+          estimated._estimated = true;
+          spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: estimated };
+          setSpotifyFeatures(prev => ({ ...prev, [r.id]: estimated }));
+        }
       }
 
-      // Exclude not_found records from the enrichment pill — they retry silently below
-      const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]?.energy && !spotifyFeaturesRef.current[r.id]?.not_found);
-      if (uncached.length === 0) return;
+      // Include not_found records in the enrichment queue once per day (with pill)
+      const uncached = collection.filter(r => {
+        if (!r.artist || !r.title) return false;
+        const f = spotifyFeaturesRef.current[r.id];
+        if (f?.energy) return false; // has real features
+        if (f?.not_found) return retryNotFound; // retry once per day
+        return true; // no data at all
+      });
+      if (uncached.length === 0) {
+        if (retryNotFound) try { localStorage.setItem('cratemate_notfound_retry', todayStr); } catch {}
+        return notFoundRecords;
+      }
+      if (retryNotFound) try { localStorage.setItem('cratemate_notfound_retry', todayStr); } catch {}
       setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
       let done = 0;
       const CONCURRENCY = 2;
@@ -6737,22 +6773,6 @@ export default function CrateMate() {
         await new Promise(res => setTimeout(res, 1200));
       }
       return notFoundList;
-    }).then(async (notFoundList) => {
-      // Silent daily retry for not_found records — no progress pill
-      if (enrichmentAbort.current || !notFoundList || notFoundList.length === 0) return;
-      const todayStr = new Date().toISOString().slice(0, 10);
-      try {
-        if (localStorage.getItem('cratemate_notfound_retry') === todayStr) return;
-        localStorage.setItem('cratemate_notfound_retry', todayStr);
-      } catch {}
-      for (const r of notFoundList) {
-        if (enrichmentAbort.current) break;
-        const result = await fetchAndCacheFeatures(r);
-        if (result && result.energy != null) {
-          spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: result };
-        }
-        await new Promise(res => setTimeout(res, 800));
-      }
     });
     return () => { enrichmentAbort.current = true; };
   }, [collection]); // eslint-disable-line react-hooks/exhaustive-deps

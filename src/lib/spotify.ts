@@ -297,6 +297,11 @@ type RawFeature = {
   danceability: number; acousticness: number; loudness: number;
 };
 
+type ReccoFeature = RawFeature & {
+  href?: string;
+  spotifyId?: string;
+};
+
 function avgFeatures(valid: RawFeature[], source: SpotifyFeatures["source"]): SpotifyFeatures {
   const avg = (key: keyof RawFeature) =>
     valid.reduce((sum, f) => sum + f[key], 0) / valid.length;
@@ -307,12 +312,22 @@ function avgFeatures(valid: RawFeature[], source: SpotifyFeatures["source"]): Sp
   };
 }
 
-async function reccoBeatsFeatures(trackIds: string[]): Promise<RawFeature[]> {
+function spotifyTrackIdFromHref(href?: string): string | undefined {
+  if (!href) return undefined;
+  const match = href.match(/\/track\/([A-Za-z0-9]+)(?:\?|$)/);
+  return match?.[1] ?? undefined;
+}
+
+async function reccoBeatsFeatures(trackIds: string[]): Promise<ReccoFeature[]> {
   const ids = trackIds.slice(0, 100).join(",");
   const res = await fetch(`${RECCOBEATS_BASE}/v1/audio-features?ids=${ids}`);
   if (!res.ok) return [];
   const data = await res.json();
-  return ((data.content || []) as (RawFeature | null)[]).filter(Boolean) as RawFeature[];
+  const items = ((data.content || []) as Array<RawFeature & { href?: string } | null>).filter(Boolean) as Array<RawFeature & { href?: string }>;
+  return items.map((feature) => ({
+    ...feature,
+    spotifyId: spotifyTrackIdFromHref(feature.href),
+  }));
 }
 
 function buildTrackFeatures(
@@ -367,7 +382,11 @@ async function fetchFeaturesByTracks(
   const resolvedTracks: { title: string; position?: string }[] = [];
   const allCandidateIds = trackCandidates.flatMap(tc => tc.ids);
   const allFeatures = await reccoBeatsFeatures(allCandidateIds);
-  const featureById = new Map(allFeatures.map((f, i) => [allCandidateIds[i], f]));
+  const featureById = new Map(
+    allFeatures
+      .filter((f) => !!f.spotifyId)
+      .map((f) => [f.spotifyId!, f])
+  );
 
   for (const tc of trackCandidates) {
     const hit = tc.ids.find(id => featureById.has(id));
@@ -476,7 +495,12 @@ export async function fetchAlbumFeatures(
         const valid = await reccoBeatsFeatures(trackIds);
         console.log(`${tag} T1: album "${album.name}" found, ${trackIds.length} tracks → ReccoBeats returned ${valid.length}`);
         if (valid.length > 0) {
-          const trackNames = spotifyTracks.map((t) => ({ title: t.name, position: String(t.track_number) }));
+          const trackById = new Map(
+            spotifyTracks.map((t) => [t.id, { title: t.name, position: String(t.track_number) }])
+          );
+          const trackNames = valid.map((f, i) =>
+            (f.spotifyId ? trackById.get(f.spotifyId) : null) || { title: `Track ${i + 1}` }
+          );
           const result = avgFeatures(valid, "album");
           result.track_features = buildTrackFeatures(valid, trackNames);
           return result;
