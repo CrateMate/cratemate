@@ -3440,18 +3440,6 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         </div>
       )}
 
-      {/* Upgrade CTA — above trail map for free users */}
-      {!isPro && !savePrompt && (
-        <div className="shrink-0 px-5 pt-1 pb-2">
-          <button
-            onClick={onUpgrade}
-            className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
-          >
-            {freeTrailUsed ? "✦ Unlock unlimited 3-way trails with Pro" : "✦ 1 free trail per day — go Pro for unlimited"}
-          </button>
-        </div>
-      )}
-
       {/* Trail map */}
       <div className="flex-1 relative flex items-center justify-center">
         {/* Error */}
@@ -3461,6 +3449,18 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
 
         {!error && (
           <div className="relative" style={{ width: CENTER, height: CENTER }}>
+            {/* Upgrade CTA — positioned near left turn for free users */}
+            {!isPro && !savePrompt && (
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: -(SLOT + GAP) - 44, width: 280, textAlign: "center" }}>
+                <button
+                  onClick={onUpgrade}
+                  className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
+                >
+                  {freeTrailUsed ? "✦ Unlock unlimited 3-way trails with Pro" : "✦ 1 free 3-way suggestion — go Pro for unlimited"}
+                </button>
+              </div>
+            )}
+
             {/* Center record */}
             <div className="rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-2xl"
               style={{ width: CENTER, height: CENTER, boxShadow: "0 0 40px rgba(180,120,30,0.3)" }}>
@@ -3568,22 +3568,22 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
               );
             })}
 
-            {/* Last.fm next suggestion — below "your pick" for free users */}
-            {!isPro && lastfmNext && !savePrompt && (
-              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: CENTER + GAP + SLOT + 36, width: 180 }}>
+            {/* Last.fm next suggestion — below "your pick", only after free trail used */}
+            {!isPro && freeTrailUsed && lastfmNext && !savePrompt && (
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: CENTER + GAP + SLOT + 36, width: 280 }}>
                 <button
                   onClick={() => onNavigate(lastfmNext.record)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-stone-700/60 hover:border-stone-600 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-stone-700/60 hover:border-stone-600 transition-colors"
                   style={{ background: "#1c1917" }}
                 >
-                  <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0 bg-stone-800">
-                    <CoverArt record={lastfmNext.record} size={28} />
+                  <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                    <CoverArt record={lastfmNext.record} size={36} />
                   </div>
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="text-stone-200 text-[10px] font-medium truncate">{lastfmNext.record.title}</div>
-                    <div className="text-stone-500 text-[8px] truncate">{stripArtistNum(lastfmNext.record.artist)}</div>
+                    <div className="text-stone-200 text-xs font-medium truncate">{lastfmNext.record.title}</div>
+                    <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(lastfmNext.record.artist)}</div>
                   </div>
-                  <span className="text-stone-500 text-[9px] shrink-0">→</span>
+                  <span className="text-stone-400 text-xs shrink-0">Play Next →</span>
                 </button>
               </div>
             )}
