@@ -11363,7 +11363,7 @@ export default function CrateMate() {
               ["history",  "▷", "Log"],
               ["reco",     "✦", "Picks"],
               ["wants",    "☆", "Wants"],
-              ["stats",    "◫", "Stats"],
+              ["stats",    "stats", "Stats"],
               ["hearts",   "♥", "Hearts"],
               ["discover", "⊕", "Discover"],
             ].map(([id, icon, label]) => {
@@ -11381,6 +11381,8 @@ export default function CrateMate() {
                   <span className="flex items-center justify-center gap-1">
                     {id === "crate"
                       ? <img src="/icon-192.png" alt="" width={11} height={11} className={`rounded-sm ${active ? "opacity-75" : "opacity-50"}`} />
+                      : id === "stats"
+                      ? <svg viewBox="0 0 12 12" fill="currentColor" className="w-3 h-3"><rect x="1" y="6" width="2.5" height="5" rx="0.5"/><rect x="4.75" y="3" width="2.5" height="8" rx="0.5"/><rect x="8.5" y="1" width="2.5" height="10" rx="0.5"/></svg>
                       : <span>{icon}</span>}
                     {active && <span>{label}</span>}
                   </span>
@@ -11401,7 +11403,7 @@ export default function CrateMate() {
               ["history",  "▷", "Log"],
               ["reco",     "✦", "Picks"],
               ["wants",    "☆", "Wants"],
-              ["stats",    "◫", "Stats"],
+              ["stats",    "stats", "Stats"],
               ["hearts",   "♥", "Hearts"],
               ["discover", "⊕", "Discover"],
             ].map(([id, icon, label]) => {
@@ -11419,6 +11421,8 @@ export default function CrateMate() {
                   <span className="flex items-center justify-center gap-1">
                     {id === "crate"
                       ? <img src="/icon-192.png" alt="" width={11} height={11} className={`rounded-sm ${active ? "opacity-75" : "opacity-50"}`} />
+                      : id === "stats"
+                      ? <svg viewBox="0 0 12 12" fill="currentColor" className="w-3 h-3"><rect x="1" y="6" width="2.5" height="5" rx="0.5"/><rect x="4.75" y="3" width="2.5" height="8" rx="0.5"/><rect x="8.5" y="1" width="2.5" height="10" rx="0.5"/></svg>
                       : <span>{icon}</span>}
                     {active && <span>{label}</span>}
                   </span>
