@@ -3451,7 +3451,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
           <div className="relative" style={{ width: CENTER, height: CENTER }}>
             {/* Upgrade CTA — positioned near left turn for free users */}
             {!isPro && !savePrompt && (
-              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: -(SLOT + GAP) - 44, width: 280, textAlign: "center" }}>
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: -(SLOT + GAP) - 70, width: 280, textAlign: "center" }}>
                 <button
                   onClick={onUpgrade}
                   className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
