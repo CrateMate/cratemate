@@ -8365,7 +8365,7 @@ export default function CrateMate() {
       onTouchEnd={onSwipeEnd}
     >
       {/* ── Compact header ── */}
-      {(!selected || tab !== "crate") && viewMode !== "drift" && (
+      {(!selected || tab !== "crate") && !(viewMode === "drift" && tab === "crate") && (
         <div className="px-4 pt-4 pb-1.5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <img src="/icon-192.png" alt="CrateMate" width={34} height={34} className="rounded-lg shrink-0" />
