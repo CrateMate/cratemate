@@ -8591,6 +8591,14 @@ export default function CrateMate() {
                   {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
                 </button>
               )}
+              {activeStyles.size > 0 && (
+                <button
+                  onClick={() => setActiveStyles(new Set())}
+                  className="text-xs px-2 py-0.5 rounded-full bg-violet-900/30 border border-violet-800/40 text-violet-400"
+                >
+                  {activeStyles.size === 1 ? [...activeStyles][0] : `${activeStyles.size} styles`} ×
+                </button>
+              )}
               {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
                 <button
                   onClick={clearStatFilter}
