@@ -95,7 +95,8 @@ export async function POST(request: Request) {
   // `source` and `track_features` handled separately
   const { source, track_features, ...dbFields } = features;
   const row = { record_id, ...dbFields, ...(track_features ? { track_features } : {}) };
-  await supabase.from("spotify_features").upsert(row);
+  const { error: upsertErr } = await supabase.from("spotify_features").upsert(row);
+  if (upsertErr) console.error(`[features] upsert failed for ${record_id}:`, upsertErr.message);
 
   // Store in shared features cache (without source)
   await upsertSpotifyFeaturesCache(cacheKey, {
