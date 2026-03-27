@@ -3358,6 +3358,23 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
   const SLOT = 100;
   const GAP = 18;
 
+  // Free users get 1 free 3-way trail per day
+  const [freeTrailUsed, setFreeTrailUsed] = useState(() => {
+    if (isPro) return false;
+    try {
+      return localStorage.getItem('cratemate_free_trail_date') === new Date().toISOString().slice(0, 10);
+    } catch { return false; }
+  });
+  const showReal = isPro || !freeTrailUsed;
+
+  function handleSuggestionNavigate(rec) {
+    if (!isPro && !freeTrailUsed) {
+      setFreeTrailUsed(true);
+      try { localStorage.setItem('cratemate_free_trail_date', new Date().toISOString().slice(0, 10)); } catch {}
+    }
+    onNavigate(rec);
+  }
+
   // Fallback pool for blurred placeholders when suggestions not yet computed
   const blurFallbackPool = useMemo(() => {
     const pool = (collection || []).filter(r => r.id !== centerRecord?.id);
@@ -3387,9 +3404,16 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         <span className="text-stone-600 text-xs uppercase tracking-widest">Your Session</span>
         <div className="flex items-center gap-3">
           {onRefresh && !loading && suggestions && (
-            <button onClick={onRefresh} className="text-stone-500 hover:text-stone-300 transition-colors" title="Shuffle suggestions">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15A9 9 0 0 0 18.36 18.36L23 14"/></svg>
-            </button>
+            isPro ? (
+              <button onClick={onRefresh} className="text-stone-500 hover:text-stone-300 transition-colors" title="Shuffle suggestions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15A9 9 0 0 0 18.36 18.36L23 14"/></svg>
+              </button>
+            ) : (
+              <button onClick={onUpgrade} className="text-stone-700 flex items-center gap-0.5 transition-colors" title="Shuffle — Pro feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15A9 9 0 0 0 18.36 18.36L23 14"/></svg>
+                <span className="text-amber-500 text-[9px]">✦</span>
+              </button>
+            )
           )}
           <button onClick={onMinimize} className="text-stone-500 hover:text-stone-300 transition-colors" title="Minimize session">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-5 h-5"><path d="M19 15l-7 7-7-7"/></svg>
@@ -3423,7 +3447,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
             onClick={onUpgrade}
             className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
           >
-            ✦ Unlock 3-way trails with Pro
+            {freeTrailUsed ? "✦ Unlock unlimited 3-way trails with Pro" : "✦ 1 free trail per day — go Pro for unlimited"}
           </button>
         </div>
       )}
@@ -3456,9 +3480,9 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
               const suggestion = suggestions?.[key];
               const rec = suggestion?.record;
               const isLoading = loading && !suggestions;
-              // Free users: always render all 3 slots (blurred)
-              // Pro users: skip empty non-sideways slots
-              if (isPro && !isLoading && suggestions && !rec && key !== "sideways") return null;
+              // Users with real suggestions: skip empty non-sideways slots
+              // Blurred view: always render all 3 slots
+              if (showReal && !isLoading && suggestions && !rec && key !== "sideways") return null;
               const isSideways = key === "sideways";
               return (
                 <div
@@ -3469,7 +3493,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                   <div style={{
                     position: "absolute",
                     fontSize: 14, fontFamily: "'Fraunces', serif", fontWeight: 700, letterSpacing: "0.02em",
-                    color, opacity: isPro ? 0.85 : 0.4, whiteSpace: "nowrap",
+                    color, opacity: showReal ? 0.85 : 0.4, whiteSpace: "nowrap",
                     bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)",
                   }}>
                     {label}
@@ -3479,7 +3503,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                   <div style={{ width: SLOT, height: SLOT, position: "relative" }}>
                     {isLoading ? (
                       <div className="rounded-xl w-full h-full animate-pulse" style={{ background: "#1c1917" }} />
-                    ) : !isPro ? (
+                    ) : !showReal ? (
                       /* Blurred actual suggestion (or fallback) for free users */
                       (() => {
                         const blurRec = suggestions?.[key]?.record
@@ -3487,10 +3511,10 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                           || centerRecord;
                         return (
                           <button onClick={onUpgrade} className="rounded-xl w-full h-full relative overflow-hidden" style={{ border: `1.5px solid ${color}30` }}>
-                            <div style={{ filter: "blur(4px)", transform: "scale(1.1)", width: "100%", height: "100%" }}>
+                            <div style={{ filter: "blur(10px)", transform: "scale(1.2)", width: "100%", height: "100%" }}>
                               <CoverArt record={blurRec} size={SLOT} />
                             </div>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1" style={{ background: "rgba(0,0,0,0.45)" }}>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1" style={{ background: "rgba(0,0,0,0.5)" }}>
                               <span style={{ color, fontSize: 13, opacity: 0.9 }}>✦</span>
                               <span style={{ color, fontSize: 8, opacity: 0.7, fontWeight: 600 }}>Pro</span>
                             </div>
@@ -3499,7 +3523,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                       })()
                     ) : rec ? (
                       <button
-                        onClick={() => onNavigate(rec)}
+                        onClick={() => handleSuggestionNavigate(rec)}
                         className="rounded-xl overflow-hidden w-full h-full relative transition-transform hover:scale-105 active:scale-95"
                         style={{ border: `1.5px solid ${color}40`, boxShadow: `0 4px 20px rgba(0,0,0,0.6)` }}
                       >
@@ -3543,6 +3567,26 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                 </div>
               );
             })}
+
+            {/* Last.fm next suggestion — below "your pick" for free users */}
+            {!isPro && lastfmNext && !savePrompt && (
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: CENTER + GAP + SLOT + 36, width: 180 }}>
+                <button
+                  onClick={() => onNavigate(lastfmNext.record)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-stone-700/60 hover:border-stone-600 transition-colors"
+                  style={{ background: "#1c1917" }}
+                >
+                  <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                    <CoverArt record={lastfmNext.record} size={28} />
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="text-stone-200 text-[10px] font-medium truncate">{lastfmNext.record.title}</div>
+                    <div className="text-stone-500 text-[8px] truncate">{stripArtistNum(lastfmNext.record.artist)}</div>
+                  </div>
+                  <span className="text-stone-500 text-[9px] shrink-0">→</span>
+                </button>
+              </div>
+            )}
 
             {/* DOWN slot — custom pick */}
             <div style={{ position: "absolute", left: (CENTER - SLOT) / 2, top: CENTER + GAP, width: SLOT }}>
@@ -3591,27 +3635,8 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         <div className="text-center pb-6 text-stone-600 text-xs">Finding next records…</div>
       )}
 
-      {/* Free user: Last.fm next + upgrade CTA */}
-      {!isPro && !savePrompt && (
-        <div className="shrink-0 px-5 pb-6 flex flex-col gap-3">
-          {lastfmNext ? (
-            <button
-              onClick={() => onNavigate(lastfmNext.record)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-stone-700/60 hover:border-stone-600 transition-colors"
-              style={{ background: "#1c1917" }}
-            >
-              <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
-                <CoverArt record={lastfmNext.record} size={36} />
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <div className="text-stone-200 text-xs font-medium truncate">{lastfmNext.record.title}</div>
-                <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(lastfmNext.record.artist)}</div>
-              </div>
-              <span className="text-stone-400 text-xs shrink-0">Next →</span>
-            </button>
-          ) : null}
-        </div>
-      )}
+      {/* spacer at bottom for free users without save prompt */}
+      {!isPro && !savePrompt && <div className="shrink-0 h-4" />}
 
       {/* Save session prompt overlay */}
       {savePrompt && (
