@@ -13,14 +13,15 @@ async function fetchLivePrice(
   tokenKey: string,
   tokenSecret: string
 ): Promise<{ lowest_listing: number | null; min_price: number | null; currency: string | null }> {
+  // Force USD for both APIs to avoid currency mismatch
   const suggestionsRes = await discogsRequest(
     "GET",
-    `${DISCOGS_API}/marketplace/price_suggestions/${releaseId}`,
+    `${DISCOGS_API}/marketplace/price_suggestions/${releaseId}?curr=USD`,
     { tokenKey, tokenSecret }
   );
 
   let minPrice: number | null = null;
-  let currency: string | null = null;
+  const currency = "USD";
 
   if (suggestionsRes.ok) {
     const data = await suggestionsRes.json();
@@ -30,7 +31,6 @@ async function fetchLivePrice(
       if (entry && typeof entry.value === "number") {
         if (minPrice === null || entry.value < minPrice) {
           minPrice = entry.value;
-          currency = entry.currency || "USD";
         }
       }
     }
@@ -40,7 +40,7 @@ async function fetchLivePrice(
   try {
     const statsRes = await discogsRequest(
       "GET",
-      `${DISCOGS_API}/marketplace/stats/${releaseId}`,
+      `${DISCOGS_API}/marketplace/stats/${releaseId}?curr=USD`,
       { tokenKey, tokenSecret }
     );
     if (statsRes.ok) {
