@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { getPriceCache, upsertPriceCache, isPriceCacheFresh } from "@/lib/discogs/cache";
 import { discogsRequest, DISCOGS_API } from "@/lib/discogs";
 
-const QUALIFYING_CONDITIONS = new Set(["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)"]);
+// Stats endpoint returns the absolute lowest listing price across all conditions
 
 async function fetchLivePrice(
   releaseId: number,
@@ -38,19 +38,15 @@ async function fetchLivePrice(
 
   let lowestListing: number | null = null;
   try {
-    const listingsRes = await discogsRequest(
+    const statsRes = await discogsRequest(
       "GET",
-      `${DISCOGS_API}/marketplace/search?release_id=${releaseId}&sort=price&sort_order=asc&per_page=100`,
+      `${DISCOGS_API}/marketplace/stats/${releaseId}`,
       { tokenKey, tokenSecret }
     );
-    if (listingsRes.ok) {
-      const listingsData = await listingsRes.json();
-      const qualifying = (listingsData.results || []).filter(
-        (l: { condition?: string; price?: { value?: number } }) =>
-          l.condition && QUALIFYING_CONDITIONS.has(l.condition) && typeof l.price?.value === "number"
-      );
-      if (qualifying.length > 0) {
-        lowestListing = Math.min(...qualifying.map((l: { price: { value: number } }) => l.price.value));
+    if (statsRes.ok) {
+      const statsData = await statsRes.json();
+      if (statsData.lowest_price && typeof statsData.lowest_price.value === "number") {
+        lowestListing = statsData.lowest_price.value;
       }
     }
   } catch { /* best-effort */ }
