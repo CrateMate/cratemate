@@ -3337,13 +3337,11 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
   const SLOT = 100;
   const GAP = 18;
 
-  // Pick 3 random records (excluding center) to show as blurred placeholders for free users
-  const blurredPlaceholders = useMemo(() => {
-    if (isPro) return [];
+  // Fallback pool for blurred placeholders when suggestions not yet computed
+  const blurFallbackPool = useMemo(() => {
     const pool = (collection || []).filter(r => r.id !== centerRecord?.id);
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 3);
-  }, [isPro, centerRecord?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    return [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
+  }, [centerRecord?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const directions = [
     { key: "windDown", label: "cool off",    offsetX: -(SLOT + GAP), offsetY: (CENTER - SLOT) / 2, color: "#60a5fa" },
@@ -3425,9 +3423,9 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
               const suggestion = suggestions?.[key];
               const rec = suggestion?.record;
               const isLoading = loading && !suggestions;
-              if (!isPro && !isLoading && key !== "sideways" && !rec) {
-                // still render as locked placeholder for all 3 directions
-              } else if (!isLoading && suggestions && !rec && key !== "sideways") return null;
+              // Free users: always render all 3 slots (blurred)
+              // Pro users: skip empty non-sideways slots
+              if (isPro && !isLoading && suggestions && !rec && key !== "sideways") return null;
               const isSideways = key === "sideways";
               return (
                 <div
@@ -3449,15 +3447,22 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                     {isLoading ? (
                       <div className="rounded-xl w-full h-full animate-pulse" style={{ background: "#1c1917" }} />
                     ) : !isPro ? (
-                      /* Blurred random record for free users */
-                      <div className="rounded-xl w-full h-full relative overflow-hidden" style={{ border: `1.5px solid ${color}30` }}>
-                        <div style={{ filter: "blur(8px)", transform: "scale(1.1)", width: "100%", height: "100%" }}>
-                          <CoverArt record={blurredPlaceholders[directions.findIndex(d => d.key === key)] || centerRecord} size={SLOT} />
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-                          <span style={{ color, fontSize: 16, opacity: 0.7 }}>✦</span>
-                        </div>
-                      </div>
+                      /* Blurred actual suggestion (or fallback) for free users */
+                      (() => {
+                        const blurRec = suggestions?.[key]?.record
+                          || blurFallbackPool[directions.findIndex(d => d.key === key)]
+                          || centerRecord;
+                        return (
+                          <div className="rounded-xl w-full h-full relative overflow-hidden" style={{ border: `1.5px solid ${color}30` }}>
+                            <div style={{ filter: "blur(4px)", transform: "scale(1.1)", width: "100%", height: "100%" }}>
+                              <CoverArt record={blurRec} size={SLOT} />
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.30)" }}>
+                              <span style={{ color, fontSize: 16, opacity: 0.7 }}>✦</span>
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : rec ? (
                       <button
                         onClick={() => onNavigate(rec)}
@@ -7295,79 +7300,37 @@ export default function CrateMate() {
           if (!parsed?.reason) throw new Error("bad-schema");
           setReco({ record: picked, reason: parsed.reason, label: "Play Next" });
 
-        } else { // mood
-          // Build a diverse shortlist weighted toward less-played records
+        } else { // mood — two-step: get sound profile, then rank + pick
           const moodPool = dedupeByAlbum(activePool, playCounts);
 
-          // Infer a target sound profile from the mood text
-          const MOOD_KEYWORD_PROFILES = {
-            // low energy / introspective
-            melancholic:  { valence: 0.25, energy: 0.30, danceability: 0.35, acousticness: 0.70 },
-            sad:          { valence: 0.20, energy: 0.25, danceability: 0.30, acousticness: 0.70 },
-            rainy:        { valence: 0.35, energy: 0.30, danceability: 0.35, acousticness: 0.65 },
-            lonely:       { valence: 0.25, energy: 0.25, danceability: 0.30, acousticness: 0.75 },
-            heartbreak:   { valence: 0.20, energy: 0.30, danceability: 0.30, acousticness: 0.65 },
-            nostalgic:    { valence: 0.45, energy: 0.35, danceability: 0.40, acousticness: 0.60 },
-            cozy:         { valence: 0.55, energy: 0.28, danceability: 0.35, acousticness: 0.80 },
-            chill:        { valence: 0.55, energy: 0.35, danceability: 0.45, acousticness: 0.55 },
-            mellow:       { valence: 0.55, energy: 0.38, danceability: 0.45, acousticness: 0.55 },
-            focus:        { valence: 0.50, energy: 0.45, danceability: 0.35, acousticness: 0.60 },
-            // mid energy
-            morning:      { valence: 0.65, energy: 0.55, danceability: 0.55, acousticness: 0.45 },
-            afternoon:    { valence: 0.60, energy: 0.58, danceability: 0.55, acousticness: 0.35 },
-            roadtrip:     { valence: 0.70, energy: 0.75, danceability: 0.65, acousticness: 0.20 },
-            // high energy
-            dance:        { valence: 0.75, energy: 0.85, danceability: 0.90, acousticness: 0.10 },
-            party:        { valence: 0.80, energy: 0.88, danceability: 0.88, acousticness: 0.08 },
-            happy:        { valence: 0.85, energy: 0.72, danceability: 0.72, acousticness: 0.20 },
-            upbeat:       { valence: 0.80, energy: 0.78, danceability: 0.75, acousticness: 0.15 },
-            angry:        { valence: 0.25, energy: 0.90, danceability: 0.55, acousticness: 0.08 },
-            intense:      { valence: 0.35, energy: 0.88, danceability: 0.55, acousticness: 0.08 },
-            workout:      { valence: 0.60, energy: 0.90, danceability: 0.80, acousticness: 0.05 },
-          };
+          // Step 1: get sound profile for this mood (cached across all users)
+          const profileRes = await fetch("/api/mood", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mood }),
+          });
+          if (!profileRes.ok) throw new Error("mood-profile-failed");
+          const moodTarget = await profileRes.json();
 
-          // Find best matching keyword(s) in mood text
-          const moodLower = mood.toLowerCase().replace(/[^a-z\s]/g, "");
-          const matchedProfiles = Object.entries(MOOD_KEYWORD_PROFILES)
-            .filter(([kw]) => moodLower.includes(kw))
-            .map(([, profile]) => profile);
+          // Step 2: rank collection against sound profile, take top 5
+          const scored = moodPool
+            .map(r => {
+              const f = spotifyFeatures[r.id] || estimateFeaturesFromRecord(r);
+              const score =
+                (1 - Math.abs(f.valence      - moodTarget.valence))      * 0.30 +
+                (1 - Math.abs(f.energy       - moodTarget.energy))       * 0.35 +
+                (1 - Math.abs(f.danceability - moodTarget.danceability)) * 0.20 +
+                (1 - Math.abs(f.acousticness - moodTarget.acousticness)) * 0.15 +
+                (!playCounts[r.id] ? 0.08 : 0);
+              return { record: r, score };
+            })
+            .sort((a, b) => b.score - a.score);
 
-          // Average matched profiles (or null = no match, fall back to random)
-          const moodTarget = matchedProfiles.length > 0
-            ? { valence: matchedProfiles.reduce((s, p) => s + p.valence, 0) / matchedProfiles.length,
-                energy: matchedProfiles.reduce((s, p) => s + p.energy, 0) / matchedProfiles.length,
-                danceability: matchedProfiles.reduce((s, p) => s + p.danceability, 0) / matchedProfiles.length,
-                acousticness: matchedProfiles.reduce((s, p) => s + p.acousticness, 0) / matchedProfiles.length }
-            : null;
+          // Slight shuffle in top tier so same mood doesn't always return same record
+          const top = scored.slice(0, 3).sort(() => Math.random() - 0.5);
+          const next = scored.slice(3, 8).sort(() => Math.random() - 0.5);
+          const shortlist = [...top, ...next].slice(0, 5);
 
-          // Score and rank pool if we have a target, otherwise weight by unplayed
-          let shortlist;
-          if (moodTarget) {
-            const scored = moodPool
-              .map(r => {
-                const f = spotifyFeatures[r.id] || estimateFeaturesFromRecord(r);
-                const score =
-                  (1 - Math.abs(f.valence      - moodTarget.valence))      * 0.30 +
-                  (1 - Math.abs(f.energy       - moodTarget.energy))       * 0.35 +
-                  (1 - Math.abs(f.danceability - moodTarget.danceability)) * 0.20 +
-                  (1 - Math.abs(f.acousticness - moodTarget.acousticness)) * 0.15 +
-                  (!playCounts[r.id] ? 0.08 : 0); // small bonus for unplayed
-                return { record: r, score };
-              })
-              .sort((a, b) => b.score - a.score);
-            // Take top 15 with slight shuffle in top half to avoid identical results
-            const top = scored.slice(0, 8).sort(() => Math.random() - 0.5);
-            const rest = scored.slice(8, 20).sort(() => Math.random() - 0.5);
-            shortlist = [...top, ...rest].slice(0, 15);
-          } else {
-            const unplayed = moodPool.filter(r => !playCounts[r.id]);
-            const played = moodPool.filter(r => playCounts[r.id]);
-            const wantUnplayed = Math.min(unplayed.length, 9);
-            const wantPlayed = Math.min(played.length, 15 - wantUnplayed);
-            shortlist = [...unplayed.sort(() => Math.random() - 0.5).slice(0, wantUnplayed),
-                         ...played.sort(() => Math.random() - 0.5).slice(0, wantPlayed)]
-                        .sort(() => Math.random() - 0.5);
-          }
           const numbered = shortlist.map((r, i) => `${i + 1}. ${describeRecord(r)}`).join("\n");
 
           // Build context: weather + time of day
@@ -7376,8 +7339,9 @@ export default function CrateMate() {
           const weatherCtx = todayWeather?.label ? ` It's ${todayWeather.label.toLowerCase()} outside.` : "";
           const context = `It's ${timeOfDay}.${weatherCtx}`;
 
+          // Step 3: Claude picks from the 5 and writes the reason
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-          const text = await callClaude([{ role: "user", content: `My mood right now: "${mood}"\n${context}\n\nHere are some records from my collection:\n${numbered}\n\nPick the ONE record (by number) that best fits this mood, time, and atmosphere. Consider genre, energy, era, and feel. Write 1-2 warm sentences about why this record is the right pull right now.\n\nRespond ONLY with JSON: {"pick": <number>, "reason":"..."}` }], 150, SYSTEM);
+          const text = await callClaude([{ role: "user", content: `My mood right now: "${mood}"\n${context}\n\nHere are the best matches from my collection:\n${numbered}\n\nPick the ONE record (by number) that best fits this mood, time, and atmosphere. Write 1-2 warm sentences about why this record is the right pull right now.\n\nRespond ONLY with JSON: {"pick": <number>, "reason":"..."}` }], 150, SYSTEM);
           const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
           let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
           if (Array.isArray(parsed)) parsed = parsed[0];
@@ -7866,7 +7830,7 @@ export default function CrateMate() {
     if (trailCenter) return; // active session — use trailSuggestions instead
     if (bannerSuggestionsRecordRef.current === nowPlaying.record.id) return; // already computed
     bannerSuggestionsRecordRef.current = nowPlaying.record.id;
-    if (!effectiveIsPro) { setBannerSuggestions(null); return; }
+    // Compute for all users — free users see blurred versions
     // Async: fetch features then compute
     (async () => {
       try {
@@ -11295,10 +11259,10 @@ export default function CrateMate() {
             </div>
             <ul className="space-y-2.5 mb-6">
               {[
-                { icon: "↓↑↔", label: "3-way trail — branch your session by energy and sound profile" },
-                { icon: "🌙", label: "Mood Match — finds the perfect record for your current vibe" },
-                { icon: "📅", label: "Smarter Today's Picks — personal reasons, not templates" },
-                { icon: "✦",  label: "Based on your Crate — new records to hunt based on what you love" },
+                { icon: "↓↑↔", label: "3-way trail: branch your session by energy and sound profile" },
+                { icon: "🌙", label: "Mood Match: finds the perfect record for your current vibe" },
+                { icon: "📅", label: "Smarter Today's Picks: why this record, why today" },
+                { icon: "✦",  label: "Based on your Crate: new records to hunt based on what you love" },
               ].map(({ icon, label }) => (
                 <li key={label} className="flex items-start gap-3 text-sm">
                   <span className="text-amber-400 w-6 shrink-0 text-center mt-0.5 text-xs">{icon}</span>
