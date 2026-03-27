@@ -241,6 +241,24 @@ function getGenrePalette(genre) {
 
 function genreColor(genre) { return getGenrePalette(genre).tw; }
 
+/** Get a muted style pill color, inheriting from the record's genre family */
+function styleColor(style, recordGenres) {
+  // First try: does the style itself match a genre palette entry?
+  const direct = getGenrePalette(style);
+  const fallback = GENRE_FALLBACK[0]; // default teal
+  const isDirect = direct !== fallback && !GENRE_FALLBACK.includes(direct);
+  if (isDirect) return direct.hex;
+  // Second try: inherit from the record's first matched genre
+  for (const g of recordGenres) {
+    const p = getGenrePalette(g);
+    if (p !== fallback && !GENRE_FALLBACK.includes(p)) return p.hex;
+  }
+  // Fallback: hash the style name to a palette color
+  let hash = 0;
+  for (let i = 0; i < style.length; i++) hash = (hash * 31 + style.charCodeAt(i)) >>> 0;
+  return GENRE_FALLBACK[hash % GENRE_FALLBACK.length].hex;
+}
+
 function genreSvgColor(genre) {
   const { hex } = getGenrePalette(genre);
   return { fill: hex + "2e", stroke: hex, text: hex };
@@ -1486,24 +1504,25 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                   <GenreTag key={g} genre={g} onClick={onGenreClick} active={activeGenres.has(g)} />
                 ))}
               </div>
-              {/* Sound profile descriptor pills — visible to all users as teaser */}
+              {/* Style pills — smaller, muted, color-linked to parent genre */}
               {(() => {
-                const sf = spotifyFeatures?.[record.id];
-                const feat = (sf?.energy != null && !sf.not_found) ? sf : null;
-                if (!feat) return null;
-                const pills = [];
-                if (feat.energy > 0.7) pills.push({ label: "High Energy", cls: "bg-amber-900/20 border-amber-800/30 text-amber-500/80" });
-                else if (feat.energy < 0.4) pills.push({ label: "Laid Back", cls: "bg-stone-800/30 border-stone-700/30 text-stone-500" });
-                if (feat.valence > 0.6) pills.push({ label: "Feel Good", cls: "bg-rose-900/20 border-rose-800/30 text-rose-400/80" });
-                else if (feat.valence < 0.35) pills.push({ label: "Melancholic", cls: "bg-indigo-900/20 border-indigo-800/30 text-indigo-400/80" });
-                if (feat.danceability > 0.65) pills.push({ label: "Danceable", cls: "bg-emerald-900/20 border-emerald-800/30 text-emerald-500/80" });
-                return pills.length > 0 ? (
+                const styles = getStyles(record);
+                if (styles.length === 0) return null;
+                const genres = getGenres(record);
+                return (
                   <div className="flex flex-wrap gap-1">
-                    {pills.map(p => (
-                      <span key={p.label} className={`text-[9px] px-1.5 py-0.5 rounded-full border ${p.cls}`}>{p.label}</span>
-                    ))}
+                    {styles.slice(0, 5).map(s => {
+                      const hex = styleColor(s, genres);
+                      return (
+                        <span
+                          key={s}
+                          className="text-[9px] px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+                          style={{ background: hex + "15", borderColor: hex + "30", color: hex + "99" }}
+                        >{s}</span>
+                      );
+                    })}
                   </div>
-                ) : null;
+                );
               })()}
               {/* Play count + last played together */}
               {(playCount > 0 || lastPlayedDate) && (
