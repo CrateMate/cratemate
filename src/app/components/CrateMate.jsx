@@ -1557,7 +1557,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
               >⬡ Session</button>
             )}
             <button
-              onClick={() => isPro ? onCompare?.(record) : onUpgrade?.()}
+              onClick={() => isPro ? onCompare?.(record) : onUpgrade?.("compare")}
               className={`flex-1 py-2 rounded-xl border text-xs font-medium transition-colors ${isPro ? "border-stone-800/40 text-stone-500 hover:text-stone-300 hover:border-stone-700/60" : "border-stone-800/30 text-stone-700"}`}
             >{isPro ? "⇄ Compare" : "⇄ Compare ✦"}</button>
             <button
@@ -1704,7 +1704,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                         </div>
                       ))}
                       <button
-                        onClick={onUpgrade}
+                        onClick={() => onUpgrade?.("soundProfile")}
                         className="w-full mt-1 px-4 py-1.5 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-xs font-medium hover:bg-amber-900/50 transition-colors"
                       >✦ Unlock with Pro</button>
                     </div>
@@ -3409,7 +3409,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15A9 9 0 0 0 18.36 18.36L23 14"/></svg>
               </button>
             ) : (
-              <button onClick={onUpgrade} className="text-stone-700 flex items-center gap-0.5 transition-colors" title="Shuffle — Pro feature">
+              <button onClick={() => onUpgrade?.("refresh")} className="text-stone-700 flex items-center gap-0.5 transition-colors" title="Shuffle — Pro feature">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15A9 9 0 0 0 18.36 18.36L23 14"/></svg>
                 <span className="text-amber-500 text-[9px]">✦</span>
               </button>
@@ -3453,7 +3453,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
             {!isPro && !savePrompt && (
               <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: -(SLOT + GAP) - 70, width: 280, textAlign: "center" }}>
                 <button
-                  onClick={onUpgrade}
+                  onClick={() => onUpgrade?.("trail")}
                   className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
                 >
                   {freeTrailUsed ? "✦ Unlock unlimited 3-way trails with Pro" : "✦ 1 free 3-way suggestion — go Pro for unlimited"}
@@ -3510,7 +3510,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                           || blurFallbackPool[directions.findIndex(d => d.key === key)]
                           || centerRecord;
                         return (
-                          <button onClick={onUpgrade} className="rounded-xl w-full h-full relative overflow-hidden" style={{ border: `1.5px solid ${color}30` }}>
+                          <button onClick={() => onUpgrade?.("trail")} className="rounded-xl w-full h-full relative overflow-hidden" style={{ border: `1.5px solid ${color}30` }}>
                             <div style={{ filter: "blur(10px)", transform: "scale(1.2)", width: "100%", height: "100%" }}>
                               <CoverArt record={blurRec} size={SLOT} />
                             </div>
@@ -5777,8 +5777,10 @@ export default function CrateMate() {
   const [isPro, setIsPro] = useState(false);
   const [proLoading, setProLoading] = useState(true);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeSource, setUpgradeSource] = useState(null); // "compare" | "soundProfile" | "trail" | "refresh" | "moodMatch" | "discover" | null
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [upgradeInterval, setUpgradeInterval] = useState("month");
+  function openUpgradeModal(source = null) { setUpgradeSource(source); setShowUpgradeModal(true); }
   const [wantsSubTab, setWantsSubTab] = useState("wantlist");
   const [lastfmRecs, setLastfmRecs] = useState(null);
   const [lastfmRecsLoading, setLastfmRecsLoading] = useState(false);
@@ -9548,7 +9550,7 @@ export default function CrateMate() {
               </>
             ) : (
               <button
-                onClick={() => setShowUpgradeModal(true)}
+                onClick={() => openUpgradeModal("moodMatch")}
                 className="w-full py-2.5 rounded-lg bg-amber-900/20 border border-amber-700/30 text-amber-400 text-sm font-medium hover:bg-amber-900/40 transition-colors"
               >
                 Unlock with Pro →
@@ -9856,7 +9858,7 @@ export default function CrateMate() {
                   <div className="text-stone-200 font-medium text-sm">Based on your Crate</div>
                   <div className="text-stone-500 text-xs leading-relaxed">Discover records to buy based on your listening history and similar artists from your collection.</div>
                   <button
-                    onClick={() => setShowUpgradeModal(true)}
+                    onClick={() => openUpgradeModal("discover")}
                     className="mt-2 px-5 py-2.5 rounded-2xl bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors"
                   >Unlock with Pro →</button>
                 </div>
@@ -10667,7 +10669,7 @@ export default function CrateMate() {
                             ))}
                           </div>
                           <button
-                            onClick={() => setShowUpgradeModal(true)}
+                            onClick={() => openUpgradeModal("soundProfile")}
                             className="w-full mt-3 px-4 py-2 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors"
                           >✦ Unlock with Pro</button>
                         </div>
@@ -11078,7 +11080,7 @@ export default function CrateMate() {
           }}
           spotifyFeatures={spotifyFeatures}
           isPro={effectiveIsPro}
-          onUpgrade={() => setShowUpgradeModal(true)}
+          onUpgrade={(source) => openUpgradeModal(source || "soundProfile")}
         />
       )}
 
@@ -11326,7 +11328,50 @@ export default function CrateMate() {
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
 
       {/* Pro upgrade modal */}
-      {showUpgradeModal && (
+      {showUpgradeModal && (() => {
+        const upgradeContent = {
+          compare: {
+            headline: "Compare your records side by side",
+            description: "See how any two records stack up across energy, mood, danceability, and more.",
+            icon: "⇄",
+          },
+          soundProfile: {
+            headline: "See the full sound profile",
+            description: "Unlock detailed energy, mood, danceability, acoustic, and loudness breakdowns for every record.",
+            icon: "📊",
+          },
+          trail: {
+            headline: "Unlock unlimited 3-way trails",
+            description: "Branch your listening session three ways — cool off, turn it up, or take a left turn.",
+            icon: "↓↑↔",
+          },
+          refresh: {
+            headline: "Shuffle for fresh suggestions",
+            description: "Don't like what you see? Shuffle to get a new set of trail suggestions instantly.",
+            icon: "🔄",
+          },
+          moodMatch: {
+            headline: "Find the perfect record for your mood",
+            description: "Describe how you feel and Mood Match picks the ideal record from your crate.",
+            icon: "🌙",
+          },
+          discover: {
+            headline: "Discover records to hunt",
+            description: "Get personalized recommendations for records to buy based on your collection's DNA.",
+            icon: "✦",
+          },
+        };
+        const ctx = upgradeContent[upgradeSource] || null;
+        const allBenefits = [
+          { key: "trail",        icon: "↓↑↔", label: "3-way trail suggestions" },
+          { key: "soundProfile", icon: "📊",  label: "Full sound profile insights" },
+          { key: "compare",      icon: "⇄",   label: "Record comparison" },
+          { key: "refresh",      icon: "🔄",  label: "Shuffle suggestions" },
+          { key: "moodMatch",    icon: "🌙",  label: "Mood Match" },
+          { key: "discover",     icon: "✦",   label: "Based on your Crate recommendations" },
+        ];
+        const otherBenefits = allBenefits.filter(b => b.key !== upgradeSource);
+        return (
         <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-4" onClick={() => setShowUpgradeModal(false)}>
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           <div
@@ -11334,21 +11379,29 @@ export default function CrateMate() {
             onClick={e => e.stopPropagation()}
           >
             <button onClick={() => setShowUpgradeModal(false)} className="absolute top-4 right-4 text-stone-600 hover:text-stone-400 text-xl leading-none">×</button>
-            <div className="text-center mb-5">
-              <div className="text-3xl mb-3">✦</div>
-              <div className="text-stone-100 font-semibold text-lg mb-1">CrateMate Pro</div>
-              <div className="text-stone-500 text-sm">Dig deeper into your crate</div>
-            </div>
-            <ul className="space-y-2.5 mb-6">
-              {[
-                { icon: "↓↑↔", label: "3-way trail: branch your session by energy and sound profile" },
-                { icon: "🌙", label: "Mood Match: finds the perfect record for your current vibe" },
-                { icon: "📅", label: "Smarter Today's Picks: why this record, why today" },
-                { icon: "✦",  label: "Based on your Crate: new records to hunt based on what you love" },
-              ].map(({ icon, label }) => (
-                <li key={label} className="flex items-start gap-3 text-sm">
-                  <span className="text-amber-400 w-6 shrink-0 text-center mt-0.5 text-xs">{icon}</span>
-                  <span className="text-stone-300">{label}</span>
+
+            {/* Contextual hero */}
+            {ctx ? (
+              <div className="text-center mb-5">
+                <div className="text-3xl mb-3">{ctx.icon}</div>
+                <div className="text-stone-100 font-semibold text-lg mb-1">{ctx.headline}</div>
+                <div className="text-stone-500 text-sm">{ctx.description}</div>
+              </div>
+            ) : (
+              <div className="text-center mb-5">
+                <div className="text-3xl mb-3">✦</div>
+                <div className="text-stone-100 font-semibold text-lg mb-1">CrateMate Pro</div>
+                <div className="text-stone-500 text-sm">Dig deeper into your crate</div>
+              </div>
+            )}
+
+            {/* Other benefits */}
+            {ctx && <div className="text-stone-600 text-[10px] uppercase tracking-widest text-center mb-3">Plus everything else</div>}
+            <ul className="space-y-2 mb-6">
+              {otherBenefits.map(({ icon, label }) => (
+                <li key={label} className="flex items-center gap-3 text-sm">
+                  <span className="text-amber-400/70 w-5 shrink-0 text-center text-xs">{icon}</span>
+                  <span className="text-stone-400">{label}</span>
                 </li>
               ))}
             </ul>
@@ -11392,7 +11445,8 @@ export default function CrateMate() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Undo toast — appears for 4s after logging a play */}
       {undoPending && (
@@ -11679,7 +11733,7 @@ export default function CrateMate() {
           }}
           isPro={effectiveIsPro}
           lastfmNext={lastfmNextSuggestion}
-          onUpgrade={() => setShowUpgradeModal(true)}
+          onUpgrade={(source) => openUpgradeModal(source || "trail")}
         />
       )}
 
