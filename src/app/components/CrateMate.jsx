@@ -674,6 +674,11 @@ function GenreTag({ genre, onClick, active }) {
   );
 }
 
+/** Local date string YYYY-MM-DD (avoids UTC mismatch across timezones) */
+function localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function stripArtistNum(s) {
   return (s || "").replace(/\s*\(\d+\)\s*$/, "").trim();
 }
@@ -3401,7 +3406,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
   const [freeTrailUsed, setFreeTrailUsed] = useState(() => {
     if (isPro) return false;
     try {
-      return localStorage.getItem('cratemate_free_trail_date') === new Date().toISOString().slice(0, 10);
+      return localStorage.getItem('cratemate_free_trail_date') === localDateStr();
     } catch { return false; }
   });
   const showReal = isPro || !freeTrailUsed;
@@ -3409,7 +3414,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
   function handleSuggestionNavigate(rec) {
     if (!isPro && !freeTrailUsed) {
       setFreeTrailUsed(true);
-      try { localStorage.setItem('cratemate_free_trail_date', new Date().toISOString().slice(0, 10)); } catch {}
+      try { localStorage.setItem('cratemate_free_trail_date', localDateStr()); } catch {}
     }
     onNavigate(rec);
   }
@@ -6684,7 +6689,7 @@ export default function CrateMate() {
   useEffect(() => {
     if (dailyPickAutoTriggered.current || !Array.isArray(collection) || collection.length === 0) return;
     if (new Date().getHours() < 6) return; // before 6 AM = still "yesterday"
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDateStr();
     try {
       const dismissed = localStorage.getItem("cratemate_daily_toast_dismissed");
       if (dismissed === todayStr) return; // user already clicked toast or visited Picks today
@@ -6726,7 +6731,7 @@ export default function CrateMate() {
       }
 
       // Check if we should retry not_found records today (once per day)
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = localDateStr();
       let retryNotFound = false;
       try { retryNotFound = localStorage.getItem('cratemate_notfound_retry') !== todayStr; } catch {}
 
@@ -7249,7 +7254,7 @@ export default function CrateMate() {
         const activePool = recoFilteredRecords.length > 0 ? recoFilteredRecords : myRecords;
         if (type === "daily") {
           const DAILY_CACHE_KEY = "cratemate_daily_picks";
-          const todayStr = new Date().toISOString().slice(0, 10);
+          const todayStr = localDateStr();
 
           // ── Check localStorage cache first ──
           try {
@@ -7492,7 +7497,7 @@ export default function CrateMate() {
   useEffect(() => {
     if (!reco || reco.label !== "Today's Pick" || dailyPickToast) return;
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = localDateStr();
       const dismissed = localStorage.getItem("cratemate_daily_toast_dismissed");
       if (dismissed === todayStr) return;
     } catch {}
@@ -7512,7 +7517,7 @@ export default function CrateMate() {
     if (tab === "reco" && (dailyPickToast || dailyPickToastMinimized)) {
       setDailyPickToast(null);
       setDailyPickToastMinimized(false);
-      try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {}
+      try { localStorage.setItem("cratemate_daily_toast_dismissed", localDateStr()); } catch {}
     }
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -8388,7 +8393,7 @@ export default function CrateMate() {
           <div className="flex items-center gap-2">
             {dailyPickToastMinimized && dailyPickToast && (
               <button
-                onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setDailyPickToastMinimized(false); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {} }}
+                onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setDailyPickToastMinimized(false); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", localDateStr()); } catch {} }}
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 hover:bg-amber-900/50 transition-colors"
                 title="Today's Pick"
               >
@@ -8852,6 +8857,22 @@ export default function CrateMate() {
                           >
                             <span>Filtered: {statFilterLabel}</span>
                             <span className="text-amber-400 font-bold">×</span>
+                          </button>
+                        )}
+                        {!statFilterLabel && activeGenres.size > 0 && (
+                          <button
+                            onClick={() => { setActiveGenres(new Set()); setStatFilterLabel(null); }}
+                            className="px-3 py-1.5 rounded-full bg-amber-900/70 backdrop-blur-sm border border-amber-700/50 text-amber-200 text-xs"
+                          >
+                            {activeGenres.size === 1 ? [...activeGenres][0] : `${activeGenres.size} genres`} ×
+                          </button>
+                        )}
+                        {!statFilterLabel && activeStyles.size > 0 && (
+                          <button
+                            onClick={() => setActiveStyles(new Set())}
+                            className="px-3 py-1.5 rounded-full bg-violet-900/70 backdrop-blur-sm border border-violet-700/50 text-violet-200 text-xs"
+                          >
+                            {activeStyles.size === 1 ? [...activeStyles][0] : `${activeStyles.size} styles`} ×
                           </button>
                         )}
                         {(activeGenres.size > 0 || activeStyles.size > 0 || activeDecade.size > 0 || activeFormat !== null) && (
@@ -11204,7 +11225,7 @@ export default function CrateMate() {
       {dailyPickToast && !dailyPickToastMinimized && (
         <div
           className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] max-w-sm w-full px-4 animate-[cm-toast-in_400ms_ease-out]"
-          onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setDailyPickToastMinimized(false); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", new Date().toISOString().slice(0, 10)); } catch {} }}
+          onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setDailyPickToastMinimized(false); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", localDateStr()); } catch {} }}
         >
           <div className="bg-stone-900/95 backdrop-blur-md border border-amber-800/30 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-lg cursor-pointer">
             <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-stone-800">
