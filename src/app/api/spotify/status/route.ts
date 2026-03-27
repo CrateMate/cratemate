@@ -6,11 +6,16 @@ export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data } = await supabase
-    .from("spotify_user_tokens")
-    .select("spotify_user_id, scope, updated_at")
-    .eq("user_id", userId)
-    .single();
+  const [{ data }, { count }] = await Promise.all([
+    supabase
+      .from("spotify_user_tokens")
+      .select("spotify_user_id, scope, updated_at")
+      .eq("user_id", userId)
+      .single(),
+    supabase
+      .from("spotify_user_tokens")
+      .select("*", { count: "exact", head: true }),
+  ]);
 
   const scope = data?.scope || "";
   const hasPlaylistScope =
@@ -21,6 +26,7 @@ export async function GET() {
     spotify_user_id: data?.spotify_user_id || null,
     scope: scope || null,
     hasPlaylistScope,
+    totalLinked: count ?? 0,
   });
 }
 

@@ -3332,7 +3332,7 @@ function CompareView({ recordA, recordB, featuresA, featuresB, playCountA, playC
   );
 }
 
-function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, onMinimize, playCounts, savePrompt, saving, onSaveSession, onDiscardSession, onRefresh, onShareSession, shareLoading }) {
+function PlayTrailView({ centerRecord, suggestions, loading, error, history, collection, searchOpen, searchQuery, onNavigate, onSearchChange, onToggleSearch, onClose, onMinimize, playCounts, savePrompt, saving, onSaveSession, onDiscardSession, onRefresh, onShareSession, shareLoading, isPro, lastfmNext, onUpgrade }) {
   const CENTER = 140;
   const SLOT = 100;
   const GAP = 18;
@@ -3417,7 +3417,9 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
               const suggestion = suggestions?.[key];
               const rec = suggestion?.record;
               const isLoading = loading && !suggestions;
-              if (!isLoading && suggestions && !rec && key !== "sideways") return null;
+              if (!isPro && !isLoading && key !== "sideways" && !rec) {
+                // still render as locked placeholder for all 3 directions
+              } else if (!isLoading && suggestions && !rec && key !== "sideways") return null;
               const isSideways = key === "sideways";
               return (
                 <div
@@ -3428,7 +3430,7 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                   <div style={{
                     position: "absolute",
                     fontSize: 14, fontFamily: "'Fraunces', serif", fontWeight: 700, letterSpacing: "0.02em",
-                    color, opacity: 0.85, whiteSpace: "nowrap",
+                    color, opacity: isPro ? 0.85 : 0.4, whiteSpace: "nowrap",
                     bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)",
                   }}>
                     {label}
@@ -3438,6 +3440,17 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
                   <div style={{ width: SLOT, height: SLOT, position: "relative" }}>
                     {isLoading ? (
                       <div className="rounded-xl w-full h-full animate-pulse" style={{ background: "#1c1917" }} />
+                    ) : !isPro ? (
+                      /* Locked placeholder for free users */
+                      <div
+                        className="rounded-xl w-full h-full flex items-center justify-center"
+                        style={{ background: `${color}12`, border: `1.5px solid ${color}25` }}
+                      >
+                        <div style={{ filter: "blur(1px)", opacity: 0.25, width: "100%", height: "100%", borderRadius: 12, background: `linear-gradient(135deg, ${color}33 0%, transparent 100%)` }} />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                          <span style={{ color, fontSize: 18, opacity: 0.5 }}>⊘</span>
+                        </div>
+                      </div>
                     ) : rec ? (
                       <button
                         onClick={() => onNavigate(rec)}
@@ -3530,6 +3543,34 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
 
       {loading && (
         <div className="text-center pb-6 text-stone-600 text-xs">Finding next records…</div>
+      )}
+
+      {/* Free user: Last.fm next + upgrade CTA */}
+      {!isPro && !savePrompt && (
+        <div className="shrink-0 px-5 pb-6 flex flex-col gap-3">
+          {lastfmNext ? (
+            <button
+              onClick={() => onNavigate(lastfmNext.record)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-stone-700/60 hover:border-stone-600 transition-colors"
+              style={{ background: "#1c1917" }}
+            >
+              <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-stone-800">
+                <CoverArt record={lastfmNext.record} size={36} />
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-stone-200 text-xs font-medium truncate">{lastfmNext.record.title}</div>
+                <div className="text-stone-500 text-[10px] truncate">{stripArtistNum(lastfmNext.record.artist)}</div>
+              </div>
+              <span className="text-stone-400 text-xs shrink-0">Next →</span>
+            </button>
+          ) : null}
+          <button
+            onClick={onUpgrade}
+            className="w-full py-2.5 rounded-2xl text-amber-400 text-xs font-medium border border-amber-800/40 hover:bg-amber-900/20 transition-colors"
+          >
+            ✦ Unlock 3-way trails with Pro
+          </button>
+        </div>
       )}
 
       {/* Save session prompt overlay */}
@@ -5632,6 +5673,10 @@ export default function CrateMate() {
   const [devSimulateFree, setDevSimulateFree] = useState(() => {
     try { return localStorage.getItem("cratemate_dev_simulate_free") === "1"; } catch { return false; }
   });
+  const [devSimulatePro, setDevSimulatePro] = useState(() => {
+    try { return localStorage.getItem("cratemate_dev_simulate_pro") === "1"; } catch { return false; }
+  });
+  const isDevUser = user?.id === process.env.NEXT_PUBLIC_DEV_USER_ID;
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [compareBase, setCompareBase] = useState(null);   // record A
   const [compareTarget, setCompareTarget] = useState(null); // record B (null = picker mode)
@@ -5659,10 +5704,16 @@ export default function CrateMate() {
   const [recoFilterGenres, setRecoFilterGenres] = useState(new Set());
   const [recoFilterDecades, setRecoFilterDecades] = useState(new Set());
   const [spotifyLinked, setSpotifyLinked] = useState(null); // null=unknown, true/false
+  const [spotifyTotalLinked, setSpotifyTotalLinked] = useState(0);
 
   const [spotifyRecs, setSpotifyRecs] = useState(null);
   const [spotifyRecsLoading, setSpotifyRecsLoading] = useState(false);
   const [spotifyExpanded, setSpotifyExpanded] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [proLoading, setProLoading] = useState(true);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [upgradeInterval, setUpgradeInterval] = useState("month");
   const [wantsSubTab, setWantsSubTab] = useState("wantlist");
   const [lastfmRecs, setLastfmRecs] = useState(null);
   const [lastfmRecsLoading, setLastfmRecsLoading] = useState(false);
@@ -5693,6 +5744,47 @@ export default function CrateMate() {
   });
   useEffect(() => { try { localStorage.setItem("cratemate_hc_shape", honeycombShape); } catch {} }, [honeycombShape]);
   useEffect(() => { try { localStorage.setItem("cratemate_hide_for_sale", hideForSale ? "1" : "0"); } catch {} }, [hideForSale]);
+
+  // Load pro status on mount; also handle Stripe redirect back
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const proParam = params.get("pro");
+    if (proParam) {
+      // Clean URL without triggering navigation
+      const clean = window.location.pathname;
+      window.history.replaceState({}, "", clean);
+    }
+    fetch("/api/stripe/status")
+      .then(r => r.ok ? r.json() : { isPro: false })
+      .then(d => {
+        setIsPro(d.isPro);
+        setProLoading(false);
+        if (proParam === "success" && d.isPro) setShowUpgradeModal(false);
+      })
+      .catch(() => setProLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dev overrides for testing (only active for dev user)
+  const effectiveIsPro = isDevUser && devSimulatePro ? true
+    : isDevUser && devSimulateFree ? false
+    : isPro;
+
+  async function handleUpgrade(interval = upgradeInterval) {
+    setUpgradeLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: window.location.href, interval }),
+      });
+      const { url } = await res.json();
+      if (url) window.location.href = url;
+    } catch {
+      // silently fail — user still on page
+    } finally {
+      setUpgradeLoading(false);
+    }
+  }
 
   // Escape key closes detail sheet
   useEffect(() => {
@@ -6380,6 +6472,7 @@ export default function CrateMate() {
         const status = statusRes.ok ? await statusRes.json() : null;
         const connected = !!status?.connected;
         setSpotifyLinked(connected);
+        setSpotifyTotalLinked(status?.totalLinked ?? 0);
         setSpotifyConnectedForPlaylists(connected && status?.hasPlaylistScope !== false);
         if (!connected) setSpotifyExpanded(true);
         if (connected) {
@@ -7657,7 +7750,7 @@ export default function CrateMate() {
 
   // For non-Spotify users: use Last.fm artist similarity to rank collection records
   async function fetchLastfmNextSuggestion(centerRecord, seenKeys) {
-    if (!devSimulateFree && Object.keys(spotifyFeatures).length > 0) return; // Spotify users use audio features instead
+    if (effectiveIsPro && Object.keys(spotifyFeatures).length > 0) return; // Pro users use audio features instead
     try {
       const artistName = stripArtistNum(centerRecord.artist || "").trim();
       if (!artistName) return;
@@ -7695,7 +7788,7 @@ export default function CrateMate() {
     if (trailCenter) return; // active session — use trailSuggestions instead
     if (bannerSuggestionsRecordRef.current === nowPlaying.record.id) return; // already computed
     bannerSuggestionsRecordRef.current = nowPlaying.record.id;
-    const hasSpotify = !devSimulateFree && Object.keys(spotifyFeatures).length > 0;
+    const hasSpotify = effectiveIsPro && Object.keys(spotifyFeatures).length > 0;
     if (!hasSpotify) { setBannerSuggestions(null); return; }
     // Async: fetch features then compute
     (async () => {
@@ -9328,28 +9421,42 @@ export default function CrateMate() {
             </button>
           ))}
 
-          <div className="rounded-xl border border-stone-700/60 p-4">
+          <div className="rounded-xl border border-stone-700/60 p-4 relative overflow-hidden">
             <div className="flex items-center gap-3 mb-3">
               <span className="text-xl w-8 text-center">🌙</span>
-              <div>
-                <div className="font-medium text-stone-200 text-sm">Mood Match</div>
+              <div className="flex-1">
+                <div className="font-medium text-stone-200 text-sm flex items-center gap-2">
+                  Mood Match
+                  {!effectiveIsPro && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-700/40 text-amber-400">Pro</span>}
+                </div>
                 <div className="text-xs text-stone-600">What&apos;s the vibe?</div>
               </div>
             </div>
-            <input
-              value={mood}
-              onChange={(e) => setMood(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
-              placeholder="e.g. melancholic rainy night, want to dance, road trip energy..."
-              className="w-full bg-stone-900/70 border border-stone-800 rounded-lg px-3 py-2 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/50 mb-3"
-            />
-            <button
-              onClick={() => mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
-              disabled={!mood || recoLoading || myRecords.length === 0}
-              className="w-full py-2.5 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-300 text-sm font-medium disabled:opacity-40 hover:bg-amber-900/50 transition-colors"
-            >
-              Find a Match
-            </button>
+            {effectiveIsPro ? (
+              <>
+                <input
+                  value={mood}
+                  onChange={(e) => setMood(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
+                  placeholder="e.g. melancholic rainy night, want to dance, road trip energy..."
+                  className="w-full bg-stone-900/70 border border-stone-800 rounded-lg px-3 py-2 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/50 mb-3"
+                />
+                <button
+                  onClick={() => mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
+                  disabled={!mood || recoLoading || myRecords.length === 0}
+                  className="w-full py-2.5 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-300 text-sm font-medium disabled:opacity-40 hover:bg-amber-900/50 transition-colors"
+                >
+                  Find a Match
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="w-full py-2.5 rounded-lg bg-amber-900/20 border border-amber-700/30 text-amber-400 text-sm font-medium hover:bg-amber-900/40 transition-colors"
+              >
+                Unlock with Pro →
+              </button>
+            )}
           </div>
 
           {myRecords.length === 0 && (
@@ -9602,8 +9709,11 @@ export default function CrateMate() {
             >Wantlist</button>
             <button
               onClick={() => setWantsSubTab("discover")}
-              className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${wantsSubTab === "discover" ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-500 hover:text-stone-300"}`}
-            >Discover</button>
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${wantsSubTab === "discover" ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-500 hover:text-stone-300"}`}
+            >
+              Based on your Crate
+              {!effectiveIsPro && <span className="text-[9px] px-1 py-0.5 rounded-full bg-amber-900/40 border border-amber-700/40 text-amber-400">Pro</span>}
+            </button>
           </div>
 
           {wantsSubTab === "wantlist" && (
@@ -9643,6 +9753,18 @@ export default function CrateMate() {
           {wantsSubTab === "discover" && (
             <div className="flex-1 overflow-y-auto px-4 space-y-3 pt-2" style={{ paddingBottom: 16 }}>
 
+              {!effectiveIsPro ? (
+                <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-4">
+                  <div className="text-3xl">✦</div>
+                  <div className="text-stone-200 font-medium text-sm">Based on your Crate</div>
+                  <div className="text-stone-500 text-xs leading-relaxed">Discover records to buy based on your listening history and similar artists from your collection.</div>
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="mt-2 px-5 py-2.5 rounded-2xl bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors"
+                  >Unlock with Pro →</button>
+                </div>
+              ) : (
+              <>
               {myRecords.length === 0 && (
                 <div className="text-center py-10 px-4">
                   <div className="text-4xl mb-3">⬡</div>
@@ -9651,8 +9773,9 @@ export default function CrateMate() {
                 </div>
               )}
 
-              {/* Spotify section — green contour */}
-              {spotifyLinked === true && (
+              {/* Spotify section — hidden when at 5-user capacity and user not already linked */}
+              {(spotifyLinked === true || (spotifyLinked === false && spotifyTotalLinked < 5)) && (
+              <>{spotifyLinked === true && (
                 <div className="rounded-xl border border-green-600/40 overflow-hidden">
                   <button
                     onClick={() => setSpotifyExpanded(e => !e)}
@@ -9733,7 +9856,7 @@ export default function CrateMate() {
                     </>
                   )}
                 </div>
-              )}
+              )}</>)}
 
               {/* Last.fm section — red contour */}
               <div className="rounded-xl border border-red-900/40 overflow-hidden">
@@ -9812,6 +9935,7 @@ export default function CrateMate() {
                   </>
                 )}
               </div>
+              </>)}
             </div>
           )}
         </div>
@@ -11045,31 +11169,107 @@ export default function CrateMate() {
               </div>
             </div>
 
-            {/* Developer tools */}
-            <div className="mt-6 pt-4 border-t border-stone-800/40">
-              <div className="text-stone-700 text-[10px] uppercase tracking-widest mb-3">Developer</div>
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <div className="text-stone-400 text-sm">Simulate free user</div>
-                  <div className="text-stone-600 text-xs mt-0.5">Forces Last.fm Play Next instead of Spotify 3-way trail</div>
-                </div>
-                <button
-                  onClick={() => {
-                    const next = !devSimulateFree;
-                    setDevSimulateFree(next);
-                    try { localStorage.setItem("cratemate_dev_simulate_free", next ? "1" : "0"); } catch {}
-                  }}
-                  className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ml-4 ${devSimulateFree ? "bg-amber-600" : "bg-stone-700"}`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${devSimulateFree ? "translate-x-5" : "translate-x-0.5"}`} />
-                </button>
+            {/* Developer tools — only visible to dev user */}
+            {isDevUser && (
+              <div className="mt-6 pt-4 border-t border-stone-800/40">
+                <div className="text-stone-700 text-[10px] uppercase tracking-widest mb-3">Developer</div>
+                {[
+                  { label: "Simulate free user", desc: "Forces free experience regardless of subscription", key: "cratemate_dev_simulate_free", value: devSimulateFree, set: setDevSimulateFree },
+                  { label: "Simulate Pro user",  desc: "Forces Pro experience regardless of subscription", key: "cratemate_dev_simulate_pro",  value: devSimulatePro,  set: setDevSimulatePro  },
+                ].map(({ label, desc, key, value, set }) => (
+                  <div key={key} className="flex items-center justify-between py-2">
+                    <div>
+                      <div className="text-stone-400 text-sm">{label}</div>
+                      <div className="text-stone-600 text-xs mt-0.5">{desc}</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !value;
+                        set(next);
+                        try { localStorage.setItem(key, next ? "1" : "0"); } catch {}
+                      }}
+                      className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ml-4 ${value ? "bg-amber-600" : "bg-stone-700"}`}
+                    >
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? "translate-x-5" : "translate-x-0.5"}`} />
+                    </button>
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
 
       {showAddModal && <AddRecordModal onClose={() => setShowAddModal(false)} onAdd={(r) => setCollection((p) => [...(p || []), r])} />}
+
+      {/* Pro upgrade modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center p-4" onClick={() => setShowUpgradeModal(false)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-sm bg-stone-950 border border-stone-800/60 rounded-3xl p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <button onClick={() => setShowUpgradeModal(false)} className="absolute top-4 right-4 text-stone-600 hover:text-stone-400 text-xl leading-none">×</button>
+            <div className="text-center mb-5">
+              <div className="text-3xl mb-3">✦</div>
+              <div className="text-stone-100 font-semibold text-lg mb-1">CrateMate Pro</div>
+              <div className="text-stone-500 text-sm">Unlock AI-powered crate digging</div>
+            </div>
+            <ul className="space-y-2.5 mb-6">
+              {[
+                { icon: "↓↑↔", label: "3-way trail suggestions — Cool off, Turn it up, Left turn" },
+                { icon: "🌙", label: "Mood Match — AI picks from your crate by vibe" },
+                { icon: "📅", label: "Today's Pick — AI-written reason, not just a template" },
+                { icon: "✦",  label: "Based on your Crate — records to buy from your listening history" },
+              ].map(({ icon, label }) => (
+                <li key={label} className="flex items-start gap-3 text-sm">
+                  <span className="text-amber-400 w-6 shrink-0 text-center mt-0.5 text-xs">{icon}</span>
+                  <span className="text-stone-300">{label}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* Billing interval toggle */}
+            <div className="flex rounded-xl overflow-hidden border border-stone-800 mb-4">
+              {[
+                { value: "month",   label: "Monthly",  price: "$4.99",  badge: null },
+                { value: "6month",  label: "6 months", price: "$26.99", badge: "Save 10%" },
+                { value: "year",    label: "Annual",   price: "$49.99", badge: "Save 17%" },
+              ].map(({ value, label, price, badge }) => (
+                <button
+                  key={value}
+                  onClick={() => setUpgradeInterval(value)}
+                  className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-colors text-sm ${
+                    upgradeInterval === value
+                      ? "bg-amber-900/30 text-amber-300"
+                      : "text-stone-500 hover:text-stone-300"
+                  }`}
+                >
+                  <span className="font-semibold">{price}</span>
+                  <span className="text-xs opacity-70">{label}</span>
+                  {badge && <span className="text-[10px] text-emerald-500 font-medium">{badge}</span>}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => handleUpgrade(upgradeInterval)}
+              disabled={upgradeLoading}
+              className="w-full py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-sm transition-colors disabled:opacity-60"
+            >
+              {upgradeLoading ? "Redirecting…" : `Start free trial`}
+            </button>
+            <div className="text-center mt-3 text-stone-600 text-xs">
+              {upgradeInterval === "year"
+                ? "10-day free trial · Billed annually · Cancel anytime"
+                : upgradeInterval === "6month"
+                ? "7-day free trial · Billed every 6 months · Cancel anytime"
+                : "3-day free trial · Billed monthly · Cancel anytime"}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Undo toast — appears for 4s after logging a play */}
       {undoPending && (
@@ -11187,7 +11387,7 @@ export default function CrateMate() {
           {(() => {
             const sessionMinimized = !!(trailCenter && !trailActive);
             const bannerRecord = sessionMinimized ? trailCenter : nowPlaying.record;
-            const hasSpotifyFeatures = !devSimulateFree && Object.keys(spotifyFeatures).length > 0;
+            const hasSpotifyFeatures = effectiveIsPro && Object.keys(spotifyFeatures).length > 0;
             return (
               <div className="flex items-center gap-3 px-4 py-2.5 max-w-md mx-auto">
                 <div
@@ -11351,6 +11551,9 @@ export default function CrateMate() {
             const session = { records: trailHistory, startTime: Date.now() };
             handleShareStory(session);
           }}
+          isPro={effectiveIsPro}
+          lastfmNext={lastfmNextSuggestion}
+          onUpgrade={() => setShowUpgradeModal(true)}
         />
       )}
 

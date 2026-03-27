@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   "/crate/(.*)",
   "/api/crate/(.*)",
   "/api/cron/(.*)",
+  "/api/stripe/webhook",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
