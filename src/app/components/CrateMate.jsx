@@ -6685,7 +6685,18 @@ export default function CrateMate() {
       for (let i = 0; i < 30 && !initialFeaturesLoaded.current; i++) {
         await new Promise(res => setTimeout(res, 200));
       }
-      const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]?.energy);
+
+      // Apply genre estimates immediately to not_found records (no pill needed)
+      const notFoundRecords = collection.filter(r => spotifyFeaturesRef.current[r.id]?.not_found);
+      for (const r of notFoundRecords) {
+        const estimated = estimateFeaturesFromRecord(r);
+        estimated._estimated = true;
+        spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: estimated };
+        setSpotifyFeatures(prev => ({ ...prev, [r.id]: estimated }));
+      }
+
+      // Exclude not_found records from the enrichment pill — they retry silently below
+      const uncached = collection.filter(r => r.artist && r.title && !spotifyFeaturesRef.current[r.id]?.energy && !spotifyFeaturesRef.current[r.id]?.not_found);
       if (uncached.length === 0) return;
       setEnrichmentProgress({ done: 0, total: uncached.length, type: "audio" });
       let done = 0;
@@ -6709,20 +6720,38 @@ export default function CrateMate() {
         if (i + CONCURRENCY < uncached.length) await new Promise(res => setTimeout(res, 800));
       }
       setEnrichmentProgress(null);
+      return notFoundRecords; // pass to chained handlers
     }
 
-    runFeaturesQueue().then(async () => {
+    runFeaturesQueue().then(async (notFoundList) => {
       // Second pass: backfill track_features for records that have album features but missing per-track data
-      if (enrichmentAbort.current) return;
+      if (enrichmentAbort.current) return notFoundList;
       const needsTrackFeatures = collection.filter(r => {
         const f = spotifyFeaturesRef.current[r.id];
-        return f && f.energy != null && !f.track_features;
+        return f && f.energy != null && !f._estimated && !f.track_features;
       });
-      if (needsTrackFeatures.length === 0) return;
+      if (needsTrackFeatures.length === 0) return notFoundList;
       for (const record of needsTrackFeatures) {
         if (enrichmentAbort.current) break;
         await fetchOneFeature(record, { force: true });
         await new Promise(res => setTimeout(res, 1200));
+      }
+      return notFoundList;
+    }).then(async (notFoundList) => {
+      // Silent daily retry for not_found records — no progress pill
+      if (enrichmentAbort.current || !notFoundList || notFoundList.length === 0) return;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      try {
+        if (localStorage.getItem('cratemate_notfound_retry') === todayStr) return;
+        localStorage.setItem('cratemate_notfound_retry', todayStr);
+      } catch {}
+      for (const r of notFoundList) {
+        if (enrichmentAbort.current) break;
+        const result = await fetchAndCacheFeatures(r);
+        if (result && result.energy != null) {
+          spotifyFeaturesRef.current = { ...spotifyFeaturesRef.current, [r.id]: result };
+        }
+        await new Promise(res => setTimeout(res, 800));
       }
     });
     return () => { enrichmentAbort.current = true; };

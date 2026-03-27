@@ -24,13 +24,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
-  const { error } = await supabase
+  // Try update first; if no row exists, insert
+  const { data: existing } = await supabase
     .from("user_profiles")
-    .upsert(
-      { user_id: userId, city_name, latitude, longitude },
-      { onConflict: "user_id" }
-    );
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  let error;
+  if (existing) {
+    ({ error } = await supabase
+      .from("user_profiles")
+      .update({ city_name, latitude, longitude })
+      .eq("user_id", userId));
+  } else {
+    ({ error } = await supabase
+      .from("user_profiles")
+      .insert({ user_id: userId, city_name, latitude, longitude }));
+  }
+
+  if (error) {
+    console.error("[location] save failed:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
