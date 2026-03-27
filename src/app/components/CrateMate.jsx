@@ -1646,8 +1646,8 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
           {/* Collapsible Sound Profile */}
           {(() => {
             const fromSpotify = spotifyFeatures?.[record.id];
-            const f = fromSpotify || estimateFeaturesFromRecord(record);
-            const isSpotify = !!fromSpotify;
+            const f = (fromSpotify?.energy != null) ? fromSpotify : estimateFeaturesFromRecord(record);
+            const isSpotify = !!(fromSpotify && !fromSpotify.not_found && !fromSpotify._estimated && fromSpotify.energy != null);
             const bars = [
               { label: "Energy",       value: f.energy,       color: "bg-amber-600/70",    hint: f.energy > 0.7 ? "high" : f.energy < 0.4 ? "low" : null },
               { label: "Mood",         value: f.valence,      color: "bg-rose-600/60",     hint: f.valence > 0.6 ? "upbeat" : f.valence < 0.4 ? "melancholic" : null },
