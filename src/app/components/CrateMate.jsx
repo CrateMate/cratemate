@@ -6451,6 +6451,12 @@ export default function CrateMate() {
   const swipeStartRef = useRef(null);
   function onSwipeStart(e) {
     if (viewMode === "drift") return;
+    // Don't capture swipe if touch started inside a horizontal scroll container
+    let el = e.target;
+    while (el && el !== e.currentTarget) {
+      if (el.scrollWidth > el.clientWidth && el.style?.touchAction === "pan-x") return;
+      el = el.parentElement;
+    }
     const t = e.touches?.[0];
     if (t) swipeStartRef.current = { x: t.clientX, y: t.clientY };
   }
