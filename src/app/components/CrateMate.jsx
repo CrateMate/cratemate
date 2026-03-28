@@ -3851,13 +3851,15 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
         </div>
       </div>
 
-      {/* Trail first-visit hint */}
+      {/* Trail first-visit hint — different for Pro vs Free */}
       {trailHintVisible && !savePrompt && (
         <div className="px-4 pb-2 shrink-0">
           <div className="px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-800/25 flex items-start gap-2">
             <span className="text-amber-500 text-sm shrink-0">💡</span>
             <div className="text-stone-300 text-[10px] leading-relaxed flex-1">
-              Pick a direction to guide your session. You always have a <span className="text-amber-400">Play Next</span> suggestion below your pick — no need to choose a trail path if you just want the next record.
+              {isPro
+                ? "Your session branches three ways — cool off, turn it up, or take a left turn. Each path picks from your crate based on your sound profile."
+                : "You get one free 3-way suggestion per day. After that, tap Play Next below your pick to keep your session going. Go Pro for unlimited trails."}
             </div>
             <button onClick={dismissTrailHint} className="text-stone-600 hover:text-stone-400 text-xs shrink-0">×</button>
           </div>
