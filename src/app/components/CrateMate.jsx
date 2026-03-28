@@ -4786,8 +4786,8 @@ async function generateTileExport(records, playCounts, mode = "full") {
 function honeycombPositions(count, BASE_SIZE) {
   const COL_STEP = BASE_SIZE * 0.76;
   const ROW_STEP = BASE_SIZE * 0.88;
-  const CIRCLE_RADIUS = BASE_SIZE * 3.2;
-  const RANGE = 6;
+  const RANGE = Math.max(6, Math.ceil(Math.sqrt(count * 1.2)));
+  const CIRCLE_RADIUS = BASE_SIZE * Math.max(3.2, RANGE * 0.55);
   const positions = [];
   for (let col = -RANGE; col <= RANGE; col++) {
     for (let row = -RANGE; row <= RANGE; row++) {
