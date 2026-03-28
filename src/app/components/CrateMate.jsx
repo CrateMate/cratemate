@@ -2483,7 +2483,7 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLog
         <div className="border-t border-white/[0.06] pt-2.5 pb-2">
           <div className="flex items-start gap-1.5">
             <span className="text-rose-500/70 text-xs shrink-0 mt-px">♥</span>
-            <div className="text-stone-400 text-xs leading-relaxed truncate">{hearts.join(", ")}</div>
+            <div className="text-stone-400 text-xs leading-relaxed truncate">{hearts.map(h => typeof h === "object" ? h.title : h).join(", ")}</div>
           </div>
         </div>
       ) : sideKeys.length > 0 ? (
