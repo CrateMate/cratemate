@@ -11890,6 +11890,18 @@ export default function CrateMate() {
                     </button>
                   </div>
                 ))}
+                <button
+                  onClick={() => {
+                    setSeenHints({});
+                    try { localStorage.removeItem("cratemate_hints"); } catch {}
+                    try { localStorage.removeItem("cratemate_free_trail_date"); } catch {}
+                    try { localStorage.removeItem("cratemate_notfound_retry"); } catch {}
+                    try { localStorage.removeItem("cratemate_trial_reminder_dismissed"); } catch {}
+                  }}
+                  className="w-full mt-3 py-2 rounded-lg border border-stone-700 text-stone-500 text-xs hover:text-amber-400 hover:border-amber-800/40 transition-colors"
+                >
+                  Reset all tooltips & daily flags
+                </button>
               </div>
             )}
           </div>
