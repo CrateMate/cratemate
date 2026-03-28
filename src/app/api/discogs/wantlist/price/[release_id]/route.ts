@@ -14,9 +14,8 @@ function conditionLabel(cond: string | undefined): string | null {
 
 function computeDealPct(suggested: number | null | undefined, lowestListing: number | null | undefined): number | null {
   if (!suggested || !lowestListing || lowestListing >= suggested) return null;
-  // Sanity check: if the deal seems too good (>80%), the data is probably unreliable
   const pct = Math.round((suggested - lowestListing) / suggested * 100);
-  if (pct > 80) return null;
+  if (pct > 65) return null;
   return pct;
 }
 
@@ -89,7 +88,7 @@ export async function GET(
     try {
       const statsRes = await discogsRequest(
         "GET",
-        `${DISCOGS_API}/marketplace/stats/${releaseId}?curr=USD`,
+        `${DISCOGS_API}/marketplace/stats/${releaseId}?curr=USD&condition=Very+Good+Plus+(VG%2B)`,
         { tokenKey: access_token, tokenSecret: access_token_secret }
       );
       if (statsRes.ok) {
@@ -103,7 +102,8 @@ export async function GET(
       }
     } catch { /* best-effort */ }
 
-    const deal_pct = computeDealPct(minPrice, lowestListing);
+    // Only compute deal % when there's enough market activity for reliable data
+    const deal_pct = (numForSale ?? 0) >= 5 ? computeDealPct(minPrice, lowestListing) : null;
 
     await upsertPriceCache(releaseId, {
       min_price: minPrice,

@@ -17,7 +17,7 @@ async function fetchLowestPrice(
   try {
     const res = await discogsRequest(
       "GET",
-      `${DISCOGS_API}/marketplace/stats/${releaseId}?curr=USD`,
+      `${DISCOGS_API}/marketplace/stats/${releaseId}?curr=USD&condition=Very+Good+Plus+(VG%2B)`,
       { tokenKey, tokenSecret }
     );
     if (!res.ok) return null;

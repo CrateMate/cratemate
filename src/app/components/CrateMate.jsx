@@ -997,15 +997,17 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
   const [wantsSort, setWantsSort] = useState("added"); // "added" | "price" | "deal"
   const pricesFetched = useRef(false);
 
-  // Fetch representative prices on first load for sorting
+  // Fetch representative prices only when user sorts by price or deal
+  // This avoids hammering Discogs API on every tab open for large wantlists
   useEffect(() => {
     if (!wantlist || wantlist.length === 0 || pricesFetched.current) return;
+    if (wantsSort === "added") return; // don't fetch prices for default sort
     pricesFetched.current = true;
     const reps = wantlist.map(g => g.representative?.release_id).filter(Boolean);
-    // Fetch in small batches to avoid overwhelming the API
     async function fetchPrices() {
-      for (let i = 0; i < reps.length; i += 3) {
-        const batch = reps.slice(i, i + 3);
+      // Fetch 2 at a time with 1.5s gaps to stay well under Discogs 60/min limit
+      for (let i = 0; i < reps.length; i += 2) {
+        const batch = reps.slice(i, i + 2);
         const results = await Promise.allSettled(
           batch.map(id => fetch(`/api/discogs/wantlist/price/${id}`).then(r => r.ok ? r.json() : null))
         );
@@ -1015,11 +1017,11 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           if (result.status === "fulfilled" && result.value) updates[id] = result.value;
         });
         if (Object.keys(updates).length > 0) setWantPrices(prev => ({ ...prev, ...updates }));
-        if (i + 3 < reps.length) await new Promise(res => setTimeout(res, 300));
+        if (i + 2 < reps.length) await new Promise(res => setTimeout(res, 1500));
       }
     }
     fetchPrices();
-  }, [wantlist]);
+  }, [wantlist, wantsSort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allGroups = wantlist || [];
   const filteredGroups = wantsSearch.trim()
