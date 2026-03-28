@@ -11639,6 +11639,8 @@ export default function CrateMate() {
             const updated = { ...selected, ...patch };
             setSelected(updated);
             setCollection((prev) => Array.isArray(prev) ? prev.map((r) => r.id === updated.id ? updated : r) : prev);
+            // Keep reco in sync so Today's Pick / Random shows updated hearts
+            if (reco?.record?.id === updated.id) setReco(prev => ({ ...prev, record: updated }));
           }}
           playCount={playCounts[selected.id] || 0}
           playCountThisYear={playSessions.filter(s => String(s.record_id) === String(selected.id) && new Date(s.played_at).getFullYear() === new Date().getFullYear()).length}
