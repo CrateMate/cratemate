@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { DISCOGS_API, discogsRequest } from "@/lib/discogs";
 
+export const maxDuration = 60;
+
 type RecordRow = {
   artist: string;
   title: string;

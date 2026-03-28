@@ -9,6 +9,8 @@ import {
   spotifyFeaturesKey,
 } from "@/lib/discogs/cache";
 
+export const maxDuration = 60;
+
 // POST: fetch + cache features for one record
 export async function POST(request: Request) {
   const { userId } = await auth();

@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase";
 import { discogsRequest, mapCollectionRelease, DISCOGS_API } from "@/lib/discogs";
 import { logEvent } from "@/lib/analytics";
 
+export const maxDuration = 60;
+
 function stripThumb<T extends Record<string, unknown>>(row: T): Omit<T, "thumb"> {
   const { thumb: _thumb, ...rest } = row as T & { thumb?: unknown };
   return rest;

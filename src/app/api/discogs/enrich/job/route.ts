@@ -2,6 +2,8 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { createEnrichJob, runEnrichJobPage } from "@/lib/discogs/enrich-job";
 
+export const maxDuration = 60;
+
 type ModeParam = "full" | "thumb";
 
 export async function POST(request: Request) {

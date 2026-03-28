@@ -1,6 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import Anthropic from "@anthropic-ai/sdk";
 
+export const maxDuration = 60;
+
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const ALLOWED_MODEL = "claude-haiku-4-5-20251001";
 const MAX_TOKENS_CAP = 600;

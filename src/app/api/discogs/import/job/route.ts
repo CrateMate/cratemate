@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase";
 import { DISCOGS_API, discogsRequest } from "@/lib/discogs";
 import { createImportJob, runImportJobPage } from "@/lib/discogs/import-job";
 
+export const maxDuration = 60;
+
 export async function POST(_request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
