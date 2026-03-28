@@ -1038,24 +1038,28 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
     : allGroups;
 
   // Sort filtered groups
-  const sortedGroups = useMemo(() => {
-    if (wantsSort === "added") return filteredGroups;
-    return [...filteredGroups].sort((a, b) => {
-      const priceA = wantPrices[a.representative?.release_id];
-      const priceB = wantPrices[b.representative?.release_id];
-      if (wantsSort === "price") {
-        const valA = priceA?.lowest_listing ?? Infinity;
-        const valB = priceB?.lowest_listing ?? Infinity;
-        return valA - valB; // cheapest first
-      }
-      if (wantsSort === "deal") {
-        const dealA = priceA?.deal_pct ?? -1;
-        const dealB = priceB?.deal_pct ?? -1;
-        return dealB - dealA; // best deal first
-      }
-      return 0;
-    });
-  }, [filteredGroups, wantsSort, wantPrices]);
+  let sortedGroups = filteredGroups;
+  if (wantsSort !== "added" && Object.keys(wantPrices).length > 0) {
+    try {
+      sortedGroups = [...filteredGroups].sort((a, b) => {
+        const idA = a.representative?.release_id;
+        const idB = b.representative?.release_id;
+        const priceA = idA ? wantPrices[idA] : null;
+        const priceB = idB ? wantPrices[idB] : null;
+        if (wantsSort === "price") {
+          const valA = priceA?.lowest_listing ?? Infinity;
+          const valB = priceB?.lowest_listing ?? Infinity;
+          return valA - valB;
+        }
+        if (wantsSort === "deal") {
+          const dealA = priceA?.deal_pct ?? -1;
+          const dealB = priceB?.deal_pct ?? -1;
+          return dealB - dealA;
+        }
+        return 0;
+      });
+    } catch { /* fall back to unsorted */ }
+  }
 
   const wantsTotalPages = Math.ceil(sortedGroups.length / WANTS_PAGE_SIZE);
   const visibleGroups = wantsInfiniteScroll
