@@ -794,7 +794,7 @@ function WantReleaseRow({ release, onPriceLoaded }) {
   );
 }
 
-function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSetting, onSaveAlert, onRemoveAlert }) {
+function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSetting, onSaveAlert, onRemoveAlert, sharedPrice }) {
   const rep = group.representative;
   const genres = (rep?.genres || "").split(",").map((g) => g.trim()).filter(Boolean);
   const marketplaceUrl = group.master_id
@@ -820,8 +820,12 @@ function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSettin
     return best;
   }, null);
 
-  // Pre-fetch representative release price on mount so deal badge shows without expanding
+  // Use shared price from parent if available, otherwise fetch
   useEffect(() => {
+    if (sharedPrice && rep?.release_id) {
+      setLoadedPrices(prev => ({ ...prev, [rep.release_id]: sharedPrice }));
+      return;
+    }
     if (!rep?.release_id) return;
     fetch(`/api/discogs/wantlist/price/${rep.release_id}`)
       .then(r => r.ok ? r.json() : null)
@@ -829,7 +833,7 @@ function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSettin
         if (data?.min_price != null) setLoadedPrices(prev => ({ ...prev, [rep.release_id]: data }));
       })
       .catch(() => {});
-  }, [rep?.release_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rep?.release_id, sharedPrice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePointerDown() {
     didLongPress.current = false;
@@ -988,6 +992,35 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
     ? Math.round((wantlistImportJob.imported / wantlistImportJob.total) * 100)
     : null;
 
+  // Shared price map — lifted from individual cards so we can sort by price
+  const [wantPrices, setWantPrices] = useState({}); // release_id → price data
+  const [wantsSort, setWantsSort] = useState("added"); // "added" | "price" | "deal"
+  const pricesFetched = useRef(false);
+
+  // Fetch representative prices on first load for sorting
+  useEffect(() => {
+    if (!wantlist || wantlist.length === 0 || pricesFetched.current) return;
+    pricesFetched.current = true;
+    const reps = wantlist.map(g => g.representative?.release_id).filter(Boolean);
+    // Fetch in small batches to avoid overwhelming the API
+    async function fetchPrices() {
+      for (let i = 0; i < reps.length; i += 3) {
+        const batch = reps.slice(i, i + 3);
+        const results = await Promise.allSettled(
+          batch.map(id => fetch(`/api/discogs/wantlist/price/${id}`).then(r => r.ok ? r.json() : null))
+        );
+        const updates = {};
+        batch.forEach((id, idx) => {
+          const result = results[idx];
+          if (result.status === "fulfilled" && result.value) updates[id] = result.value;
+        });
+        if (Object.keys(updates).length > 0) setWantPrices(prev => ({ ...prev, ...updates }));
+        if (i + 3 < reps.length) await new Promise(res => setTimeout(res, 300));
+      }
+    }
+    fetchPrices();
+  }, [wantlist]);
+
   const allGroups = wantlist || [];
   const filteredGroups = wantsSearch.trim()
     ? allGroups.filter((g) => {
@@ -1001,11 +1034,32 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
         );
       })
     : allGroups;
-  const wantsTotalPages = Math.ceil(filteredGroups.length / WANTS_PAGE_SIZE);
+
+  // Sort filtered groups
+  const sortedGroups = useMemo(() => {
+    if (wantsSort === "added") return filteredGroups;
+    return [...filteredGroups].sort((a, b) => {
+      const priceA = wantPrices[a.representative?.release_id];
+      const priceB = wantPrices[b.representative?.release_id];
+      if (wantsSort === "price") {
+        const valA = priceA?.lowest_listing ?? Infinity;
+        const valB = priceB?.lowest_listing ?? Infinity;
+        return valA - valB; // cheapest first
+      }
+      if (wantsSort === "deal") {
+        const dealA = priceA?.deal_pct ?? -1;
+        const dealB = priceB?.deal_pct ?? -1;
+        return dealB - dealA; // best deal first
+      }
+      return 0;
+    });
+  }, [filteredGroups, wantsSort, wantPrices]);
+
+  const wantsTotalPages = Math.ceil(sortedGroups.length / WANTS_PAGE_SIZE);
   const visibleGroups = wantsInfiniteScroll
-    ? filteredGroups.slice(0, wantsVisible)
-    : filteredGroups.slice((wantsPage - 1) * WANTS_PAGE_SIZE, wantsPage * WANTS_PAGE_SIZE);
-  const wantsHasMore = wantsInfiniteScroll && wantsVisible < filteredGroups.length;
+    ? sortedGroups.slice(0, wantsVisible)
+    : sortedGroups.slice((wantsPage - 1) * WANTS_PAGE_SIZE, wantsPage * WANTS_PAGE_SIZE);
+  const wantsHasMore = wantsInfiniteScroll && wantsVisible < sortedGroups.length;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -1059,12 +1113,31 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
           >🔔</button>
         )}
         {allGroups.length > 0 && (
-          <button
-            onClick={() => { setWantsInfiniteScroll(s => !s); setWantsPage(1); setWantsVisible(WANTS_PAGE_SIZE); }}
-            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${wantsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
-          >
-            {wantsInfiniteScroll ? "∞" : "p."}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {[
+              { value: "added", label: "Recent" },
+              { value: "price", label: "Price" },
+              ...(isPro ? [{ value: "deal", label: "Deals" }] : []),
+            ].map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setWantsSort(value)}
+                className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${wantsSort === value ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-600 hover:text-stone-400"}`}
+              >{label}</button>
+            ))}
+            {!isPro && (
+              <button
+                onClick={() => onUpgrade?.("priceAlerts")}
+                className="text-[10px] px-2 py-0.5 rounded-full border border-stone-800/30 text-stone-700"
+              >Deals ✦</button>
+            )}
+            <button
+              onClick={() => { setWantsInfiniteScroll(s => !s); setWantsPage(1); setWantsVisible(WANTS_PAGE_SIZE); }}
+              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${wantsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
+            >
+              {wantsInfiniteScroll ? "∞" : "p."}
+            </button>
+          </div>
         )}
       </div>
 
@@ -1084,7 +1157,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
 
       {wantsSearch && (
         <div className="px-4 pb-1 text-[10px] text-stone-600">
-          {filteredGroups.length} of {allGroups.length} albums
+          {sortedGroups.length} of {allGroups.length} albums
         </div>
       )}
 
@@ -1122,6 +1195,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
                 alertSetting={alertSettings.get(group.master_id || group.representative?.release_id)}
                 onSaveAlert={onSaveAlert}
                 onRemoveAlert={onRemoveAlert}
+                sharedPrice={repId ? wantPrices[repId] : null}
               />
             );
           })}
