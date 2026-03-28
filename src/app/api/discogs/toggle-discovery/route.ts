@@ -7,7 +7,8 @@ export async function POST(request: Request) {
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
-  const discoverable = !!body.discoverable;
+  const discoverable = body.discoverable !== undefined ? !!body.discoverable : undefined;
+  const sharePlays = body.share_plays !== undefined ? !!body.share_plays : undefined;
 
   // Resolve display name: Discogs username if connected, else Clerk name
   const { data: tokenRow } = await supabase
@@ -28,14 +29,15 @@ export async function POST(request: Request) {
       userId.slice(-8);
   }
 
+  const row: Record<string, unknown> = { user_id: userId, display_name: displayName };
+  if (discoverable !== undefined) row.is_discoverable = discoverable;
+  if (sharePlays !== undefined) row.share_plays = sharePlays;
+
   const { error } = await supabase
     .from("user_profiles")
-    .upsert(
-      { user_id: userId, display_name: displayName, is_discoverable: discoverable },
-      { onConflict: "user_id" }
-    );
+    .upsert(row, { onConflict: "user_id" });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ is_discoverable: discoverable });
+  return NextResponse.json({ is_discoverable: discoverable, share_plays: sharePlays });
 }

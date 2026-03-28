@@ -6412,6 +6412,39 @@ export default function CrateMate() {
   const [overlapLoading, setOverlapLoading] = useState(false);
   const [showAllSharedArtists, setShowAllSharedArtists] = useState(false);
   const [showAllUniqueRecords, setShowAllUniqueRecords] = useState(false);
+  const [followingIds, setFollowingIds] = useState(new Set()); // user_ids I follow
+  const [circleData, setCircleData] = useState(null); // recent plays from circle
+  const [sharePlays, setSharePlays] = useState(true);
+  const [discoverSearch, setDiscoverSearch] = useState("");
+
+  // Load follows + circle when discover tab opens
+  useEffect(() => {
+    if (tab !== "discover") return;
+    fetch("/api/follow").then(r => r.ok ? r.json() : []).then(rows => {
+      setFollowingIds(new Set(rows.map(r => r.following_id)));
+    }).catch(() => {});
+    fetch("/api/follow/circle").then(r => r.ok ? r.json() : []).then(data => {
+      setCircleData(Array.isArray(data) ? data : []);
+    }).catch(() => {});
+  }, [tab]);
+
+  async function toggleFollow(targetUserId) {
+    const res = await fetch("/api/follow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ following_id: targetUserId }),
+    });
+    if (res.ok) {
+      const { followed } = await res.json();
+      setFollowingIds(prev => {
+        const next = new Set(prev);
+        if (followed) next.add(targetUserId);
+        else next.delete(targetUserId);
+        return next;
+      });
+    }
+  }
+
   // Auto-fetch discover results when tab opens
   useEffect(() => {
     if (tab !== "discover" || !isDiscoverable || discoverFetchedRef.current || discoverLoading) return;
@@ -11056,6 +11089,30 @@ export default function CrateMate() {
                 <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white/90 transition-all shadow ${isDiscoverable ? "left-5" : "left-0.5"}`} />
               </button>
             </div>
+            {isDiscoverable && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-stone-300 text-xs">Share my plays</div>
+                  <div className="text-stone-700 text-[10px]">Let followers see what you spin</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const next = !sharePlays;
+                    setSharePlays(next);
+                    try {
+                      await fetch("/api/discogs/toggle-discovery", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ share_plays: next }),
+                      });
+                    } catch { setSharePlays(!next); }
+                  }}
+                  className={`w-9 h-5 rounded-full border transition-colors relative ${sharePlays ? "bg-amber-700/60 border-amber-600/60" : "bg-stone-800 border-stone-700"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white/90 transition-all shadow ${sharePlays ? "left-4" : "left-0.5"}`} />
+                </button>
+              </div>
+            )}
             {discogsUsername && (
               <button
                 onClick={() => {
@@ -11111,6 +11168,50 @@ export default function CrateMate() {
                   </div>
                 );
               })()}
+
+              {/* Your Circle — recent plays from people you follow */}
+              {circleData && circleData.length > 0 && (
+                <div>
+                  <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Your Circle</div>
+                  <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                    {circleData.map((p, i) => (
+                      <div key={`${p.user_id}-${i}`} className="shrink-0 text-center" style={{ width: 64 }}>
+                        <div className="w-12 h-12 mx-auto rounded-xl overflow-hidden bg-stone-800 mb-1 border border-stone-700/40">
+                          {p.thumb
+                            ? <img src={proxyArtUrl(upgradeDiscogsThumb(p.thumb) || p.thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                            : <div className="w-full h-full bg-stone-700" />}
+                        </div>
+                        <div className="text-stone-300 text-[9px] truncate">{p.title}</div>
+                        <div className="text-stone-600 text-[8px] truncate">@{p.username}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Username search */}
+              <div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={discoverSearch}
+                    onChange={(e) => setDiscoverSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && discoverSearch.trim()) {
+                        window.open(`/crate/${encodeURIComponent(discoverSearch.trim())}`, "_blank");
+                        setDiscoverSearch("");
+                      }
+                    }}
+                    placeholder="Find a crate by username…"
+                    className="flex-1 bg-stone-900/70 border border-stone-800 rounded-lg px-3 py-2 text-xs text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/50"
+                  />
+                  {discoverSearch.trim() && (
+                    <button
+                      onClick={() => { window.open(`/crate/${encodeURIComponent(discoverSearch.trim())}`, "_blank"); setDiscoverSearch(""); }}
+                      className="px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-400 text-xs hover:bg-amber-900/50 transition-colors shrink-0"
+                    >Go</button>
+                  )}
+                </div>
+              </div>
 
               <div className="flex items-center justify-between">
                 <div className="text-stone-500 text-xs uppercase tracking-wider">Similar Crates</div>
@@ -11172,6 +11273,12 @@ export default function CrateMate() {
                             </div>
                           </div>
                           <div className="shrink-0 flex items-center gap-3">
+                            {u.user_id && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleFollow(u.user_id); }}
+                                className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${followingIds.has(u.user_id) ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-600 hover:text-stone-300"}`}
+                              >{followingIds.has(u.user_id) ? "Following" : "Follow"}</button>
+                            )}
                             <div className="text-right">
                               <div className="text-amber-400 text-xs font-medium">{u.similarity_pct}%</div>
                               <div className="text-stone-700 text-xs">match</div>

@@ -104,6 +104,7 @@ export async function GET() {
 
       return {
         username: profile.display_name,
+        user_id: profile.user_id,
         record_count: theirList.length,
         shared_artists: sharedArtists,
         similarity_pct: similarityPct,

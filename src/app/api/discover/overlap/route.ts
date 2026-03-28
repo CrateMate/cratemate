@@ -84,7 +84,7 @@ export async function GET(request: Request) {
   // Look up their user_id from user_profiles (works for all users, not just Discogs)
   const { data: profileRows } = await supabase
     .from("user_profiles")
-    .select("user_id")
+    .select("user_id, is_pro, share_plays")
     .eq("display_name", username)
     .eq("is_discoverable", true)
     .limit(1);
@@ -267,10 +267,12 @@ export async function GET(request: Request) {
   return NextResponse.json({
     sharedArtists,
     theirUniqueRecords: theirUniqueRecords.slice(0, 50),
-    theirRecentPlays,
+    theirRecentPlays: profileRow.share_plays !== false ? theirRecentPlays : [],
     myTotal: myRecords.length,
     theirTotal: theirRecords.length,
     myProfile: avgProfile(myRecords),
-    theirProfile: avgProfile(theirRecords),
+    theirProfile: profileRow.is_pro ? avgProfile(theirRecords) : null,
+    theirIsPro: profileRow.is_pro ?? false,
+    theirUserId: profileRow.user_id,
   });
 }
