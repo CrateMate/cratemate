@@ -7992,7 +7992,7 @@ export default function CrateMate() {
 
           // Step 3: Claude picks from the 5 and writes the reason
           const SYSTEM = "You are a passionate music obsessive recommending records from a friend's personal collection. Be warm and specific — speak to the music, not the calendar. Avoid filler slang like dude, man, or bro. Return valid JSON only — no markdown, no prose outside the JSON.";
-          const text = await callClaude([{ role: "user", content: `My mood right now: "${mood}"\n${context}\n\nHere are the best matches from my collection:\n${numbered}\n\nPick the ONE record (by number) that best fits this mood, time, and atmosphere. Write 1-2 warm sentences about why this record is the right pull right now.\n\nRespond ONLY with JSON: {"pick": <number>, "reason":"..."}` }], 150, SYSTEM);
+          const text = await callClaude([{ role: "user", content: `My mood right now: "${mood}"\n${context}\n\nHere are the best matches from my collection:\n${numbered}\n\nPick the ONE record (by number) that best fits this mood. Write ONE short sentence (under 25 words) about why it fits. Be specific to the music, not generic.\n\nRespond ONLY with JSON: {"pick": <number>, "reason":"..."}` }], 80, SYSTEM);
           const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
           let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
           if (Array.isArray(parsed)) parsed = parsed[0];
