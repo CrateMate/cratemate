@@ -61,6 +61,43 @@ export async function GET() {
   });
 }
 
+// POST: manually add a release to the wantlist
+export async function POST(request: Request) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const { release_id, master_id, artist, title, year_pressed, label, format, thumb, genres, styles, country, catno } = body;
+  if (!release_id || !title) return NextResponse.json({ error: "Missing release_id or title" }, { status: 400 });
+
+  const row = {
+    user_id: userId,
+    release_id,
+    master_id: master_id || null,
+    artist: artist || "",
+    title,
+    year_pressed: year_pressed || null,
+    label: label || "",
+    format: format || "",
+    thumb: thumb || "",
+    genres: genres || "",
+    styles: styles || "",
+    notes: catno ? `${country || ""} · ${catno}`.trim() : "",
+    added_at: new Date().toISOString(),
+    found: false,
+    found_record_id: null,
+  };
+
+  const { data, error } = await supabase
+    .from("wantlist")
+    .upsert(row, { onConflict: "user_id,release_id" })
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
 export async function DELETE(request: Request) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

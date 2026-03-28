@@ -162,6 +162,109 @@ function AddRecordModal({ onClose, onAdd }) {
   );
 }
 
+function AddToWantlistModal({ onClose, onAdd }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState(null);
+  const debounce = useRef(null);
+
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); return; }
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/discogs/search?q=${encodeURIComponent(q)}`);
+        if (res.ok) setResults(await res.json());
+        else setResults([]);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 500);
+  }, [q]);
+
+  async function handleAdd(r) {
+    setAdding(r.id);
+    try {
+      const res = await fetch("/api/discogs/wantlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          release_id: r.id,
+          master_id: r.master_id || null,
+          artist: r.title?.split(" - ")[0] || "",
+          title: r.title?.split(" - ").slice(1).join(" - ") || r.title || "",
+          year_pressed: r.year || null,
+          label: (r.label || []).slice(0, 1).join(", "),
+          format: (r.format || []).join(", "),
+          thumb: r.thumb || r.cover_image || "",
+          genres: (r.genre || []).join(", "),
+          styles: (r.style || []).join(", "),
+          country: r.country || "",
+          catno: r.catno || "",
+        }),
+      });
+      if (res.ok) {
+        onAdd?.();
+        onClose();
+      }
+    } catch {}
+    setAdding(null);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-end justify-center" onClick={onClose}>
+      <div className="bg-stone-950 border border-stone-800/80 rounded-t-3xl w-full max-w-md p-5 pb-10" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 20 }} className="text-amber-50">Add to Wantlist</h2>
+          <button onClick={onClose} className="text-stone-600 hover:text-stone-400 text-xl">×</button>
+        </div>
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search Discogs — artist, title..."
+          className="w-full bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60 mb-3"
+        />
+        {loading && <div className="text-stone-600 text-sm text-center py-4">Searching...</div>}
+        <div className="space-y-1 max-h-72 overflow-y-auto">
+          {results.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => handleAdd(r)}
+              disabled={adding === r.id}
+              className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all"
+            >
+              {r.thumb ? (
+                <img src={proxyArtUrl(upgradeDiscogsThumb(r.thumb) || r.thumb)} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0 opacity-80" />
+              ) : (
+                <div className="w-10 h-10 rounded bg-stone-800 flex-shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-amber-50 text-sm truncate">{r.title}</div>
+                <div className="text-stone-500 text-xs truncate">
+                  {[r.year, r.country, ...(r.label || []).slice(0, 1), r.catno].filter(Boolean).join(" · ")}
+                </div>
+                <div className="text-stone-600 text-[10px] truncate">
+                  {(r.format || []).slice(0, 2).join(", ")}
+                </div>
+              </div>
+              {adding === r.id ? (
+                <span className="text-stone-600 text-xs">Adding...</span>
+              ) : (
+                <span className="text-amber-700 text-lg">+</span>
+              )}
+            </button>
+          ))}
+          {!loading && q && results.length === 0 && (
+            <div className="text-stone-700 text-sm text-center py-6">No results found</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const GENRE_PALETTE = {
   // Cool / acoustic
   "jazz":             { tw: "bg-sky-900/40 text-sky-300 border-sky-800/40",            hex: "#38bdf8" },
@@ -974,11 +1077,12 @@ function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSettin
 
 const WANTS_PAGE_SIZE = 25;
 
-function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold, isPro, onUpgrade, alertSettings, onSaveAlert, onRemoveAlert, nowPlaying, onScroll, topSlot }) {
+function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold, isPro, onUpgrade, alertSettings, onSaveAlert, onRemoveAlert, nowPlaying, onScroll, topSlot, onRefreshWantlist }) {
   const [wantsPage, setWantsPage] = useState(1);
   const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(true);
   const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
   const [wantsSearch, setWantsSearch] = useState("");
+  const [showAddWantlist, setShowAddWantlist] = useState(false);
   const wantsSentinelRef = useRef(null);
 
   useEffect(() => {
@@ -1111,6 +1215,12 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
         >
           {isImporting ? "Importing…" : "↓ Import"}
         </button>
+        <button
+          onClick={() => setShowAddWantlist(true)}
+          className="text-xs px-3 py-1.5 rounded-lg border border-stone-700 text-stone-400 hover:text-amber-300 hover:border-amber-900/50 transition-all"
+        >
+          + Add
+        </button>
         {isImporting && progress !== null && (
           <span className="text-[10px] text-stone-500">{progress}%</span>
         )}
@@ -1222,6 +1332,14 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
             )
           }
         </div>
+      )}
+
+      {/* Add to Wantlist modal */}
+      {showAddWantlist && (
+        <AddToWantlistModal
+          onClose={() => setShowAddWantlist(false)}
+          onAdd={() => onRefreshWantlist?.()}
+        />
       )}
     </div>
   );
@@ -10288,6 +10406,10 @@ export default function CrateMate() {
               onSaveAlert={saveAlertSetting}
               onRemoveAlert={removeAlertSetting}
               nowPlaying={!!nowPlaying}
+              onRefreshWantlist={async () => {
+                const res = await fetch("/api/discogs/wantlist");
+                if (res.ok) setWantlist(await res.json());
+              }}
                            onStartImport={async () => {
                 if (!wantlist) {
                   const res = await fetch("/api/discogs/wantlist");
