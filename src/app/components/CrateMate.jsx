@@ -8642,7 +8642,7 @@ export default function CrateMate() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {dailyPickToastMinimized && dailyPickToast && (
               <button
                 onClick={() => { setReco({ record: dailyPickToast.record, reason: dailyPickToast.reason, label: "Today's Pick" }); setDailyPickToast(null); setDailyPickToastMinimized(false); setTab("reco"); try { localStorage.setItem("cratemate_daily_toast_dismissed", localDateStr()); } catch {} }}
