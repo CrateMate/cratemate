@@ -2499,10 +2499,12 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLog
                 <div key={row} className={`flex gap-4 ${row > 0 ? "mt-2" : ""}`}>
                   {[left, right].filter(Boolean).map(side => (
                     <div key={side} className="flex-1 min-w-0">
-                      <div className="text-stone-600 text-[9px] uppercase tracking-wider mb-0.5">Side {side}</div>
+                      <div className="text-stone-600 text-[9px] uppercase tracking-wider mb-0.5">
+                        Side {side} <span className="text-rose-500/50">{"♥".repeat(heartSides[side].length)}</span>
+                      </div>
                       {heartSides[side].map((h, i) => (
                         <div key={i} className="text-stone-400 text-[10px] truncate">
-                          <span className="text-rose-500/60">♥</span> {h.pos && <span className="text-stone-600">{h.pos}</span>} {h.title}
+                          {h.pos && <span className="text-stone-600">{h.pos}</span>} {h.title}
                         </div>
                       ))}
                     </div>
