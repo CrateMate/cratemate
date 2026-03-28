@@ -3604,6 +3604,18 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
     return [...pool].sort(() => Math.random() - 0.5).slice(0, 3);
   }, [centerRecord?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [trailHintVisible, setTrailHintVisible] = useState(() => {
+    try { return !JSON.parse(localStorage.getItem("cratemate_hints") || "{}").trail_session; } catch { return true; }
+  });
+  function dismissTrailHint() {
+    setTrailHintVisible(false);
+    try {
+      const hints = JSON.parse(localStorage.getItem("cratemate_hints") || "{}");
+      hints.trail_session = true;
+      localStorage.setItem("cratemate_hints", JSON.stringify(hints));
+    } catch {}
+  }
+
   const directions = [
     { key: "windDown", label: "cool off",    offsetX: -(SLOT + GAP), offsetY: (CENTER - SLOT) / 2, color: "#60a5fa" },
     { key: "liftUp",  label: "turn it up", offsetX: CENTER + GAP,    offsetY: (CENTER - SLOT) / 2, color: "#f87171" },
@@ -3643,6 +3655,19 @@ function PlayTrailView({ centerRecord, suggestions, loading, error, history, col
           </button>
         </div>
       </div>
+
+      {/* Trail first-visit hint */}
+      {trailHintVisible && !savePrompt && (
+        <div className="px-4 pb-2 shrink-0">
+          <div className="px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-800/25 flex items-start gap-2">
+            <span className="text-amber-500 text-sm shrink-0">💡</span>
+            <div className="text-stone-300 text-[10px] leading-relaxed flex-1">
+              Pick a direction to guide your session. You always have a <span className="text-amber-400">Play Next</span> suggestion below your pick — no need to choose a trail path if you just want the next record.
+            </div>
+            <button onClick={dismissTrailHint} className="text-stone-600 hover:text-stone-400 text-xs shrink-0">×</button>
+          </div>
+        </div>
+      )}
 
       {/* History strip */}
       {history.length > 1 && (
@@ -9808,6 +9833,26 @@ export default function CrateMate() {
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           <div className="px-4 space-y-3 pt-0">
 
+          {!seenHints["tab_reco"] && collection.length > 0 && (
+            <HintBanner onDismiss={() => dismissHint("tab_reco")}>
+              Tap Random or Today&apos;s for a pick from your crate. Pro unlocks Mood Match — describe your vibe and we&apos;ll find the record.
+            </HintBanner>
+          )}
+
+          {/* Enrichment quality notice — shows when sound profile is still building */}
+          {collection.length > 0 && (() => {
+            const enriched = Object.values(spotifyFeatures).filter(f => f && !f.not_found && !f._estimated && f.energy != null).length;
+            const pct = Math.round(enriched / collection.length * 100);
+            if (pct >= 80 || seenHints["enrichment_quality"]) return null;
+            return (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-stone-900/60 border border-stone-800/40">
+                <span className="text-stone-600 text-xs">◎</span>
+                <div className="text-stone-500 text-[10px] flex-1">Recommendations improve as your sound profile builds ({pct}% complete). Keep using the app — it gets smarter.</div>
+                <button onClick={() => dismissHint("enrichment_quality")} className="text-stone-700 text-xs shrink-0">×</button>
+              </div>
+            );
+          })()}
+
           {/* Genre + Decade filters */}
           {myRecords.length > 0 && (() => {
             const availableGenres = [...new Set(myRecords.flatMap(r => getGenres(r)))].sort();
@@ -10202,6 +10247,11 @@ export default function CrateMate() {
 
       {tab === "wants" && (
         <div className="flex-1 flex flex-col overflow-hidden" style={tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : undefined}>
+          {!seenHints["tab_wants"] && (
+            <HintBanner onDismiss={() => dismissHint("tab_wants")}>
+              Your Discogs wantlist. Long-press any record to open it on the marketplace. Set price alerts to get notified when a deal drops.
+            </HintBanner>
+          )}
           {/* Subtab pills */}
           <div className="px-4 pt-2 pb-1 flex gap-2 shrink-0">
             <button
@@ -10449,6 +10499,11 @@ export default function CrateMate() {
 
       {tab === "stats" && (
         <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
+          {!seenHints["tab_stats"] && collection.length > 0 && (
+            <HintBanner onDismiss={() => dismissHint("tab_stats")}>
+              Your collection and listening stats. Tap any genre bubble or decade bar to filter your crate. Share your stats as a card.
+            </HintBanner>
+          )}
           {(() => {
             const { decades, genres, formats, styles } = buildCollectionStats(myRecords);
             const { byHour, byDow, nightPlays, dayPlays, weekendPlays, weekdayPlays, midnightRecord, sunMorningRecord } = buildTimeStats(playSessions, collection);
@@ -11203,6 +11258,11 @@ export default function CrateMate() {
       {tab === "discover" && (
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           <div className="px-4 pt-2 space-y-4">
+          {!seenHints["tab_discover"] && (
+            <HintBanner onDismiss={() => dismissHint("tab_discover")}>
+              Find collectors with similar taste. Follow them to see what they&apos;re spinning. Search by username to find friends.
+            </HintBanner>
+          )}
           {/* Discovery toggle + share */}
           <div className="bg-white/[0.04] rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
