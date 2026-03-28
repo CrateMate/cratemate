@@ -2481,9 +2481,32 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLog
       {/* Hearted tracks or side preview */}
       {hearts.length > 0 ? (
         <div className="border-t border-white/[0.06] pt-2.5 pb-2">
-          <div className="flex items-start gap-1.5">
-            <span className="text-rose-500/70 text-xs shrink-0 mt-px">♥</span>
-            <div className="text-stone-400 text-xs leading-relaxed truncate">{hearts.map(h => typeof h === "object" ? h.title : h).join(", ")}</div>
+          <div className="flex gap-4">
+            <div className="flex-1 min-w-0">
+              {hearts.slice(0, 3).map((h, i) => {
+                const title = typeof h === "object" ? h.title : h;
+                const pos = typeof h === "object" ? h.key : null;
+                return (
+                  <div key={i} className="text-stone-400 text-[10px] truncate">
+                    <span className="text-rose-500/60">♥</span> {pos && <span className="text-stone-600">{pos}</span>} {title}
+                  </div>
+                );
+              })}
+            </div>
+            {hearts.length > 3 && (
+              <div className="flex-1 min-w-0">
+                {hearts.slice(3, 6).map((h, i) => {
+                  const title = typeof h === "object" ? h.title : h;
+                  const pos = typeof h === "object" ? h.key : null;
+                  return (
+                    <div key={i} className="text-stone-400 text-[10px] truncate">
+                      <span className="text-rose-500/60">♥</span> {pos && <span className="text-stone-600">{pos}</span>} {title}
+                    </div>
+                  );
+                })}
+                {hearts.length > 6 && <div className="text-stone-600 text-[10px]">+{hearts.length - 6} more</div>}
+              </div>
+            )}
           </div>
         </div>
       ) : sideKeys.length > 0 ? (
