@@ -7982,7 +7982,7 @@ export default function CrateMate() {
           const next = scored.slice(3, 8).sort(() => Math.random() - 0.5);
           const shortlist = [...top, ...next].slice(0, 5);
 
-          const numbered = shortlist.map((r, i) => `${i + 1}. ${describeRecord(r)}`).join("\n");
+          const numbered = shortlist.map((r, i) => `${i + 1}. ${describeRecord(r.record)}`).join("\n");
 
           // Build context: weather + time of day
           const hour = new Date().getHours();
@@ -7997,9 +7997,9 @@ export default function CrateMate() {
           let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
           if (Array.isArray(parsed)) parsed = parsed[0];
           const pickIdx = (parsed?.pick ?? 1) - 1;
-          const picked = shortlist[Math.max(0, Math.min(pickIdx, shortlist.length - 1))] || shortlist[0];
+          const pickedItem = shortlist[Math.max(0, Math.min(pickIdx, shortlist.length - 1))] || shortlist[0];
           if (!parsed?.reason) throw new Error("bad-schema");
-          setReco({ record: picked, reason: parsed.reason, label: "Mood Match" });
+          setReco({ record: pickedItem.record, reason: parsed.reason, label: "Mood Match" });
         }
       } catch (err) {
         if (err.message === "bad-schema" || err.message === "no-json") setRecoError("Got an unexpected response — try again.");
