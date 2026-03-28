@@ -11197,8 +11197,7 @@ export default function CrateMate() {
                     onChange={(e) => setDiscoverSearch(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && discoverSearch.trim()) {
-                        window.open(`/crate/${encodeURIComponent(discoverSearch.trim())}`, "_blank");
-                        setDiscoverSearch("");
+                        window.location.href = `/crate/${encodeURIComponent(discoverSearch.trim())}`;
                       }
                     }}
                     placeholder="Find a crate by username…"
@@ -11206,7 +11205,7 @@ export default function CrateMate() {
                   />
                   {discoverSearch.trim() && (
                     <button
-                      onClick={() => { window.open(`/crate/${encodeURIComponent(discoverSearch.trim())}`, "_blank"); setDiscoverSearch(""); }}
+                      onClick={() => { window.location.href = `/crate/${encodeURIComponent(discoverSearch.trim())}`; }}
                       className="px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-400 text-xs hover:bg-amber-900/50 transition-colors shrink-0"
                     >Go</button>
                   )}

@@ -70,12 +70,20 @@ export default function PublicCrate({ records, username }) {
             <span className="ml-1">· {records.length} records</span>
           </div>
         </div>
-        <a
-          href="/sign-up"
-          className="text-xs px-3 py-1.5 rounded-full border border-amber-800/50 bg-amber-900/20 text-amber-300 hover:bg-amber-900/40 transition-colors whitespace-nowrap"
-        >
-          Build your own crate — it&apos;s free →
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href="/app"
+            className="text-xs px-3 py-1.5 rounded-full border border-stone-700/50 text-stone-400 hover:text-stone-200 hover:border-stone-600 transition-colors whitespace-nowrap"
+          >
+            ← My crate
+          </a>
+          <a
+            href="/sign-up"
+            className="text-xs px-3 py-1.5 rounded-full border border-amber-800/50 bg-amber-900/20 text-amber-300 hover:bg-amber-900/40 transition-colors whitespace-nowrap"
+          >
+            Join free →
+          </a>
+        </div>
       </div>
 
       {/* View */}
