@@ -9835,14 +9835,14 @@ export default function CrateMate() {
                 key={type}
                 onClick={() => !recoLoading && myRecords.length > 0 && getReco(type)}
                 disabled={recoLoading || myRecords.length === 0}
-                className={`flex-1 py-3 rounded-xl border text-center transition-all ${
+                className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 transition-all ${
                   myRecords.length === 0
                     ? "border-stone-800/50 opacity-35"
                     : "border-stone-700/60 hover:border-amber-900/50 hover:bg-white/[0.02]"
                 }`}
               >
-                <span className="text-lg">{icon}</span>
-                <div className="font-medium text-stone-300 text-xs mt-0.5">{title}</div>
+                <span className="text-base">{icon}</span>
+                <span className="font-medium text-stone-300 text-xs">{title}</span>
               </button>
             ))}
           </div>
