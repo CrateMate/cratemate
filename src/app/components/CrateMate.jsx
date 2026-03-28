@@ -785,7 +785,7 @@ function WantReleaseRow({ release, onPriceLoaded }) {
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <span className="text-[10px] text-stone-600">↗ Discogs Marketplace</span>
           {price && (
-            <span className="text-[10px] text-emerald-700">from ${price.lowest_listing != null ? price.lowest_listing.toFixed(2) : price.min_price.toFixed(2)} VG+{price.ships_from ? ` ${countryToFlag(price.ships_from) || price.ships_from}` : ''}</span>
+            <span className="text-[10px] text-emerald-700">from ${(price.lowest_listing ?? price.min_price ?? 0).toFixed(2)} VG+{price.ships_from ? ` ${countryToFlag(price.ships_from) || price.ships_from}` : ''}</span>
           )}
           {price && <DealBadge dealPct={price.deal_pct} />}
         </div>
@@ -886,7 +886,7 @@ function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSettin
             )}
             {minPrice && (
               <span className="text-[10px] text-emerald-700">
-                from ${minPrice.lowest_listing != null ? minPrice.lowest_listing.toFixed(2) : minPrice.min_price.toFixed(2)} VG+{minPrice.ships_from ? ` ${countryToFlag(minPrice.ships_from) || minPrice.ships_from}` : ''}
+                from ${(minPrice.lowest_listing ?? minPrice.min_price ?? 0).toFixed(2)} VG+{minPrice.ships_from ? ` ${countryToFlag(minPrice.ships_from) || minPrice.ships_from}` : ''}
               </span>
             )}
             {bestDeal && <DealBadge dealPct={bestDeal.deal_pct} />}
@@ -916,7 +916,7 @@ function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSettin
           </button>
         )}
         {minPrice?.lowest_listing != null && (
-          <span className="text-[10px] text-stone-600">Now: ${minPrice.lowest_listing.toFixed(2)}</span>
+          <span className="text-[10px] text-stone-600">Now: ${(minPrice.lowest_listing ?? minPrice.min_price ?? 0).toFixed(2)}</span>
         )}
       </div>
 
