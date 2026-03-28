@@ -794,7 +794,7 @@ function WantReleaseRow({ release, onPriceLoaded }) {
   );
 }
 
-function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSaveThreshold, onRemoveThreshold }) {
+function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSetting, onSaveAlert, onRemoveAlert }) {
   const rep = group.representative;
   const genres = (rep?.genres || "").split(",").map((g) => g.trim()).filter(Boolean);
   const marketplaceUrl = group.master_id
@@ -804,15 +804,9 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
   const didLongPress = useRef(false);
   const [loadedPrices, setLoadedPrices] = useState({});
 
-  // Bell-slider state
-  const trackRef = useRef(null);
-  const isDragging = useRef(false);
-  const activePct = threshold?.threshold_deal_pct ?? 0;
-  const [dragPct, setDragPct] = useState(activePct);
-  const [dragging, setDragging] = useState(false);
-
-  // Sync dragPct when threshold changes externally
-  useEffect(() => { if (!dragging) setDragPct(threshold?.threshold_deal_pct ?? 0); }, [threshold, dragging]);
+  // Price alert input state
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [priceInput, setPriceInput] = useState(alertSetting?.target_price_usd ? String(alertSetting.target_price_usd) : "");
 
   const minPrice = Object.values(loadedPrices).reduce((best, p) => {
     if (!best || p.min_price < best.min_price) return p;
@@ -899,84 +893,58 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
         </div>
       </div>
 
-      {/* Bell slider — only shown when push is enabled */}
-      {pushEnabled && (
-        <div
-          className="px-3 pb-2 pt-1"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {/* % label floats above thumb while dragging */}
-          <div ref={trackRef} className="relative h-7 flex items-center select-none" style={{ touchAction: "none" }}>
-            {/* Track fill — only visible when active */}
-            <div className="absolute inset-y-1/2 -translate-y-1/2 left-0 right-0 rounded-full overflow-hidden" style={{ height: 2 }}>
-              <div
-                className="h-full rounded-full transition-colors"
-                style={{
-                  width: `${(dragPct / 50) * 100}%`,
-                  background: dragPct > 0 ? "#f59e0b" : "transparent",
-                }}
-              />
-            </div>
-            {/* Track background — faint, always shown */}
-            <div className="absolute inset-y-1/2 -translate-y-1/2 left-0 right-0 rounded-full" style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
+      {/* Price alert — inline per-album */}
+      <div className="flex items-center gap-2 px-3 pb-2" onClick={(e) => e.stopPropagation()}>
+        {alertSetting?.target_price_usd ? (
+          <button
+            onClick={() => isPro ? setAlertOpen(o => !o) : onUpgrade?.("priceAlerts")}
+            className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-full bg-amber-900/25 border border-amber-800/35 text-amber-400 hover:bg-amber-900/40 transition-colors"
+          >
+            <span>🔔</span>
+            <span>Under ${Number(alertSetting.target_price_usd).toFixed(0)}</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => isPro ? setAlertOpen(o => !o) : onUpgrade?.("priceAlerts")}
+            className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border transition-colors ${isPro ? "border-stone-800/40 text-stone-600 hover:text-amber-400 hover:border-amber-800/40" : "border-stone-800/30 text-stone-700"}`}
+          >
+            {isPro ? "🔔 Set alert" : "🔔 Set alert ✦"}
+          </button>
+        )}
+        {minPrice?.lowest_listing != null && (
+          <span className="text-[10px] text-stone-600">Now: ${minPrice.lowest_listing.toFixed(2)}</span>
+        )}
+      </div>
 
-            {/* Floating pct label */}
-            {dragging && dragPct > 0 && (
-              <div
-                className="absolute -top-5 text-[10px] text-amber-300 font-medium pointer-events-none"
-                style={{ left: `calc(${(dragPct / 50) * 100}% - 16px)` }}
-              >
-                ≥{dragPct}%
-              </div>
-            )}
-
-            {/* Bell thumb */}
-            <div
-              className="absolute"
-              style={{
-                left: `calc(${(dragPct / 50) * 100}% - 12px)`,
-                cursor: "ew-resize",
-                fontSize: 18,
-                lineHeight: 1,
-                filter: dragPct > 0 ? "none" : "grayscale(1) opacity(0.4)",
-                transition: dragging ? "none" : "left 0.15s ease, filter 0.2s",
-                userSelect: "none",
-              }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                e.currentTarget.setPointerCapture(e.pointerId);
-                isDragging.current = true;
-                setDragging(true);
-              }}
-              onPointerMove={(e) => {
-                if (!isDragging.current) return;
-                const track = trackRef.current;
-                if (!track) return;
-                const rect = track.getBoundingClientRect();
-                const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                const snapped = Math.round((ratio * 50) / 5) * 5;
-                setDragPct(snapped);
-              }}
-              onPointerUp={(e) => {
-                if (!isDragging.current) return;
-                isDragging.current = false;
-                setDragging(false);
-                if (dragPct < 5) {
-                  onRemoveThreshold?.();
-                  setDragPct(0);
-                } else {
-                  onSaveThreshold?.(dragPct);
-                }
-              }}
-            >
-              🔔
-            </div>
-          </div>
-          {/* Hint text */}
-          <div className="text-[10px] text-stone-700 mt-0.5">
-            {dragPct > 0 ? `Alert when ≥${dragPct}% below market` : "Drag to set deal alert"}
-          </div>
+      {/* Price alert input — expanded */}
+      {alertOpen && isPro && (
+        <div className="px-3 pb-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className="text-stone-500 text-xs">$</span>
+          <input
+            type="number"
+            value={priceInput}
+            onChange={(e) => setPriceInput(e.target.value)}
+            placeholder="Max price"
+            className="flex-1 bg-stone-900 border border-stone-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-50 placeholder-stone-700 outline-none focus:border-amber-900/50 w-20"
+            min="0"
+            step="1"
+          />
+          <button
+            onClick={() => {
+              const val = parseFloat(priceInput);
+              if (val > 0) {
+                onSaveAlert?.(group.master_id || group.representative?.release_id, val);
+                setAlertOpen(false);
+              }
+            }}
+            className="text-xs px-3 py-1.5 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-400 hover:bg-amber-900/50 transition-colors"
+          >Save</button>
+          {alertSetting && (
+            <button
+              onClick={() => { onRemoveAlert?.(group.master_id || group.representative?.release_id); setAlertOpen(false); setPriceInput(""); }}
+              className="text-xs px-2 py-1.5 rounded-lg border border-stone-800 text-stone-600 hover:text-rose-400 hover:border-rose-900/40 transition-colors"
+            >Remove</button>
+          )}
         </div>
       )}
 
@@ -999,7 +967,7 @@ function WantGroupRow({ group, expanded, onToggle, pushEnabled, threshold, onSav
 
 const WANTS_PAGE_SIZE = 25;
 
-function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold, nowPlaying, onScroll, topSlot }) {
+function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpandedMasters, onStartImport, onRemove, pushPermission, pushSubscribed, onSubscribePush, priceThresholds, onSaveThreshold, onRemoveThreshold, isPro, onUpgrade, alertSettings, onSaveAlert, onRemoveAlert, nowPlaying, onScroll, topSlot }) {
   const [wantsPage, setWantsPage] = useState(1);
   const [wantsInfiniteScroll, setWantsInfiniteScroll] = useState(true);
   const [wantsVisible, setWantsVisible] = useState(WANTS_PAGE_SIZE);
@@ -1149,10 +1117,11 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
                   });
                 }}
                 onRemove={onRemove}
-                pushEnabled={pushPermission === "granted" && pushSubscribed}
-                threshold={repId ? priceThresholds.get(repId) : null}
-                onSaveThreshold={repId ? (price) => onSaveThreshold(repId, price) : null}
-                onRemoveThreshold={repId ? () => onRemoveThreshold(repId) : null}
+                isPro={isPro}
+                onUpgrade={onUpgrade}
+                alertSetting={alertSettings.get(group.master_id || group.representative?.release_id)}
+                onSaveAlert={onSaveAlert}
+                onRemoveAlert={onRemoveAlert}
               />
             );
           })}
@@ -6341,7 +6310,8 @@ export default function CrateMate() {
     typeof Notification !== "undefined" ? Notification.permission : "default"
   );
   const [pushSubscribed, setPushSubscribed] = useState(false);
-  const [priceThresholds, setPriceThresholds] = useState(new Map()); // release_id → row
+  const [priceThresholds, setPriceThresholds] = useState(new Map()); // release_id → row (legacy)
+  const [alertSettings, setAlertSettings] = useState(new Map()); // master_id → { target_price_usd, enabled, ... }
 
   async function subscribeToPush() {
     try {
@@ -6388,6 +6358,27 @@ export default function CrateMate() {
     setPriceThresholds(prev => { const m = new Map(prev); m.delete(releaseId); return m; });
   }
 
+  async function saveAlertSetting(masterId, targetPriceUsd) {
+    const res = await fetch("/api/push/alert-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ master_id: masterId, target_price_usd: targetPriceUsd }),
+    });
+    if (res.ok) {
+      const row = await res.json();
+      setAlertSettings(prev => { const m = new Map(prev); m.set(masterId, row); return m; });
+    }
+  }
+
+  async function removeAlertSetting(masterId) {
+    await fetch("/api/push/alert-settings", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ master_id: masterId }),
+    });
+    setAlertSettings(prev => { const m = new Map(prev); m.delete(masterId); return m; });
+  }
+
   // Load push sub status + thresholds when wantlist tab opens
   useEffect(() => {
     if (tab !== "wants") return;
@@ -6403,6 +6394,14 @@ export default function CrateMate() {
         const m = new Map();
         for (const row of rows) m.set(row.release_id, row);
         setPriceThresholds(m);
+      })
+      .catch(() => {});
+    fetch("/api/push/alert-settings")
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => {
+        const m = new Map();
+        for (const row of rows) m.set(row.master_id, row);
+        setAlertSettings(m);
       })
       .catch(() => {});
   }, [tab]);
@@ -9978,6 +9977,11 @@ export default function CrateMate() {
               priceThresholds={priceThresholds}
               onSaveThreshold={savePriceThreshold}
               onRemoveThreshold={removePriceThreshold}
+              isPro={effectiveIsPro}
+              onUpgrade={(source) => openUpgradeModal(source || "priceAlerts")}
+              alertSettings={alertSettings}
+              onSaveAlert={saveAlertSetting}
+              onRemoveAlert={removeAlertSetting}
               nowPlaying={!!nowPlaying}
                            onStartImport={async () => {
                 if (!wantlist) {
@@ -11512,6 +11516,11 @@ export default function CrateMate() {
             description: "Get personalized recommendations for records to buy based on your collection's DNA.",
             icon: "✦",
           },
+          priceAlerts: {
+            headline: "Never miss a deal on your wantlist",
+            description: "Set price targets per album and get notified when a copy drops into your buy range.",
+            icon: "🔔",
+          },
         };
         const ctx = upgradeContent[upgradeSource] || null;
         const allBenefits = [
@@ -11521,6 +11530,7 @@ export default function CrateMate() {
           { key: "refresh",      icon: "🔄",  label: "Shuffle suggestions" },
           { key: "moodMatch",    icon: "🌙",  label: "Mood Match" },
           { key: "discover",     icon: "✦",   label: "Based on your Crate recommendations" },
+          { key: "priceAlerts",  icon: "🔔",  label: "Wantlist price alerts" },
         ];
         const otherBenefits = allBenefits.filter(b => b.key !== upgradeSource);
         return (
