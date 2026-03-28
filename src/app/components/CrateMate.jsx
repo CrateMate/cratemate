@@ -10044,7 +10044,9 @@ export default function CrateMate() {
 
           {!seenHints["tab_reco"] && collection.length > 0 && (
             <HintBanner onDismiss={() => dismissHint("tab_reco")}>
-              Tap Random or Today&apos;s for a pick from your crate. Pro unlocks Mood Match — describe your vibe and we&apos;ll find the record.
+              {effectiveIsPro
+                ? "Tap Random or Today\u2019s for a quick pick, or use Mood Match to describe your vibe and we\u2019ll find the perfect record."
+                : "Tap Random or Today\u2019s for a pick from your crate. Pro unlocks Mood Match \u2014 describe your vibe and we\u2019ll find the record."}
             </HintBanner>
           )}
 
