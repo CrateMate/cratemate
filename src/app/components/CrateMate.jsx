@@ -8763,7 +8763,7 @@ export default function CrateMate() {
           style={tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : undefined}>
           {!seenHints["crate_play"] && collection.length > 0 && collection.length <= 10 && (
             <HintBanner onDismiss={() => dismissHint("crate_play")}>
-              Long-press any record to log a play, or use the Log button in the detail card.
+              Long-press any record in visual views, or tap ▶ in list view, to log a play.
             </HintBanner>
           )}
           {viewMode !== "drift" && (!selected || tab !== "crate") && <div className="px-4 space-y-2 mb-1">
@@ -10031,7 +10031,7 @@ export default function CrateMate() {
         <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           {!seenHints["history"] && playSessions.length === 0 && (
             <HintBanner onDismiss={() => dismissHint("history")}>
-              Long-press any record to log a play, or use the Log button in the detail card to start your streak.
+              Long-press any record in visual views, or tap ▶ in list view, to log a play and start your streak.
             </HintBanner>
           )}
           <div className="px-4">
@@ -10579,7 +10579,7 @@ export default function CrateMate() {
                       <div className="text-center py-16 px-4">
                         <div className="text-2xl mb-2 text-stone-700">▷</div>
                         <div className="text-stone-600 text-sm">No plays logged yet.</div>
-                        <div className="text-stone-700 text-xs mt-1">Long-press any record to log a play.</div>
+                        <div className="text-stone-700 text-xs mt-1">Long-press in visual views or tap ▶ in list view to log a play.</div>
                       </div>
                     )}
 
@@ -11658,7 +11658,7 @@ export default function CrateMate() {
       {/* Quick-start onboarding overlay — shows once for users with records */}
       {!seenHints["onboarding_tour"] && collection.length > 0 && !showOnboarding && tab === "crate" && (() => {
         const steps = [
-          { icon: "▷", label: "Log plays", desc: "Long-press a record to log what you're spinning" },
+          { icon: "▷", label: "Log plays", desc: "Long-press in visual views or tap ▶ in list view" },
           { icon: "✦", label: "Get picks", desc: "Today's Pick and Mood Match find your next record" },
           { icon: "◎", label: "See stats", desc: "Track your listening habits and share your taste" },
         ];
