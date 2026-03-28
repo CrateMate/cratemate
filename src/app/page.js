@@ -7,12 +7,13 @@ import Link from "next/link";
 
 const SCREENSHOTS = [
   { name: "crate", label: "Crate" },
-  { name: "wants", label: "Wants" },
-  { name: "hearts", label: "Hearts" },
-  { name: "history", label: "History" },
-  { name: "reco", label: "Reco" },
-  { name: "stats-listening", label: "Stats" },
+  { name: "detail", label: "Detail" },
+  { name: "trail", label: "Trail" },
+  { name: "reco", label: "Picks" },
   { name: "stats-collection", label: "Collection" },
+  { name: "stats-listening", label: "Listening" },
+  { name: "wants", label: "Wantlist" },
+  { name: "hearts", label: "Hearts" },
   { name: "discover", label: "Discover" },
   { name: "honeycomb", label: "Honeycomb" },
 ];
@@ -92,9 +93,9 @@ export default function LandingPage() {
             className="text-lg text-stone-400 leading-relaxed max-w-md"
             style={{ fontFamily: "'DM Sans', sans-serif" }}
           >
-            Track what you spin. Discover what&rsquo;s next.
+            Track what you spin. Know what to play next.
             <br />
-            Share your collection with the world.
+            Never miss a deal on the records you want.
           </p>
 
           <div className="flex flex-wrap gap-3 pt-2">
@@ -171,27 +172,37 @@ export default function LandingPage() {
 
       {/* ── FEATURES ── */}
       <section className="max-w-4xl mx-auto px-6 py-16">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[
             {
-              icon: "🎵",
+              icon: "⏺",
               title: "Your whole collection",
-              body: "Discogs sync or search 60M+ records. No Discogs account needed.",
+              body: "Import from Discogs or search 60M+ records. Visual crate views, drift mode, and detailed record cards.",
             },
             {
-              icon: "📈",
+              icon: "▷",
               title: "Track every spin",
-              body: "Plays, streaks, and session history so you always know what you've been spinning.",
+              body: "Log plays, build streaks, and see your listening DNA — top artists, genres, and when you spin most.",
+            },
+            {
+              icon: "⬡",
+              title: "Trail sessions",
+              body: "Branch your listening three ways — cool off, turn it up, or take a left turn. Guided by your sound profile.",
             },
             {
               icon: "✦",
-              title: "Discover what's next",
-              body: "AI + Spotify recs built from your actual listening — not generic charts.",
+              title: "Smart picks",
+              body: "Daily recommendations, random pulls, and Mood Match — all built from your actual collection and taste.",
             },
             {
-              icon: "🌐",
-              title: "Share your crate",
-              body: "Public profiles. Let others find you by shared artists and genres.",
+              icon: "🔔",
+              title: "Wantlist price alerts",
+              body: "Set price targets on records you want. Get notified when a VG+ copy drops into your buy range.",
+            },
+            {
+              icon: "⊕",
+              title: "Find similar crates",
+              body: "Discover collectors with matching taste. Follow them to see what they're spinning.",
             },
           ].map(({ icon, title, body }) => (
             <div
