@@ -10,10 +10,12 @@ export async function GET(request: Request) {
   const q = searchParams.get("q");
   if (!q) return NextResponse.json([]);
 
+  const type = searchParams.get("type") || "release";
   const url = new URL(`${DISCOGS_API}/database/search`);
   url.searchParams.set("q", q);
-  url.searchParams.set("type", "release");
-  url.searchParams.set("per_page", "10");
+  url.searchParams.set("type", type);
+  url.searchParams.set("format", "Vinyl");
+  url.searchParams.set("per_page", searchParams.get("per_page") || "10");
   url.searchParams.set("key", process.env.DISCOGS_CONSUMER_KEY!);
   url.searchParams.set("secret", process.env.DISCOGS_CONSUMER_SECRET!);
 

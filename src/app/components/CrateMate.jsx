@@ -164,36 +164,85 @@ function AddRecordModal({ onClose, onAdd }) {
 
 function AddToWantlistModal({ onClose, onAdd }) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState([]);
+  const [masters, setMasters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(null);
+  const [expandedMaster, setExpandedMaster] = useState(null); // master_id being expanded
+  const [pressings, setPressings] = useState([]); // individual releases for expanded master
+  const [pressingsLoading, setPressingsLoading] = useState(false);
   const debounce = useRef(null);
 
+  // Search masters (albums)
   useEffect(() => {
-    if (!q.trim()) { setResults([]); return; }
+    if (!q.trim()) { setMasters([]); setExpandedMaster(null); return; }
     clearTimeout(debounce.current);
     debounce.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/discogs/search?q=${encodeURIComponent(q)}`);
-        if (res.ok) setResults(await res.json());
-        else setResults([]);
-      } catch { setResults([]); }
+        const res = await fetch(`/api/discogs/search?q=${encodeURIComponent(q)}&type=master&per_page=8`);
+        if (res.ok) setMasters(await res.json());
+        else setMasters([]);
+      } catch { setMasters([]); }
       finally { setLoading(false); }
     }, 500);
   }, [q]);
 
-  async function handleAdd(r) {
-    setAdding(r.id);
+  // Add all pressings (master level)
+  async function handleAddAll(m) {
+    setAdding(m.id);
+    const dash = (m.title || "").indexOf(" - ");
+    const artist = dash > -1 ? m.title.slice(0, dash) : "";
+    const title = dash > -1 ? m.title.slice(dash + 3) : m.title || "";
     try {
-      const res = await fetch("/api/discogs/wantlist", {
+      await fetch("/api/discogs/wantlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          release_id: m.id, // master_id as release_id for the group representative
+          master_id: m.id,
+          artist, title,
+          year_pressed: m.year || null,
+          thumb: m.thumb || m.cover_image || "",
+          genres: (m.genre || []).join(", "),
+          styles: (m.style || []).join(", "),
+        }),
+      });
+      onAdd?.();
+      onClose();
+    } catch {}
+    setAdding(null);
+  }
+
+  // Expand to show individual pressings
+  async function handleExpand(masterId) {
+    if (expandedMaster === masterId) { setExpandedMaster(null); return; }
+    setExpandedMaster(masterId);
+    setPressings([]);
+    setPressingsLoading(true);
+    try {
+      const res = await fetch(`/api/discogs/search?q=${encodeURIComponent(q)}&type=release&per_page=15`);
+      if (res.ok) {
+        const all = await res.json();
+        setPressings(all.filter(r => r.master_id === masterId));
+      }
+    } catch {}
+    setPressingsLoading(false);
+  }
+
+  // Add a specific pressing
+  async function handleAddPressing(r) {
+    setAdding(r.id);
+    const dash = (r.title || "").indexOf(" - ");
+    const artist = dash > -1 ? r.title.slice(0, dash) : "";
+    const title = dash > -1 ? r.title.slice(dash + 3) : r.title || "";
+    try {
+      await fetch("/api/discogs/wantlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           release_id: r.id,
           master_id: r.master_id || null,
-          artist: r.title?.split(" - ")[0] || "",
-          title: r.title?.split(" - ").slice(1).join(" - ") || r.title || "",
+          artist, title,
           year_pressed: r.year || null,
           label: (r.label || []).slice(0, 1).join(", "),
           format: (r.format || []).join(", "),
@@ -204,10 +253,8 @@ function AddToWantlistModal({ onClose, onAdd }) {
           catno: r.catno || "",
         }),
       });
-      if (res.ok) {
-        onAdd?.();
-        onClose();
-      }
+      onAdd?.();
+      onClose();
     } catch {}
     setAdding(null);
   }
@@ -223,40 +270,61 @@ function AddToWantlistModal({ onClose, onAdd }) {
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search Discogs — artist, title..."
+          placeholder="Search Discogs — artist, album..."
           className="w-full bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60 mb-3"
         />
         {loading && <div className="text-stone-600 text-sm text-center py-4">Searching...</div>}
-        <div className="space-y-1 max-h-72 overflow-y-auto">
-          {results.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => handleAdd(r)}
-              disabled={adding === r.id}
-              className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all"
-            >
-              {r.thumb ? (
-                <img src={proxyArtUrl(upgradeDiscogsThumb(r.thumb) || r.thumb)} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0 opacity-80" />
-              ) : (
-                <div className="w-10 h-10 rounded bg-stone-800 flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="text-amber-50 text-sm truncate">{r.title}</div>
-                <div className="text-stone-500 text-xs truncate">
-                  {[r.year, r.country, ...(r.label || []).slice(0, 1), r.catno].filter(Boolean).join(" · ")}
+        <div className="space-y-1 max-h-80 overflow-y-auto">
+          {masters.map((m) => (
+            <div key={m.id}>
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/[0.07] transition-all">
+                {m.thumb ? (
+                  <img src={proxyArtUrl(upgradeDiscogsThumb(m.thumb) || m.thumb)} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0 opacity-80" />
+                ) : (
+                  <div className="w-10 h-10 rounded bg-stone-800 flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-amber-50 text-sm truncate">{m.title}</div>
+                  <div className="text-stone-500 text-xs">{m.year || ""}</div>
                 </div>
-                <div className="text-stone-600 text-[10px] truncate">
-                  {(r.format || []).slice(0, 2).join(", ")}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => handleExpand(m.id)}
+                    className="text-stone-600 text-[10px] px-2 py-1 rounded-lg border border-stone-800 hover:text-stone-300 hover:border-stone-600 transition-colors"
+                  >{expandedMaster === m.id ? "Hide" : "Pressings"}</button>
+                  <button
+                    onClick={() => handleAddAll(m)}
+                    disabled={adding === m.id}
+                    className="text-amber-700 text-[10px] px-2 py-1 rounded-lg border border-amber-900/40 hover:text-amber-400 hover:border-amber-700/50 transition-colors"
+                  >{adding === m.id ? "..." : "+ Any"}</button>
                 </div>
               </div>
-              {adding === r.id ? (
-                <span className="text-stone-600 text-xs">Adding...</span>
-              ) : (
-                <span className="text-amber-700 text-lg">+</span>
+              {/* Expanded pressings */}
+              {expandedMaster === m.id && (
+                <div className="ml-12 space-y-0.5 pb-2">
+                  {pressingsLoading && <div className="text-stone-600 text-xs py-2">Loading pressings...</div>}
+                  {pressings.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => handleAddPressing(r)}
+                      disabled={adding === r.id}
+                      className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.04] transition-all"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-stone-400 text-xs truncate">
+                          {[r.year, r.country, ...(r.label || []).slice(0, 1), r.catno].filter(Boolean).join(" · ")}
+                        </div>
+                        <div className="text-stone-600 text-[10px] truncate">{(r.format || []).slice(0, 2).join(", ")}</div>
+                      </div>
+                      {adding === r.id ? <span className="text-stone-600 text-[10px]">...</span> : <span className="text-amber-700 text-sm">+</span>}
+                    </button>
+                  ))}
+                  {!pressingsLoading && pressings.length === 0 && <div className="text-stone-700 text-xs py-2">No vinyl pressings found</div>}
+                </div>
               )}
-            </button>
+            </div>
           ))}
-          {!loading && q && results.length === 0 && (
+          {!loading && q && masters.length === 0 && (
             <div className="text-stone-700 text-sm text-center py-6">No results found</div>
           )}
         </div>
@@ -900,7 +968,7 @@ function WantReleaseRow({ release, onPriceLoaded }) {
   );
 }
 
-function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSetting, onSaveAlert, onRemoveAlert, sharedPrice }) {
+function WantGroupRow({ group, expanded, onToggle, onRemove, isPro, onUpgrade, alertSetting, onSaveAlert, onRemoveAlert, sharedPrice }) {
   const rep = group.representative;
   const genres = (rep?.genres || "").split(",").map((g) => g.trim()).filter(Boolean);
   const marketplaceUrl = group.master_id
@@ -1069,6 +1137,12 @@ function WantGroupRow({ group, expanded, onToggle, isPro, onUpgrade, alertSettin
               }
             />
           ))}
+          <button
+            onClick={() => { if (confirm("Remove this from your wantlist?")) onRemove?.(group.representative?.release_id); }}
+            className="w-full text-center text-xs text-stone-700 hover:text-rose-400 py-1.5 transition-colors"
+          >
+            Remove from wantlist
+          </button>
         </div>
       )}
     </div>
