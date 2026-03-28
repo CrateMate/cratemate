@@ -6193,7 +6193,13 @@ async function generateCrateStory(session, username) {
 }
 
 export default function CrateMate() {
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
+
+  // Redirect to sign-in if not authenticated
+  if (isLoaded && !user) {
+    if (typeof window !== "undefined") window.location.href = "/sign-in";
+    return null;
+  }
   const { theme, setTheme } = useTheme();
   const [collection, setCollection] = useState(null);
   const [collectionError, setCollectionError] = useState("");
