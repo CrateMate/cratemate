@@ -4,9 +4,6 @@ import { supabase } from "@/lib/supabase";
 import { discogsRequest, DISCOGS_API } from "@/lib/discogs";
 import { getPriceCache, upsertPriceCache, isPriceCacheFresh } from "@/lib/discogs/cache";
 
-// Conditions that count as "acceptable" for deal detection (VG+ minimum)
-const QUALIFYING_CONDITIONS = new Set(["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)"]);
-
 function conditionLabel(cond: string | undefined): string | null {
   if (!cond) return null;
   if (cond === "Very Good Plus (VG+)") return "VG+";
@@ -15,10 +12,12 @@ function conditionLabel(cond: string | undefined): string | null {
   return null;
 }
 
-/** How far below the market suggestion the cheapest qualifying listing is (0–100, or null). */
 function computeDealPct(suggested: number | null | undefined, lowestListing: number | null | undefined): number | null {
   if (!suggested || !lowestListing || lowestListing >= suggested) return null;
-  return Math.round((suggested - lowestListing) / suggested * 100);
+  // Sanity check: if the deal seems too good (>80%), the data is probably unreliable
+  const pct = Math.round((suggested - lowestListing) / suggested * 100);
+  if (pct > 80) return null;
+  return pct;
 }
 
 export async function GET(
@@ -32,7 +31,7 @@ export async function GET(
   const releaseId = parseInt(release_id, 10);
   if (!Number.isFinite(releaseId)) return NextResponse.json({ error: "Invalid release_id" }, { status: 400 });
 
-  // Return from cache if fresh and already has listing data
+  // Return from cache if fresh
   const cached = await getPriceCache(releaseId);
   if (cached && isPriceCacheFresh(cached) && cached.lowest_listing !== undefined) {
     return NextResponse.json({
@@ -58,60 +57,51 @@ export async function GET(
   const { access_token, access_token_secret } = tokenData;
 
   try {
-    // --- Step 1: price suggestions (market rate per condition) ---
+    // Step 1: price suggestions (market rate per condition) — force USD
     const suggestionsRes = await discogsRequest(
       "GET",
-      `${DISCOGS_API}/marketplace/price_suggestions/${releaseId}`,
+      `${DISCOGS_API}/marketplace/price_suggestions/${releaseId}?curr=USD`,
       { tokenKey: access_token, tokenSecret: access_token_secret }
     );
 
-    if (!suggestionsRes.ok) {
-      await upsertPriceCache(releaseId, { min_price: null, currency: null, condition: null, ships_from: null, lowest_listing: null, num_for_sale: null });
-      return NextResponse.json({ min_price: null });
-    }
-
-    const suggestionsData = await suggestionsRes.json();
-
-    // Lowest suggested price among VG+ and above (= our market rate baseline)
-    const ORDERED = ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)"];
     let minPrice: number | null = null;
-    let currency: string | null = null;
+    const currency = "USD";
     let condition: string | null = null;
 
-    for (const cond of ORDERED) {
-      const entry = suggestionsData[cond];
-      if (entry && typeof entry.value === "number") {
-        if (minPrice === null || entry.value < minPrice) {
-          minPrice = entry.value;
-          currency = entry.currency || "USD";
-          condition = conditionLabel(cond);
+    if (suggestionsRes.ok) {
+      const suggestionsData = await suggestionsRes.json();
+      const ORDERED = ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)"];
+      for (const cond of ORDERED) {
+        const entry = suggestionsData[cond];
+        if (entry && typeof entry.value === "number") {
+          if (minPrice === null || entry.value < minPrice) {
+            minPrice = entry.value;
+            condition = conditionLabel(cond);
+          }
         }
       }
     }
 
-    // --- Step 2: cheapest active VG+ or better listing (condition-aware deal detection) ---
+    // Step 2: lowest listing price from marketplace stats — force USD
     let lowestListing: number | null = null;
     let numForSale: number | null = null;
 
     try {
-      const listingsRes = await discogsRequest(
+      const statsRes = await discogsRequest(
         "GET",
-        `${DISCOGS_API}/marketplace/search?release_id=${releaseId}&sort=price&sort_order=asc&per_page=100`,
+        `${DISCOGS_API}/marketplace/stats/${releaseId}?curr=USD`,
         { tokenKey: access_token, tokenSecret: access_token_secret }
       );
-
-      if (listingsRes.ok) {
-        const listingsData = await listingsRes.json();
-        const allListings: Array<{ condition?: string; price?: { value?: number } }> = listingsData.results || [];
-        const qualifying = allListings.filter(
-          (l) => l.condition && QUALIFYING_CONDITIONS.has(l.condition) && typeof l.price?.value === "number"
-        );
-        numForSale = qualifying.length;
-        if (qualifying.length > 0) {
-          lowestListing = Math.min(...qualifying.map((l) => l.price!.value as number));
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        if (statsData.lowest_price && typeof statsData.lowest_price.value === "number") {
+          lowestListing = statsData.lowest_price.value;
+        }
+        if (typeof statsData.num_for_sale === "number") {
+          numForSale = statsData.num_for_sale;
         }
       }
-    } catch { /* fall through — deal detection is best-effort */ }
+    } catch { /* best-effort */ }
 
     const deal_pct = computeDealPct(minPrice, lowestListing);
 
