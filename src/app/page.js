@@ -41,9 +41,6 @@ function PhoneFrame({ src, label, pro, style }) {
           e.currentTarget.style.display = "none";
         }}
       />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <span className="text-stone-700 text-xs">{label}</span>
-      </div>
       {pro && (
         <div className="absolute top-3 right-3 pointer-events-none">
           <span
