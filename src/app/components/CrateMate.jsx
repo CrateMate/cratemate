@@ -1119,7 +1119,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
             {[
               { value: "added", label: "Recent" },
               { value: "price", label: "Price" },
-              ...(isPro ? [{ value: "deal", label: "Deals" }] : []),
+              { value: "deal", label: "Deals" },
             ].map(({ value, label }) => (
               <button
                 key={value}
@@ -1127,12 +1127,6 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
                 className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${wantsSort === value ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-800 text-stone-600 hover:text-stone-400"}`}
               >{label}</button>
             ))}
-            {!isPro && (
-              <button
-                onClick={() => onUpgrade?.("priceAlerts")}
-                className="text-[10px] px-2 py-0.5 rounded-full border border-stone-800/30 text-stone-700"
-              >Deals ✦</button>
-            )}
             <button
               onClick={() => { setWantsInfiniteScroll(s => !s); setWantsPage(1); setWantsVisible(WANTS_PAGE_SIZE); }}
               className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${wantsInfiniteScroll ? "bg-amber-900/30 border-amber-800/40 text-amber-400" : "border-stone-700 text-stone-500 hover:text-stone-300"}`}
