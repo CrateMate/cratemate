@@ -1,5 +1,6 @@
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Analytics } from "@vercel/analytics/next";
 import ThemeProvider from "./components/ThemeProvider";
 import ServiceWorkerRegistration from "./components/ServiceWorkerRegistration";
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }) {
         </head>
         <body>
           <ThemeProvider>{children}</ThemeProvider>
+          <Analytics />
           <ServiceWorkerRegistration />
         </body>
       </html>
