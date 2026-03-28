@@ -13,7 +13,7 @@ const SCREENSHOTS = [
   { name: "stats-collection", label: "Collection" },
   { name: "stats-listening", label: "Listening" },
   { name: "wants", label: "Wantlist" },
-  { name: "hearts", label: "Hearts" },
+  { name: "hearts", label: "Faves" },
   { name: "discover", label: "Discover" },
   { name: "honeycomb", label: "Honeycomb" },
 ];

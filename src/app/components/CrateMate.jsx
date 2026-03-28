@@ -12361,7 +12361,7 @@ export default function CrateMate() {
               ["reco",     "✦", "Picks"],
               ["wants",    "☆", "Wants"],
               ["stats",    "stats", "Stats"],
-              ["hearts",   "♥", "Hearts"],
+              ["hearts",   "♥", "Faves"],
               ["discover", "⊕", "Discover"],
             ].map(([id, icon, label]) => {
               const active = tab === id;
@@ -12401,7 +12401,7 @@ export default function CrateMate() {
               ["reco",     "✦", "Picks"],
               ["wants",    "☆", "Wants"],
               ["stats",    "stats", "Stats"],
-              ["hearts",   "♥", "Hearts"],
+              ["hearts",   "♥", "Faves"],
               ["discover", "⊕", "Discover"],
             ].map(([id, icon, label]) => {
               const active = tab === id;
