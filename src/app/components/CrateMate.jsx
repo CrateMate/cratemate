@@ -5148,13 +5148,13 @@ async function generateListeningDNA(stats, username) {
     }
   }
 
-  // ── MOST PLAYED RECORDS — 2 rows × 5 ──────────────────────────────────────
+  // ── RECENTLY PLAYED RECORDS — 2 rows × 5 ────────────────────────────────────
   if (stats.topPlayed.length > 0) {
     curY += SEC_GAP - 14;
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
     ctx.font = `500 26px "DM Sans", sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText('MOST PLAYED', TX, curY);
+    ctx.fillText('RECENTLY PLAYED', TX, curY);
     curY += 36;
 
     const recs = stats.topPlayed.slice(0, 10);
@@ -10536,7 +10536,7 @@ export default function CrateMate() {
                       return recentUnique.length > 0 ? (
                         <div>
                           <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Recently Played</div>
-                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
                             {recentUnique.map(r => (
                               <button key={r.id} onClick={() => setSelected(r)} className="shrink-0 text-center group" style={{ width: 64 }}>
                                 <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-stone-800 border border-stone-700/40 group-hover:border-amber-800/40 transition-colors">
@@ -10597,11 +10597,21 @@ export default function CrateMate() {
                               } : null;
 
                               const uniqueRecords = new Set(Object.keys(playCounts).filter(id => (playCounts[id] || 0) > 0)).size;
+                              // Build recent plays for share card
+                              const recentSeen = new Set();
+                              const recentPlayedList = [];
+                              for (const s of playSessions) {
+                                if (recentSeen.has(String(s.record_id))) continue;
+                                recentSeen.add(String(s.record_id));
+                                const rec = myRecords.find(r => String(r.id) === String(s.record_id));
+                                if (rec) recentPlayedList.push({ record: rec, count: playCounts[rec.id] || 0 });
+                                if (recentPlayedList.length >= 10) break;
+                              }
                               const listeningStats = {
                                 topGenres: topGenresList,
                                 totalPlays,
                                 totalListeningLabel: totalListeningLabel,
-                                topPlayed: topPlayed.slice(0, 10),
+                                topPlayed: recentPlayedList,
                                 topPlayedArtists,
                                 streak,
                                 nightPlays, dayPlays, weekendPlays, weekdayPlays,
@@ -10899,7 +10909,7 @@ export default function CrateMate() {
                       {mostPlayed.length > 0 && (
                         <div>
                           <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Most Played</div>
-                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
                             {mostPlayed.map(r => (
                               <button key={r.id} onClick={() => setSelected(r)} className="shrink-0 text-center group" style={{ width: 64 }}>
                                 <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-stone-800 border border-stone-700/40 group-hover:border-amber-800/40 transition-colors">
@@ -10915,7 +10925,7 @@ export default function CrateMate() {
                       {favorites.length > 0 && (
                         <div>
                           <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Favorites</div>
-                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
                             {favorites.map(r => {
                               const heartCount = (r.favorite_tracks || []).length;
                               return (
@@ -10933,6 +10943,36 @@ export default function CrateMate() {
                         </div>
                       )}
                     </>
+                  );
+                })()}
+
+                {/* Top Artists by records owned */}
+                {myRecords.length > 0 && (() => {
+                  const artistMap = {};
+                  myRecords.forEach(r => {
+                    if (!r.artist || /^various/i.test(r.artist)) return;
+                    const name = stripArtistNum(r.artist);
+                    if (!artistMap[name]) artistMap[name] = { count: 0, thumb: r.thumb };
+                    artistMap[name].count++;
+                    if (r.thumb && !artistMap[name].thumb) artistMap[name].thumb = r.thumb;
+                  });
+                  const topArtists = Object.entries(artistMap).sort((a, b) => b[1].count - a[1].count).slice(0, 8);
+                  if (topArtists.length === 0) return null;
+                  return (
+                    <div>
+                      <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Top Artists</div>
+                      <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
+                        {topArtists.map(([name, { count, thumb }]) => (
+                          <div key={name} className="shrink-0 text-center" style={{ width: 64 }}>
+                            <div className="w-14 h-14 mx-auto rounded-full overflow-hidden bg-stone-800 border border-stone-700/40">
+                              {thumb ? <img src={proxyArtUrl(upgradeDiscogsThumb(thumb) || thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <div className="w-full h-full bg-stone-700" />}
+                            </div>
+                            <div className="text-stone-300 text-[9px] truncate mt-1">{name}</div>
+                            <div className="text-stone-600 text-[8px]">{count} rec</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   );
                 })()}
 
@@ -10965,6 +11005,51 @@ export default function CrateMate() {
                           <div className="text-stone-500 text-xs mt-0.5">year range</div>
                         </div>
                       )}
+                    </div>
+                  );
+                })()}
+
+                {/* Genre/Style Bubble Map */}
+                {(Object.keys(genres).length > 0 || Object.keys(styles).length > 0) && (() => {
+                  // Build stylesByGenre for expanded style sub-bubbles
+                  const stylesByGenre = {};
+                  myRecords.forEach(r => {
+                    getGenres(r).forEach(g => {
+                      stylesByGenre[g] = stylesByGenre[g] || {};
+                      getStyles(r).forEach(s => { stylesByGenre[g][s] = (stylesByGenre[g][s] || 0) + 1; });
+                    });
+                  });
+                  const styleItems = {};
+                  for (const [g, sMap] of Object.entries(stylesByGenre)) {
+                    styleItems[g] = Object.entries(sMap).map(([label, count]) => ({ label, count })).sort((a,b) => b.count - a.count).slice(0, 8);
+                  }
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-stone-500 text-xs uppercase tracking-wider">Collection Map</span>
+                        <div className="flex gap-1">
+                          {["genres", "styles"].map(v => (
+                            <button key={v} onClick={() => setBubbleView(v)}
+                              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                                bubbleView === v
+                                  ? "bg-stone-700 border-stone-500 text-stone-100"
+                                  : "border-stone-700 text-stone-500 hover:text-stone-300"
+                              }`}>
+                              {v.charAt(0).toUpperCase() + v.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <GenreBubbleMap
+                        items={Object.entries(bubbleView === "genres" ? genres : styles)
+                          .map(([label, count]) => ({ label, count }))
+                          .filter(i => i.label)}
+                        styleItems={bubbleView === "genres" ? styleItems : {}}
+                        onBubbleClick={bubbleView === "genres" ? drillByGenre : drillByStyle}
+                        onStyleClick={(style, parentGenre) =>
+                          parentGenre ? drillByGenreAndStyle(parentGenre, style) : drillByStyle(style)
+                        }
+                      />
                     </div>
                   );
                 })()}
@@ -11019,51 +11104,6 @@ export default function CrateMate() {
                           </button>
                         ))}
                       </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Genre/Style Bubble Map */}
-                {(Object.keys(genres).length > 0 || Object.keys(styles).length > 0) && (() => {
-                  // Build stylesByGenre for expanded style sub-bubbles
-                  const stylesByGenre = {};
-                  myRecords.forEach(r => {
-                    getGenres(r).forEach(g => {
-                      stylesByGenre[g] = stylesByGenre[g] || {};
-                      getStyles(r).forEach(s => { stylesByGenre[g][s] = (stylesByGenre[g][s] || 0) + 1; });
-                    });
-                  });
-                  const styleItems = {};
-                  for (const [g, sMap] of Object.entries(stylesByGenre)) {
-                    styleItems[g] = Object.entries(sMap).map(([label, count]) => ({ label, count })).sort((a,b) => b.count - a.count).slice(0, 8);
-                  }
-                  return (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-stone-500 text-xs uppercase tracking-wider">Collection Map</span>
-                        <div className="flex gap-1">
-                          {["genres", "styles"].map(v => (
-                            <button key={v} onClick={() => setBubbleView(v)}
-                              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                                bubbleView === v
-                                  ? "bg-stone-700 border-stone-500 text-stone-100"
-                                  : "border-stone-700 text-stone-500 hover:text-stone-300"
-                              }`}>
-                              {v.charAt(0).toUpperCase() + v.slice(1)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <GenreBubbleMap
-                        items={Object.entries(bubbleView === "genres" ? genres : styles)
-                          .map(([label, count]) => ({ label, count }))
-                          .filter(i => i.label)}
-                        styleItems={bubbleView === "genres" ? styleItems : {}}
-                        onBubbleClick={bubbleView === "genres" ? drillByGenre : drillByStyle}
-                        onStyleClick={(style, parentGenre) =>
-                          parentGenre ? drillByGenreAndStyle(parentGenre, style) : drillByStyle(style)
-                        }
-                      />
                     </div>
                   );
                 })()}
@@ -11289,41 +11329,6 @@ export default function CrateMate() {
             </div>
           ) : (
             <>
-              {/* Crate DNA — social card */}
-              {(() => {
-                const { genres } = buildCollectionStats(myRecords);
-                const topGenres = Object.entries(genres).sort((a, b) => b[1] - a[1]).slice(0, 3);
-                const topArtists = [...new Map(myRecords.filter(r => r.artist && !/^various/i.test(r.artist)).map(r => [r.artist, r])).entries()]
-                  .map(([artist, r]) => ({ artist, count: myRecords.filter(x => x.artist === artist).length, thumb: r.thumb }))
-                  .sort((a, b) => b.count - a.count).slice(0, 5);
-                return (
-                  <div className="bg-white/[0.04] rounded-xl overflow-hidden">
-                    <div className="px-3 pt-3 pb-2 flex items-center justify-between">
-                      <div className="text-stone-500 text-xs uppercase tracking-wider">Your Crate DNA</div>
-                      <div className="text-stone-700 text-[10px]">{myRecords.length} records</div>
-                    </div>
-                    {topGenres.length > 0 && (
-                      <div className="px-3 pb-2 flex gap-1.5 flex-wrap">
-                        {topGenres.map(([genre]) => (
-                          <span key={genre} className="text-[10px] px-2 py-0.5 rounded-full border border-amber-800/30 bg-amber-900/15 text-amber-400/80">{genre}</span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="px-3 pb-3 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-                      {topArtists.map(({ artist, count, thumb }) => (
-                        <div key={artist} className="shrink-0 text-center" style={{ width: 52 }}>
-                          <div className="w-10 h-10 mx-auto rounded-lg overflow-hidden bg-stone-800 mb-1">
-                            {thumb ? <img src={proxyArtUrl(upgradeDiscogsThumb(thumb) || thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <div className="w-full h-full bg-stone-700" />}
-                          </div>
-                          <div className="text-stone-400 text-[9px] truncate">{stripArtistNum(artist)}</div>
-                          <div className="text-stone-700 text-[8px]">{count} rec</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
               {/* Your Circle — recent plays from people you follow */}
               {circleData && circleData.length > 0 && (
                 <div>
