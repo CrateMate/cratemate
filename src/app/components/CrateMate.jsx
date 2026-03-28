@@ -10501,7 +10501,7 @@ export default function CrateMate() {
         <div className="flex-1 px-4 overflow-y-auto" style={{ paddingBottom: 16, ...(tabSlide ? { animation: `cm-slide-${tabSlide} 200ms ease-out` } : {}) }}>
           {!seenHints["tab_stats"] && collection.length > 0 && (
             <HintBanner onDismiss={() => dismissHint("tab_stats")}>
-              Your collection and listening stats. Tap any genre bubble or decade bar to filter your crate. Share your stats as a card.
+              Your collection and listening stats. Tap any genre bubble or decade bar to filter your crate. Share a snapshot on social media.
             </HintBanner>
           )}
           {(() => {
