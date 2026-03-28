@@ -998,29 +998,33 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
   const pricesFetched = useRef(false);
 
   // Fetch representative prices only when user sorts by price or deal
-  // This avoids hammering Discogs API on every tab open for large wantlists
   useEffect(() => {
     if (!wantlist || wantlist.length === 0 || pricesFetched.current) return;
-    if (wantsSort === "added") return; // don't fetch prices for default sort
+    if (wantsSort === "added") return;
     pricesFetched.current = true;
+    let cancelled = false;
     const reps = wantlist.map(g => g.representative?.release_id).filter(Boolean);
     async function fetchPrices() {
-      // Fetch 2 at a time with 1.5s gaps to stay well under Discogs 60/min limit
       for (let i = 0; i < reps.length; i += 2) {
+        if (cancelled) break;
         const batch = reps.slice(i, i + 2);
-        const results = await Promise.allSettled(
-          batch.map(id => fetch(`/api/discogs/wantlist/price/${id}`).then(r => r.ok ? r.json() : null))
-        );
-        const updates = {};
-        batch.forEach((id, idx) => {
-          const result = results[idx];
-          if (result.status === "fulfilled" && result.value) updates[id] = result.value;
-        });
-        if (Object.keys(updates).length > 0) setWantPrices(prev => ({ ...prev, ...updates }));
+        try {
+          const results = await Promise.allSettled(
+            batch.map(id => fetch(`/api/discogs/wantlist/price/${id}`).then(r => r.ok ? r.json() : null))
+          );
+          if (cancelled) break;
+          const updates = {};
+          batch.forEach((id, idx) => {
+            const result = results[idx];
+            if (result.status === "fulfilled" && result.value) updates[id] = result.value;
+          });
+          if (Object.keys(updates).length > 0) setWantPrices(prev => ({ ...prev, ...updates }));
+        } catch { /* ignore */ }
         if (i + 2 < reps.length) await new Promise(res => setTimeout(res, 1500));
       }
     }
     fetchPrices();
+    return () => { cancelled = true; };
   }, [wantlist, wantsSort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allGroups = wantlist || [];
@@ -1192,7 +1196,7 @@ function WantlistTab({ wantlist, wantlistImportJob, expandedMasters, setExpanded
                 onRemove={onRemove}
                 isPro={isPro}
                 onUpgrade={onUpgrade}
-                alertSetting={alertSettings.get(group.master_id || group.representative?.release_id)}
+                alertSetting={alertSettings?.get(group.master_id || group.representative?.release_id)}
                 onSaveAlert={onSaveAlert}
                 onRemoveAlert={onRemoveAlert}
                 sharedPrice={repId ? wantPrices[repId] : null}
