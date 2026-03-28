@@ -2416,9 +2416,34 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap, screensav
   );
 }
 
-function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLogPlay, onSelect }) {
+function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLogPlay, onSelect, isPro }) {
   if (!reco) return null;
   const { record, reason, label } = reco;
+
+  // Duration formatting
+  const durationMin = record.duration_secs ? Math.round(record.duration_secs / 60) : null;
+
+  // Hearted tracks
+  const hearts = record.favorite_tracks || [];
+
+  // Track preview: opener, mid, closer per side
+  const tracks = record.tracks || [];
+  const sides = {};
+  for (const t of tracks) {
+    if (t.type !== "track" || !t.position) continue;
+    const side = t.position.replace(/[0-9]/g, "").toUpperCase() || "A";
+    if (!sides[side]) sides[side] = [];
+    sides[side].push(t);
+  }
+  function pickPreview(sideTracks) {
+    if (!sideTracks || sideTracks.length === 0) return [];
+    if (sideTracks.length <= 2) return sideTracks;
+    if (sideTracks.length <= 4) return [sideTracks[0], sideTracks[sideTracks.length - 1]];
+    const mid = Math.floor(sideTracks.length / 2);
+    return [sideTracks[0], sideTracks[mid], sideTracks[sideTracks.length - 1]];
+  }
+  const sideKeys = Object.keys(sides).sort();
+
   return (
     <div className="rounded-2xl border border-stone-700/60 bg-stone-900/80 p-5 relative">
       <div className="flex items-center justify-between mb-3">
@@ -2442,15 +2467,54 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLog
             {(record.year_original || record.year_pressed) && (
               <span className="text-stone-500 text-xs">{record.year_original || record.year_pressed}</span>
             )}
-            {getGenres(record).map((g) => (
+            {getGenres(record).slice(0, 2).map((g) => (
               <GenreTag key={g} genre={g} onClick={(g) => { onGenreClick?.(g); }} active={activeGenres.has(g)} />
             ))}
+            {durationMin && <span className="text-stone-600 text-[10px]">{durationMin} min</span>}
           </div>
         </div>
       </div>
-      {reason && (
-        <div className="border-t border-white/[0.06] pt-3 pb-3 text-stone-300 text-sm leading-relaxed italic">{reason}</div>
+
+      {/* Hearted tracks or side preview */}
+      {hearts.length > 0 ? (
+        <div className="border-t border-white/[0.06] pt-2.5 pb-2">
+          <div className="flex items-start gap-1.5">
+            <span className="text-rose-500/70 text-xs shrink-0 mt-px">♥</span>
+            <div className="text-stone-400 text-xs leading-relaxed truncate">{hearts.join(", ")}</div>
+          </div>
+        </div>
+      ) : sideKeys.length > 0 ? (
+        <div className="border-t border-white/[0.06] pt-2.5 pb-2">
+          {/* Pair sides: A+B then C+D */}
+          {Array.from({ length: Math.ceil(sideKeys.length / 2) }, (_, row) => {
+            const left = sideKeys[row * 2];
+            const right = sideKeys[row * 2 + 1];
+            return (
+              <div key={row} className={`flex gap-4 ${row > 0 ? "mt-2" : ""}`}>
+                {[left, right].filter(Boolean).map(side => {
+                  const preview = pickPreview(sides[side]);
+                  return (
+                    <div key={side} className="flex-1 min-w-0">
+                      <div className="text-stone-600 text-[9px] uppercase tracking-wider mb-0.5">Side {side}</div>
+                      {preview.map(t => (
+                        <div key={t.position} className="text-stone-500 text-[10px] truncate">
+                          <span className="text-stone-600">{t.position}</span> {t.title}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* AI reason — Pro only */}
+      {isPro && reason && (
+        <div className="border-t border-white/[0.06] pt-2.5 pb-2 text-stone-400 text-xs leading-relaxed italic">{reason}</div>
       )}
+
       <div className="flex items-center justify-end border-t border-white/[0.06] pt-3">
         <button
           onClick={() => onLogPlay?.(record.id)}
@@ -9725,60 +9789,65 @@ export default function CrateMate() {
             );
           })()}
 
-          {[
-            { type: "random", icon: "🎲", title: "Random Pick" },
-            { type: "daily",  icon: "📅", title: "Today's Pick" },
-          ].map(({ type, icon, title, disabled }) => (
-            <button
-              key={type}
-              onClick={() => !disabled && !recoLoading && getReco(type)}
-              disabled={!!disabled || recoLoading || myRecords.length === 0}
-              className={`w-full py-3.5 rounded-xl border text-left px-4 flex items-center gap-3 transition-all ${
-                disabled || myRecords.length === 0
-                  ? "border-stone-800/50 opacity-35"
-                  : "border-stone-700/60 hover:border-amber-900/50 hover:bg-white/[0.02]"
-              }`}
-            >
-              <span className="text-xl w-8 text-center">{icon}</span>
-              <div className="font-medium text-stone-200 text-sm">{title}</div>
-            </button>
-          ))}
-
-          <div className="rounded-xl border border-stone-700/60 p-4 relative overflow-hidden">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-xl w-8 text-center">🌙</span>
-              <div className="flex-1">
-                <div className="font-medium text-stone-200 text-sm flex items-center gap-2">
-                  Mood Match
-                  {!effectiveIsPro && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-900/40 border border-amber-700/40 text-amber-400">Pro</span>}
-                </div>
-                <div className="text-xs text-stone-600">What&apos;s the vibe?</div>
-              </div>
-            </div>
-            {effectiveIsPro ? (
-              <>
-                <input
-                  value={mood}
-                  onChange={(e) => setMood(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
-                  placeholder="e.g. melancholic rainy night, want to dance, road trip energy..."
-                  className="w-full bg-stone-900/70 border border-stone-800 rounded-lg px-3 py-2 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/50 mb-3"
-                />
-                <button
-                  onClick={() => mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
-                  disabled={!mood || recoLoading || myRecords.length === 0}
-                  className="w-full py-2.5 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-300 text-sm font-medium disabled:opacity-40 hover:bg-amber-900/50 transition-colors"
-                >
-                  Find a Match
-                </button>
-              </>
-            ) : (
+          {/* Random + Today's side by side */}
+          <div className="flex gap-2">
+            {[
+              { type: "random", icon: "🎲", title: "Random" },
+              { type: "daily",  icon: "📅", title: "Today's" },
+            ].map(({ type, icon, title }) => (
               <button
-                onClick={() => openUpgradeModal("moodMatch")}
-                className="w-full py-2.5 rounded-lg bg-amber-900/20 border border-amber-700/30 text-amber-400 text-sm font-medium hover:bg-amber-900/40 transition-colors"
+                key={type}
+                onClick={() => !recoLoading && myRecords.length > 0 && getReco(type)}
+                disabled={recoLoading || myRecords.length === 0}
+                className={`flex-1 py-3 rounded-xl border text-center transition-all ${
+                  myRecords.length === 0
+                    ? "border-stone-800/50 opacity-35"
+                    : "border-stone-700/60 hover:border-amber-900/50 hover:bg-white/[0.02]"
+                }`}
               >
-                Dig Deeper with Pro →
+                <span className="text-lg">{icon}</span>
+                <div className="font-medium text-stone-300 text-xs mt-0.5">{title}</div>
               </button>
+            ))}
+          </div>
+
+          {/* Mood Match + Dig Deeper on same row */}
+          <div className="rounded-xl border border-stone-700/60 p-3 relative overflow-hidden">
+            {effectiveIsPro ? (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">🌙</span>
+                  <span className="font-medium text-stone-200 text-sm">Mood Match</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={mood}
+                    onChange={(e) => setMood(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
+                    placeholder="melancholic rainy night, road trip energy..."
+                    className="flex-1 bg-stone-900/70 border border-stone-800 rounded-lg px-3 py-2 text-xs text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/50"
+                  />
+                  <button
+                    onClick={() => mood && !recoLoading && myRecords.length > 0 && getReco("mood")}
+                    disabled={!mood || recoLoading || myRecords.length === 0}
+                    className="px-4 py-2 rounded-lg bg-amber-900/30 border border-amber-800/40 text-amber-300 text-xs font-medium disabled:opacity-40 hover:bg-amber-900/50 transition-colors shrink-0"
+                  >Match</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-base">🌙</span>
+                  <div>
+                    <span className="font-medium text-stone-200 text-sm">Mood Match</span>
+                    <div className="text-[10px] text-stone-600">What&apos;s the vibe?</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => openUpgradeModal("moodMatch")}
+                  className="px-4 py-2 rounded-lg bg-amber-900/20 border border-amber-700/30 text-amber-400 text-xs font-medium hover:bg-amber-900/40 transition-colors shrink-0"
+                >Dig Deeper with Pro →</button>
+              </div>
             )}
           </div>
 
@@ -9798,7 +9867,7 @@ export default function CrateMate() {
           )}
           {recoError && <div className="text-red-500/70 text-sm text-center py-3">{recoError}</div>}
           {reco && !recoLoading && (
-            <RecoCard reco={reco} onClose={() => setReco(null)} onGenreClick={toggleGenre} activeGenres={activeGenres} onLogPlay={handleLogPlay} onSelect={setSelected} />
+            <RecoCard reco={reco} onClose={() => setReco(null)} onGenreClick={toggleGenre} activeGenres={activeGenres} onLogPlay={handleLogPlay} onSelect={setSelected} isPro={effectiveIsPro} />
           )}
           </div>
         </div>
