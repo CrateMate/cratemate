@@ -14,7 +14,7 @@ export async function GET() {
       .maybeSingle(),
     supabase
       .from("user_profiles")
-      .select("display_name, is_discoverable")
+      .select("display_name, is_discoverable, share_plays")
       .eq("user_id", userId)
       .maybeSingle(),
   ]);
@@ -23,5 +23,6 @@ export async function GET() {
     connected: !!tokenRow,
     username: tokenRow?.discogs_username || profileRow?.display_name || null,
     is_discoverable: profileRow ? (profileRow.is_discoverable ?? false) : null,
+    share_plays: profileRow?.share_plays ?? true,
   });
 }

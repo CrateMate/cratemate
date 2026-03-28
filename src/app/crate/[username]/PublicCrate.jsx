@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { HoneycombView, TileView, CoverArt } from "@/app/components/CrateMate";
 
 function PublicDetailCard({ record, onClose }) {
@@ -48,6 +49,7 @@ function PublicDetailCard({ record, onClose }) {
 }
 
 export default function PublicCrate({ records, username }) {
+  const { isSignedIn } = useAuth();
   const searchParams = useSearchParams();
   const [zoom, setZoom] = useState(1.0);
   const [selected, setSelected] = useState(null);
@@ -70,20 +72,21 @@ export default function PublicCrate({ records, username }) {
             <span className="ml-1">· {records.length} records</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        {isSignedIn ? (
           <a
             href="/app"
             className="text-xs px-3 py-1.5 rounded-full border border-stone-700/50 text-stone-400 hover:text-stone-200 hover:border-stone-600 transition-colors whitespace-nowrap"
           >
             ← My crate
           </a>
+        ) : (
           <a
             href="/sign-up"
             className="text-xs px-3 py-1.5 rounded-full border border-amber-800/50 bg-amber-900/20 text-amber-300 hover:bg-amber-900/40 transition-colors whitespace-nowrap"
           >
-            Join free →
+            Build your own crate — it&apos;s free →
           </a>
-        </div>
+        )}
       </div>
 
       {/* View */}

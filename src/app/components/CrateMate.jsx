@@ -6649,6 +6649,7 @@ export default function CrateMate() {
         setDiscogsConnected(d.connected);
         setDiscogsUsername(d.username);
         setIsDiscoverable(d.is_discoverable ?? true);
+        setSharePlays(d.share_plays ?? true);
         // Auto-enable discoverability for new users (no profile row yet → null)
         if (d.is_discoverable == null) {
           fetch("/api/discogs/toggle-discovery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ discoverable: true }) }).catch(() => {});
