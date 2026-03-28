@@ -4718,10 +4718,10 @@ async function generateCollectionDNA(stats, username) {
   ctx.fillText(headerSub, TX, curY);
   curY += SEC_GAP;
 
-  // ── Shared constants for record grids ──
-  const REC_THUMB = 176;
-  const REC_GAP = 11;
-  const REC_ROW_H = REC_THUMB + 48;
+  // ── Shared constants for record grids (compact to fit sound profile) ──
+  const REC_THUMB = 160;
+  const REC_GAP = 10;
+  const REC_ROW_H = REC_THUMB + 44;
 
   // ── GENRE BAR ──────────────────────────────────────────────────────────────
   if (stats.topGenres.length > 0) {
@@ -10528,36 +10528,7 @@ export default function CrateMate() {
                       </div>
                     )}
 
-                    {/* Recently Played hero row */}
-                    {totalPlays > 0 && (() => {
-                      const recentUnique = [];
-                      const seen = new Set();
-                      for (const s of playSessions) {
-                        if (seen.has(String(s.record_id))) continue;
-                        seen.add(String(s.record_id));
-                        const rec = myRecords.find(r => String(r.id) === String(s.record_id));
-                        if (rec) recentUnique.push(rec);
-                        if (recentUnique.length >= 8) break;
-                      }
-                      return recentUnique.length > 0 ? (
-                        <div>
-                          <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Recently Played</div>
-                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
-                            {recentUnique.map(r => (
-                              <button key={r.id} onClick={() => setSelected(r)} className="shrink-0 text-center group" style={{ width: 64 }}>
-                                <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-stone-800 border border-stone-700/40 group-hover:border-amber-800/40 transition-colors">
-                                  <CoverArt record={r} size={56} />
-                                </div>
-                                <div className="text-stone-300 text-[9px] truncate mt-1">{r.title}</div>
-                                <div className="text-stone-600 text-[8px]">{stripArtistNum(r.artist)}</div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null;
-                    })()}
-
-                    {/* Share listening button */}
+                    {/* Share listening button — at top like collection share */}
                     {totalPlays >= 5 && (
                       <div className="flex justify-end">
                         <button
@@ -10565,7 +10536,6 @@ export default function CrateMate() {
                             if (dnaGenerating) return;
                             setDnaGenerating(true);
                             try {
-                              // Genre bar by play count (not record count)
                               const playGenreCounts = {};
                               for (const [id, count] of Object.entries(playCounts)) {
                                 const rec = myRecords.find(r => String(r.id) === String(id));
@@ -10573,8 +10543,6 @@ export default function CrateMate() {
                                 for (const g of getGenres(rec)) playGenreCounts[g] = (playGenreCounts[g] || 0) + count;
                               }
                               const topGenresList = Object.entries(playGenreCounts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([genre, count]) => ({ genre, count }));
-
-                              // Top artists by plays with record thumbnails
                               const artistPlayCounts = {};
                               for (const [id, count] of Object.entries(playCounts)) {
                                 const rec = myRecords.find(r => String(r.id) === String(id));
@@ -10584,8 +10552,6 @@ export default function CrateMate() {
                                 artist, count,
                                 records: myRecords.filter(r => r.artist === artist).slice(0, 5).map(r => ({ thumb: r.thumb })),
                               }));
-
-                              // Play-weighted audio profile
                               const myIds = new Set(myRecords.map(r => r.id));
                               let wEnergy = 0, wValence = 0, wDance = 0, wAcoustic = 0, wTempo = 0, wTotal = 0;
                               for (const [id, count] of Object.entries(playCounts)) {
@@ -10601,9 +10567,7 @@ export default function CrateMate() {
                                 danceability: wDance / wTotal, acousticness: wAcoustic / wTotal,
                                 tempo: wTempo / wTotal,
                               } : null;
-
                               const uniqueRecords = new Set(Object.keys(playCounts).filter(id => (playCounts[id] || 0) > 0)).size;
-                              // Build recent plays for share card
                               const recentSeen = new Set();
                               const recentPlayedList = [];
                               for (const s of playSessions) {
@@ -10648,6 +10612,35 @@ export default function CrateMate() {
                         </button>
                       </div>
                     )}
+
+                    {/* Recently Played hero row */}
+                    {totalPlays > 0 && (() => {
+                      const recentUnique = [];
+                      const seen = new Set();
+                      for (const s of playSessions) {
+                        if (seen.has(String(s.record_id))) continue;
+                        seen.add(String(s.record_id));
+                        const rec = myRecords.find(r => String(r.id) === String(s.record_id));
+                        if (rec) recentUnique.push(rec);
+                        if (recentUnique.length >= 8) break;
+                      }
+                      return recentUnique.length > 0 ? (
+                        <div>
+                          <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Recently Played</div>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
+                            {recentUnique.map(r => (
+                              <button key={r.id} onClick={() => setSelected(r)} className="shrink-0 text-center group" style={{ width: 64 }}>
+                                <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-stone-800 border border-stone-700/40 group-hover:border-amber-800/40 transition-colors">
+                                  <CoverArt record={r} size={56} />
+                                </div>
+                                <div className="text-stone-300 text-[9px] truncate mt-1">{r.title}</div>
+                                <div className="text-stone-600 text-[8px]">{stripArtistNum(r.artist)}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
 
                     {/* Identity labels */}
                     {totalPlays >= 5 && (
@@ -11034,6 +11027,90 @@ export default function CrateMate() {
                   );
                 })()}
 
+                {/* Sound Profile — moved up, right after Collection Map */}
+                {(() => {
+                  const myIds = new Set(myRecords.map(r => r.id));
+                  const spotifyData = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
+                  const n = spotifyData.filter(f => !f.not_found && !f._estimated && f.energy != null).length;
+                  const usingSpotify = n > 0;
+                  const relevant = usingSpotify ? spotifyData : myRecords.map(r => estimateFeaturesFromRecord(r));
+                  const avg = (key) => relevant.reduce((s, f) => s + (f[key] || 0), 0) / relevant.length;
+                  const energy = avg("energy"), valence = avg("valence"), danceability = avg("danceability");
+                  const acousticness = avg("acousticness"), tempo = avg("tempo"), loudness = avg("loudness");
+                  const bars = [
+                    { label: "Energy", value: energy, color: "bg-amber-600/70" },
+                    { label: "Mood", value: valence, color: "bg-rose-600/60", hint: valence > 0.6 ? "upbeat" : valence < 0.4 ? "melancholic" : "balanced" },
+                    { label: "Danceability", value: danceability, color: "bg-emerald-700/60" },
+                    { label: "Acoustic", value: acousticness, color: "bg-stone-500/70" },
+                    { label: "Loudness", value: loudness, color: "bg-orange-900/70", hint: loudness > 0.80 ? "loud" : loudness < 0.45 ? "dynamic" : "balanced" },
+                  ];
+                  const analyzeCollection = async () => {
+                    if (spotifyAnalyzing) return;
+                    setSpotifyAnalyzing(true);
+                    const uncached = [...myRecords].filter(r => !spotifyFeatures[r.id]).sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0)).slice(0, 10);
+                    for (const record of uncached) { await fetchOneFeature(record, { force: true }); }
+                    setSpotifyAnalyzing(false);
+                  };
+                  return (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
+                        {effectiveIsPro && (
+                          <div className="text-stone-600 text-xs">
+                            {usingSpotify ? `${Math.round(n / myRecords.length * 100)}% enriched · ${Math.round(tempo)} BPM` : `genre estimates · ${Math.round(tempo)} BPM avg`}
+                          </div>
+                        )}
+                      </div>
+                      {effectiveIsPro ? (
+                        <>
+                          {usingSpotify && n < myRecords.length && (
+                            <div className="mb-3">
+                              <div className="w-full bg-stone-800/50 rounded-full h-1.5 overflow-hidden">
+                                <div className="h-full bg-amber-700/50 rounded-full transition-all" style={{ width: `${Math.round(n / myRecords.length * 100)}%` }} />
+                              </div>
+                            </div>
+                          )}
+                          <div className="space-y-2 mb-3">
+                            {bars.map(({ label, value, color, hint }) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
+                                <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden">
+                                  <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${Math.round(value * 100)}%` }} />
+                                </div>
+                                <div className="text-stone-600 text-xs w-8 text-right">{Math.round(value * 100)}%</div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mb-3">
+                          <div className="space-y-2">
+                            {bars.map(({ label, value, color }) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}</div>
+                                <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden blur-sm">
+                                  <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.round(value * 100)}%` }} />
+                                </div>
+                                <div className="text-stone-600 text-xs w-8 text-right blur-sm select-none">{Math.round(value * 100)}%</div>
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={() => openUpgradeModal("soundProfile")} className="w-full mt-3 px-4 py-2 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors">✦ Dig Deeper with Pro</button>
+                        </div>
+                      )}
+                      {effectiveIsPro && (!usingSpotify ? (
+                        <button onClick={analyzeCollection} disabled={spotifyAnalyzing} className="text-xs text-stone-600 hover:text-amber-400 transition-colors disabled:opacity-40">
+                          {spotifyAnalyzing ? "Analyzing via Spotify…" : "↑ Analyze via Spotify for precise data"}
+                        </button>
+                      ) : n < myRecords.length ? (
+                        <button onClick={analyzeCollection} disabled={spotifyAnalyzing} className="text-xs text-stone-600 hover:text-amber-400 transition-colors disabled:opacity-40">
+                          {spotifyAnalyzing ? `Analyzing… (${n} done)` : `↑ Analyze next 10 (${myRecords.length - n} remaining)`}
+                        </button>
+                      ) : null)}
+                    </div>
+                  );
+                })()}
+
                 {/* By Decade */}
                 {sortedDecades.length > 0 && (
                   <div>
@@ -11088,121 +11165,7 @@ export default function CrateMate() {
                   );
                 })()}
 
-                {/* Sound Profile */}
-                {(() => {
-                  const myIds = new Set(myRecords.map(r => r.id));
-                  const spotifyData = Object.entries(spotifyFeatures).filter(([id]) => myIds.has(id)).map(([, f]) => f);
-                  const n = spotifyData.filter(f => !f.not_found && !f._estimated && f.energy != null).length;
-                  const usingSpotify = n > 0;
-
-                  // Fall back to genre-based estimates when no Spotify data
-                  const relevant = usingSpotify
-                    ? spotifyData
-                    : myRecords.map(r => estimateFeaturesFromRecord(r));
-
-                  const avg = (key) => relevant.reduce((s, f) => s + (f[key] || 0), 0) / relevant.length;
-                  const energy = avg("energy");
-                  const valence = avg("valence");
-                  const danceability = avg("danceability");
-                  const acousticness = avg("acousticness");
-                  const tempo = avg("tempo");
-                  const loudness = avg("loudness");
-
-                  const bars = [
-                    { label: "Energy",        value: energy,        color: "bg-amber-600/70" },
-                    { label: "Mood",          value: valence,       color: "bg-rose-600/60", hint: valence > 0.6 ? "upbeat" : valence < 0.4 ? "melancholic" : "balanced" },
-                    { label: "Danceability",  value: danceability,  color: "bg-emerald-700/60" },
-                    { label: "Acoustic",      value: acousticness,  color: "bg-stone-500/70" },
-                    { label: "Loudness",      value: loudness,      color: "bg-orange-900/70", hint: loudness > 0.80 ? "loud" : loudness < 0.45 ? "dynamic" : "balanced" },
-                  ];
-
-                  const analyzeCollection = async () => {
-                    if (spotifyAnalyzing) return;
-                    setSpotifyAnalyzing(true);
-                    // Sort uncached records by play count descending so most-listened
-                    // records get real data first, then process 10 per click.
-                    const uncached = [...myRecords]
-                      .filter(r => !spotifyFeatures[r.id])
-                      .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
-                      .slice(0, 10);
-                    for (const record of uncached) {
-                      await fetchOneFeature(record, { force: true });
-                    }
-                    setSpotifyAnalyzing(false);
-                  };
-
-                  return (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-stone-400 text-xs uppercase tracking-widest">Sound Profile</div>
-                        {effectiveIsPro && (
-                          <div className="text-stone-600 text-xs">
-                            {usingSpotify
-                              ? `${Math.round(n / myRecords.length * 100)}% enriched (${n}/${myRecords.length}) · ${Math.round(tempo)} BPM`
-                              : `genre estimates · ${Math.round(tempo)} BPM avg`}
-                          </div>
-                        )}
-                      </div>
-                      {effectiveIsPro ? (
-                        <>
-                          {usingSpotify && n < myRecords.length && (
-                            <div className="mb-3">
-                              <div className="w-full bg-stone-800/50 rounded-full h-1.5 overflow-hidden">
-                                <div className="h-full bg-amber-700/50 rounded-full transition-all" style={{ width: `${Math.round(n / myRecords.length * 100)}%` }} />
-                              </div>
-                            </div>
-                          )}
-                          <div className="space-y-2 mb-3">
-                            {bars.map(({ label, value, color, hint }) => (
-                              <div key={label} className="flex items-center gap-3">
-                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}{hint ? <span className="text-stone-700 ml-1">({hint})</span> : null}</div>
-                                <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden">
-                                  <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${Math.round(value * 100)}%` }} />
-                                </div>
-                                <div className="text-stone-600 text-xs w-8 text-right">{Math.round(value * 100)}%</div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="mb-3">
-                          <div className="space-y-2">
-                            {bars.map(({ label, value, color }) => (
-                              <div key={label} className="flex items-center gap-3">
-                                <div className="text-stone-500 text-xs w-20 shrink-0">{label}</div>
-                                <div className="flex-1 bg-stone-800/50 rounded-full h-4 overflow-hidden blur-sm">
-                                  <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.round(value * 100)}%` }} />
-                                </div>
-                                <div className="text-stone-600 text-xs w-8 text-right blur-sm select-none">{Math.round(value * 100)}%</div>
-                              </div>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => openUpgradeModal("soundProfile")}
-                            className="w-full mt-3 px-4 py-2 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors"
-                          >✦ Dig Deeper with Pro</button>
-                        </div>
-                      )}
-                      {effectiveIsPro && (!usingSpotify ? (
-                        <button
-                          onClick={analyzeCollection}
-                          disabled={spotifyAnalyzing}
-                          className="text-xs text-stone-600 hover:text-amber-400 transition-colors disabled:opacity-40"
-                        >
-                          {spotifyAnalyzing ? "Analyzing via Spotify…" : "↑ Analyze via Spotify for precise data"}
-                        </button>
-                      ) : n < myRecords.length ? (
-                        <button
-                          onClick={analyzeCollection}
-                          disabled={spotifyAnalyzing}
-                          className="text-xs text-stone-600 hover:text-amber-400 transition-colors disabled:opacity-40"
-                        >
-                          {spotifyAnalyzing ? `Analyzing… (${n} done)` : `↑ Analyze next 10 (${myRecords.length - n} remaining)`}
-                        </button>
-                      ) : null)}
-                    </div>
-                  );
-                })()}
+                {/* Sound Profile moved up — now after Collection Map */}
 
                 {/* By Format */}
                 {formatEntries.length > 0 && (
