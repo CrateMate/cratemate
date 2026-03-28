@@ -1793,7 +1793,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
                       <button
                         onClick={() => onUpgrade?.("soundProfile")}
                         className="w-full mt-1 px-4 py-1.5 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-xs font-medium hover:bg-amber-900/50 transition-colors"
-                      >✦ Unlock with Pro</button>
+                      >✦ Dig Deeper with Pro</button>
                     </div>
                   )
                 )}
@@ -9777,7 +9777,7 @@ export default function CrateMate() {
                 onClick={() => openUpgradeModal("moodMatch")}
                 className="w-full py-2.5 rounded-lg bg-amber-900/20 border border-amber-700/30 text-amber-400 text-sm font-medium hover:bg-amber-900/40 transition-colors"
               >
-                Unlock with Pro →
+                Dig Deeper with Pro →
               </button>
             )}
           </div>
@@ -10089,7 +10089,7 @@ export default function CrateMate() {
                   <button
                     onClick={() => openUpgradeModal("discover")}
                     className="mt-2 px-5 py-2.5 rounded-2xl bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors"
-                  >Unlock with Pro →</button>
+                  >Dig Deeper with Pro →</button>
                 </div>
               ) : (
               <>
@@ -10900,7 +10900,7 @@ export default function CrateMate() {
                           <button
                             onClick={() => openUpgradeModal("soundProfile")}
                             className="w-full mt-3 px-4 py-2 rounded-full bg-amber-900/30 border border-amber-700/40 text-amber-400 text-sm font-medium hover:bg-amber-900/50 transition-colors"
-                          >✦ Unlock with Pro</button>
+                          >✦ Dig Deeper with Pro</button>
                         </div>
                       )}
                       {effectiveIsPro && (!usingSpotify ? (
