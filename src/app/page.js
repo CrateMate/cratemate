@@ -256,7 +256,7 @@ export default function LandingPage() {
             className="text-stone-500 text-sm"
             style={{ fontFamily: "'DM Sans', sans-serif" }}
           >
-            CrateMate &middot; Made for vinyl heads
+            CrateMate &middot; By vinyl heads, for vinyl heads
           </p>
           <div className="flex gap-3">
             <Link
