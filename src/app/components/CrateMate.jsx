@@ -2481,33 +2481,36 @@ function RecoCard({ reco, onClose, onGenreClick, activeGenres = new Set(), onLog
       {/* Hearted tracks or side preview */}
       {hearts.length > 0 ? (
         <div className="border-t border-white/[0.06] pt-2.5 pb-2">
-          <div className="flex gap-4">
-            <div className="flex-1 min-w-0">
-              {hearts.slice(0, 3).map((h, i) => {
-                const title = typeof h === "object" ? h.title : h;
-                const pos = typeof h === "object" ? h.key : null;
-                return (
-                  <div key={i} className="text-stone-400 text-[10px] truncate">
-                    <span className="text-rose-500/60">♥</span> {pos && <span className="text-stone-600">{pos}</span>} {title}
-                  </div>
-                );
-              })}
-            </div>
-            {hearts.length > 3 && (
-              <div className="flex-1 min-w-0">
-                {hearts.slice(3, 6).map((h, i) => {
-                  const title = typeof h === "object" ? h.title : h;
-                  const pos = typeof h === "object" ? h.key : null;
-                  return (
-                    <div key={i} className="text-stone-400 text-[10px] truncate">
-                      <span className="text-rose-500/60">♥</span> {pos && <span className="text-stone-600">{pos}</span>} {title}
+          {(() => {
+            // Group hearts by side
+            const heartSides = {};
+            for (const h of hearts) {
+              const pos = typeof h === "object" ? h.key : null;
+              const title = typeof h === "object" ? h.title : h;
+              const side = pos ? pos.replace(/[0-9]/g, "").toUpperCase() || "A" : "?";
+              if (!heartSides[side]) heartSides[side] = [];
+              heartSides[side].push({ pos, title });
+            }
+            const hSideKeys = Object.keys(heartSides).sort();
+            return Array.from({ length: Math.ceil(hSideKeys.length / 2) }, (_, row) => {
+              const left = hSideKeys[row * 2];
+              const right = hSideKeys[row * 2 + 1];
+              return (
+                <div key={row} className={`flex gap-4 ${row > 0 ? "mt-2" : ""}`}>
+                  {[left, right].filter(Boolean).map(side => (
+                    <div key={side} className="flex-1 min-w-0">
+                      <div className="text-stone-600 text-[9px] uppercase tracking-wider mb-0.5">Side {side}</div>
+                      {heartSides[side].map((h, i) => (
+                        <div key={i} className="text-stone-400 text-[10px] truncate">
+                          <span className="text-rose-500/60">♥</span> {h.pos && <span className="text-stone-600">{h.pos}</span>} {h.title}
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-                {hearts.length > 6 && <div className="text-stone-600 text-[10px]">+{hearts.length - 6} more</div>}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              );
+            });
+          })()}
         </div>
       ) : sideKeys.length > 0 ? (
         <div className="border-t border-white/[0.06] pt-2.5 pb-2">
