@@ -7,8 +7,8 @@ import Link from "next/link";
 
 const SCREENSHOTS = [
   { name: "crate", label: "Crate" },
-  { name: "detail", label: "Detail" },
-  { name: "trail", label: "Trail" },
+  { name: "detail", label: "Sound Profile", pro: true },
+  { name: "trail", label: "3-Way Trails", pro: true },
   { name: "reco", label: "Picks" },
   { name: "stats-collection", label: "Collection" },
   { name: "stats-listening", label: "Listening" },
@@ -18,11 +18,20 @@ const SCREENSHOTS = [
   { name: "honeycomb", label: "Honeycomb" },
 ];
 
-function PhoneFrame({ src, label, style }) {
+function PhoneFrame({ src, label, pro, style }) {
   return (
     <div
-      style={{ width: 200, flexShrink: 0, ...style }}
-      className="relative aspect-[9/19] rounded-[2.5rem] overflow-hidden border border-white/[0.08] bg-white/[0.03]"
+      style={{
+        width: 200,
+        flexShrink: 0,
+        ...style,
+        ...(pro ? { boxShadow: "0 0 24px rgba(251,191,36,0.15), 0 0 48px rgba(251,191,36,0.08)" } : {}),
+      }}
+      className={`relative aspect-[9/19] rounded-[2.5rem] overflow-hidden ${
+        pro
+          ? "border-2 border-amber-500/40"
+          : "border border-white/[0.08]"
+      } bg-white/[0.03]`}
     >
       <img
         src={src}
@@ -35,6 +44,21 @@ function PhoneFrame({ src, label, style }) {
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <span className="text-stone-700 text-xs">{label}</span>
       </div>
+      {pro && (
+        <div className="absolute top-3 right-3 pointer-events-none">
+          <span
+            className="text-[9px] font-semibold px-2 py-0.5 rounded-full"
+            style={{
+              background: "rgba(251,191,36,0.2)",
+              border: "1px solid rgba(251,191,36,0.4)",
+              color: "#fbbf24",
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            ✦ Pro
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -165,6 +189,7 @@ export default function LandingPage() {
               key={i}
               src={`/screenshots/${s.name}.png`}
               label={s.label}
+              pro={s.pro}
             />
           ))}
         </div>
