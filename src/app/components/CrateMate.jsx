@@ -2043,18 +2043,24 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
   const isGrid = shape === "grid";
   const COL_STEP = isGrid ? BASE_SIZE * 0.82 : BASE_SIZE * 0.76;
   const ROW_STEP = BASE_SIZE * 0.88;
-  const CIRCLE_RADIUS = BASE_SIZE * 4.8; // controls how wide the circular grid is
+  // Dynamically size grid to fit all records
+  const totalRecords = records.length;
+  const gridCols = Math.ceil(Math.sqrt(totalRecords * 1.2)); // slightly wider than square
+  const gridRows = Math.ceil(totalRecords / gridCols);
+  const halfCols = Math.ceil(gridCols / 2);
+  const halfRows = Math.ceil(gridRows / 2);
+  const RANGE = Math.max(halfCols, halfRows, 9);
+  const CIRCLE_RADIUS = BASE_SIZE * Math.max(4.8, RANGE * 0.55);
 
   // Generate all candidate positions in a circular boundary, sorted center-outward
   const allPositions = [];
-  const RANGE = 9;
   for (let col = -RANGE; col <= RANGE; col++) {
     for (let row = -RANGE; row <= RANGE; row++) {
       const px = col * COL_STEP;
       const rowOffset = isGrid ? 0 : (((col % 2) + 2) % 2 === 1 ? ROW_STEP / 2 : 0);
       const py = row * ROW_STEP + rowOffset;
       const dist = Math.hypot(px, py);
-      const inBounds = isGrid ? (Math.abs(col) <= 5 && Math.abs(row) <= 4) : dist <= CIRCLE_RADIUS;
+      const inBounds = isGrid ? (Math.abs(col) <= halfCols && Math.abs(row) <= halfRows) : dist <= CIRCLE_RADIUS;
       if (inBounds) {
         allPositions.push({ col, row, px, py, dist });
       }
