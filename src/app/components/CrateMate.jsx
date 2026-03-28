@@ -10697,27 +10697,6 @@ export default function CrateMate() {
                       </div>
                     )}
 
-                    {/* Most Played */}
-                    {topPlayed.length > 0 && (
-                      <div>
-                        <div className="text-stone-600 text-xs uppercase tracking-widest mb-2 px-0.5">Most Played</div>
-                        <div className="space-y-1.5">
-                          {topPlayed.map(({ record: r, count }) => (
-                            <div key={r.id} className="flex items-center gap-2.5">
-                              <CoverArt record={r} size={32} />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-stone-300 text-xs truncate" style={{ fontFamily: "'Fraunces',serif" }}>{r.title}</div>
-                                <div className="mt-0.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
-                                  <div className="h-full rounded-full bg-amber-700/60" style={{ width: `${Math.round((count / maxPlays) * 100)}%` }} />
-                                </div>
-                              </div>
-                              <div className="text-stone-600 text-xs shrink-0 w-6 text-right">{count}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     {/* Genre Mix (play-weighted) */}
                     {topPlayedGenres.length > 0 && (
                       <div>
@@ -10890,8 +10869,17 @@ export default function CrateMate() {
                     </button>
                   </div>
                 )}
-                {/* Most Played + Favorites hero rows */}
+                {/* Top Artists → Most Played → Favorites hero rows */}
                 {myRecords.length > 0 && (() => {
+                  const artistMap = {};
+                  myRecords.forEach(r => {
+                    if (!r.artist || /^various/i.test(r.artist)) return;
+                    const name = stripArtistNum(r.artist);
+                    if (!artistMap[name]) artistMap[name] = { count: 0, thumb: r.thumb };
+                    artistMap[name].count++;
+                    if (r.thumb && !artistMap[name].thumb) artistMap[name].thumb = r.thumb;
+                  });
+                  const topArtists = Object.entries(artistMap).sort((a, b) => b[1].count - a[1].count).slice(0, 8);
                   const mostPlayed = [...myRecords]
                     .filter(r => (playCounts[r.id] || 0) > 0)
                     .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
@@ -10906,6 +10894,22 @@ export default function CrateMate() {
                     .slice(0, 8);
                   return (
                     <>
+                      {topArtists.length > 0 && (
+                        <div>
+                          <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Top Artists</div>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
+                            {topArtists.map(([name, { count, thumb }]) => (
+                              <div key={name} className="shrink-0 text-center" style={{ width: 64 }}>
+                                <div className="w-14 h-14 mx-auto rounded-full overflow-hidden bg-stone-800 border border-stone-700/40">
+                                  {thumb ? <img src={proxyArtUrl(upgradeDiscogsThumb(thumb) || thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <div className="w-full h-full bg-stone-700" />}
+                                </div>
+                                <div className="text-stone-300 text-[9px] truncate mt-1">{name}</div>
+                                <div className="text-stone-600 text-[8px]">{count} rec</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {mostPlayed.length > 0 && (
                         <div>
                           <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Most Played</div>
@@ -10943,36 +10947,6 @@ export default function CrateMate() {
                         </div>
                       )}
                     </>
-                  );
-                })()}
-
-                {/* Top Artists by records owned */}
-                {myRecords.length > 0 && (() => {
-                  const artistMap = {};
-                  myRecords.forEach(r => {
-                    if (!r.artist || /^various/i.test(r.artist)) return;
-                    const name = stripArtistNum(r.artist);
-                    if (!artistMap[name]) artistMap[name] = { count: 0, thumb: r.thumb };
-                    artistMap[name].count++;
-                    if (r.thumb && !artistMap[name].thumb) artistMap[name].thumb = r.thumb;
-                  });
-                  const topArtists = Object.entries(artistMap).sort((a, b) => b[1].count - a[1].count).slice(0, 8);
-                  if (topArtists.length === 0) return null;
-                  return (
-                    <div>
-                      <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Top Artists</div>
-                      <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", touchAction: "pan-x" }}>
-                        {topArtists.map(([name, { count, thumb }]) => (
-                          <div key={name} className="shrink-0 text-center" style={{ width: 64 }}>
-                            <div className="w-14 h-14 mx-auto rounded-full overflow-hidden bg-stone-800 border border-stone-700/40">
-                              {thumb ? <img src={proxyArtUrl(upgradeDiscogsThumb(thumb) || thumb)} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <div className="w-full h-full bg-stone-700" />}
-                            </div>
-                            <div className="text-stone-300 text-[9px] truncate mt-1">{name}</div>
-                            <div className="text-stone-600 text-[8px]">{count} rec</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                   );
                 })()}
 
