@@ -4824,31 +4824,71 @@ async function generateCollectionDNA(stats, username) {
     curY += 74;
   }
 
-  // ── FAVORITE RECORDS (by % hearted) — 2 rows of 5 ─────────────────────────
+  // ── MOST PLAYED (1 row of 5) ────────────────────────────────────────────────
+  if (stats.mostPlayed && stats.mostPlayed.length > 0) {
+    curY += SEC_GAP - 14;
+    ctx.fillStyle = 'rgba(255,255,255,0.40)';
+    ctx.font = `500 26px "DM Sans", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('MOST PLAYED', TX, curY);
+    curY += 36;
+
+    const played = stats.mostPlayed.slice(0, 5);
+    const playedImgs = await Promise.all(
+      played.map(rec => rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null))
+    );
+
+    played.forEach((rec, i) => {
+      const tx = TX + i * (REC_THUMB + REC_GAP);
+      const ty = curY;
+      const img = playedImgs[i];
+      ctx.save();
+      ctx.shadowColor = 'transparent';
+      canvasRoundRect(ctx, tx, ty, REC_THUMB, REC_THUMB, 14);
+      ctx.clip();
+      if (img) ctx.drawImage(img, tx, ty, REC_THUMB, REC_THUMB);
+      else { ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(tx, ty, REC_THUMB, REC_THUMB); }
+      ctx.restore();
+      // Play count badge
+      ctx.fillStyle = 'rgba(217,119,6,0.85)';
+      canvasRoundRect(ctx, tx + REC_THUMB - 40, ty + REC_THUMB - 30, 36, 24, 8); ctx.fill();
+      ctx.fillStyle = 'white';
+      ctx.font = `500 15px "DM Sans", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${rec.playCount}×`, tx + REC_THUMB - 22, ty + REC_THUMB - 13);
+      const titleStr = (rec.title || '').length > 15 ? rec.title.slice(0, 13) + '…' : rec.title;
+      const artistShort = ((rec.artist || '').replace(/\s*\(\d+\)\s*$/, '').trim()).slice(0, 15);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = `500 18px "DM Sans", sans-serif`;
+      ctx.fillText(titleStr, tx, ty + REC_THUMB + 20);
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.font = `300 16px "DM Sans", sans-serif`;
+      ctx.fillText(artistShort, tx, ty + REC_THUMB + 38);
+    });
+
+    curY += REC_ROW_H + 8;
+  }
+
+  // ── FAVORITES (1 row of 5, by % hearted) ──────────────────────────────────
   if (stats.favoriteRecords && stats.favoriteRecords.length > 0) {
     curY += SEC_GAP - 14;
     ctx.fillStyle = 'rgba(255,255,255,0.40)';
     ctx.font = `500 26px "DM Sans", sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText('FAVORITE RECORDS', TX, curY);
+    ctx.fillText('FAVORITES', TX, curY);
     curY += 36;
 
-    const favs = stats.favoriteRecords.slice(0, 10);
+    const favs = stats.favoriteRecords.slice(0, 5);
 
     const thumbImgs = await Promise.all(
       favs.map(rec => rec.thumb ? loadImgForCanvas(rec.thumb) : Promise.resolve(null))
     );
 
-    for (let row = 0; row < 2; row++) {
-      const rowFavs = favs.slice(row * 5, row * 5 + 5);
-      if (rowFavs.length === 0) break;
-      const rowY = curY + row * (REC_ROW_H + 8);
-
-      rowFavs.forEach((rec, i) => {
-        const gi = row * 5 + i;
+    favs.forEach((rec, i) => {
         const tx = TX + i * (REC_THUMB + REC_GAP);
-        const ty = rowY;
-        const img = thumbImgs[gi];
+        const ty = curY;
+        const img = thumbImgs[i];
         ctx.save();
         ctx.shadowColor = 'transparent';
         canvasRoundRect(ctx, tx, ty, REC_THUMB, REC_THUMB, 14);
@@ -4878,11 +4918,9 @@ async function generateCollectionDNA(stats, username) {
         ctx.fillStyle = 'rgba(255,255,255,0.45)';
         ctx.font = `300 16px "DM Sans", sans-serif`;
         ctx.fillText(artistShort, tx, ty + REC_THUMB + 38);
-      });
-    }
+    });
 
-    const rows = Math.min(2, Math.ceil(favs.length / 5));
-    curY += rows * (REC_ROW_H + 8);
+    curY += REC_ROW_H + 8;
   }
 
   // ── SOUND PROFILE (anchored above footer) ──────────────────────────────────
@@ -10787,17 +10825,19 @@ export default function CrateMate() {
                             artist, count,
                             records: myRecords.filter(r => r.artist === artist).slice(0, 5).map(r => ({ thumb: r.thumb })),
                           }));
+                          const mostPlayedList = [...myRecords]
+                            .filter(r => (playCounts[r.id] || 0) > 0)
+                            .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
+                            .slice(0, 5)
+                            .map(r => ({ id: r.id, title: r.title, artist: r.artist, thumb: r.thumb, playCount: playCounts[r.id] || 0 }));
                           const favoriteRecordsList = [...myRecords]
                             .filter(r => (r.favorite_tracks || []).length > 0)
                             .sort((a, b) => {
-                              // Sort by % of tracks hearted (fair to short albums)
                               const tcA = spotifyFeatures[a.id]?.track_count || (a.favorite_tracks || []).length || 1;
                               const tcB = spotifyFeatures[b.id]?.track_count || (b.favorite_tracks || []).length || 1;
-                              const pctA = (a.favorite_tracks || []).length / tcA;
-                              const pctB = (b.favorite_tracks || []).length / tcB;
-                              return pctB - pctA;
+                              return ((b.favorite_tracks || []).length / tcB) - ((a.favorite_tracks || []).length / tcA);
                             })
-                            .slice(0, 10)
+                            .slice(0, 5)
                             .map(r => ({ id: r.id, title: r.title, artist: r.artist, thumb: r.thumb, heartCount: (r.favorite_tracks || []).length }));
                           const avg = (key) => spotifyData.reduce((s, f) => s + (f[key] || 0), 0) / (spotifyData.length || 1);
                           const audioProfile = effectiveIsPro && spotifyData.length > 0 ? { energy: avg("energy"), valence: avg("valence"), danceability: avg("danceability"), acousticness: avg("acousticness"), tempo: avg("tempo") } : null;
@@ -10805,6 +10845,7 @@ export default function CrateMate() {
                             topGenres: topGenresList,
                             topDecades: topDecadesList,
                             topArtists: topArtistsList,
+                            mostPlayed: mostPlayedList,
                             favoriteRecords: favoriteRecordsList,
                             audioProfile,
                             totalRecords: myRecords.length,
