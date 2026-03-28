@@ -10484,6 +10484,35 @@ export default function CrateMate() {
                       </div>
                     )}
 
+                    {/* Recently Played hero row */}
+                    {totalPlays > 0 && (() => {
+                      const recentUnique = [];
+                      const seen = new Set();
+                      for (const s of playSessions) {
+                        if (seen.has(String(s.record_id))) continue;
+                        seen.add(String(s.record_id));
+                        const rec = myRecords.find(r => String(r.id) === String(s.record_id));
+                        if (rec) recentUnique.push(rec);
+                        if (recentUnique.length >= 8) break;
+                      }
+                      return recentUnique.length > 0 ? (
+                        <div>
+                          <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Recently Played</div>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                            {recentUnique.map(r => (
+                              <button key={r.id} onClick={() => setSelected(r)} className="shrink-0 text-center group" style={{ width: 64 }}>
+                                <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-stone-800 border border-stone-700/40 group-hover:border-amber-800/40 transition-colors">
+                                  <CoverArt record={r} size={56} />
+                                </div>
+                                <div className="text-stone-300 text-[9px] truncate mt-1">{r.title}</div>
+                                <div className="text-stone-600 text-[8px]">{stripArtistNum(r.artist)}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+
                     {/* Share listening button */}
                     {totalPlays >= 5 && (
                       <div className="flex justify-end">
@@ -10810,6 +10839,62 @@ export default function CrateMate() {
                     </button>
                   </div>
                 )}
+                {/* Most Played + Favorites hero rows */}
+                {myRecords.length > 0 && (() => {
+                  const mostPlayed = [...myRecords]
+                    .filter(r => (playCounts[r.id] || 0) > 0)
+                    .sort((a, b) => (playCounts[b.id] || 0) - (playCounts[a.id] || 0))
+                    .slice(0, 8);
+                  const favorites = [...myRecords]
+                    .filter(r => (r.favorite_tracks || []).length > 0)
+                    .sort((a, b) => {
+                      const tcA = spotifyFeatures[a.id]?.track_count || (a.favorite_tracks || []).length || 1;
+                      const tcB = spotifyFeatures[b.id]?.track_count || (b.favorite_tracks || []).length || 1;
+                      return ((b.favorite_tracks || []).length / tcB) - ((a.favorite_tracks || []).length / tcA);
+                    })
+                    .slice(0, 8);
+                  return (
+                    <>
+                      {mostPlayed.length > 0 && (
+                        <div>
+                          <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Most Played</div>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                            {mostPlayed.map(r => (
+                              <button key={r.id} onClick={() => setSelected(r)} className="shrink-0 text-center group" style={{ width: 64 }}>
+                                <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-stone-800 border border-stone-700/40 group-hover:border-amber-800/40 transition-colors">
+                                  <CoverArt record={r} size={56} />
+                                </div>
+                                <div className="text-stone-300 text-[9px] truncate mt-1">{r.title}</div>
+                                <div className="text-stone-600 text-[8px]">{playCounts[r.id]}×</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {favorites.length > 0 && (
+                        <div>
+                          <div className="text-stone-500 text-xs uppercase tracking-wider mb-2">Favorites</div>
+                          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                            {favorites.map(r => {
+                              const heartCount = (r.favorite_tracks || []).length;
+                              return (
+                                <button key={r.id} onClick={() => setSelected(r)} className="shrink-0 text-center group" style={{ width: 64 }}>
+                                  <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden bg-stone-800 border border-stone-700/40 group-hover:border-rose-800/40 transition-colors relative">
+                                    <CoverArt record={r} size={56} />
+                                    <span className="absolute bottom-0.5 right-0.5 text-[8px] bg-black/60 text-rose-400 px-1 rounded">♥{heartCount}</span>
+                                  </div>
+                                  <div className="text-stone-300 text-[9px] truncate mt-1">{r.title}</div>
+                                  <div className="text-stone-600 text-[8px]">{stripArtistNum(r.artist)}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
                 {/* Collection summary tiles */}
                 {myRecords.length > 0 && (() => {
                   const uniqueArtists = new Set(myRecords.map(r => r.artist).filter(Boolean)).size;
