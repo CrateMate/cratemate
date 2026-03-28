@@ -93,7 +93,7 @@ function AddRecordModal({ onClose, onAdd }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end justify-center"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-end justify-center"
       onClick={onClose}
     >
       <div
@@ -139,8 +139,11 @@ function AddRecordModal({ onClose, onAdd }) {
               )}
               <div className="flex-1 min-w-0">
                 <div className="text-amber-50 text-sm truncate">{r.title}</div>
-                <div className="text-stone-500 text-xs">
-                  {r.year} · {(r.format || []).slice(0, 2).join(", ")}
+                <div className="text-stone-500 text-xs truncate">
+                  {[r.year, r.country, ...(r.label || []).slice(0, 1), r.catno].filter(Boolean).join(" · ")}
+                </div>
+                <div className="text-stone-600 text-[10px] truncate">
+                  {(r.format || []).slice(0, 2).join(", ")}
                 </div>
               </div>
               {adding === r.id ? (
