@@ -12,7 +12,7 @@ export async function generateMetadata({ params }) {
     .from("records")
     .select("thumb")
     .eq("user_id", (
-      await supabase.from("discogs_tokens").select("user_id").eq("discogs_username", username).limit(1)
+      await supabase.from("user_profiles").select("user_id").eq("display_name", username).limit(1)
     ).data?.[0]?.user_id || "")
     .eq("for_sale", false)
     .not("thumb", "is", null)
@@ -43,15 +43,14 @@ export async function generateMetadata({ params }) {
 export default async function PublicCratePage({ params }) {
   const { username } = await params;
 
-  // Look up user_id from discogs_tokens — use limit(1) instead of single()
-  // so duplicate rows (e.g. dev + prod Clerk instances) don't cause a 404.
-  const { data: tokenRows } = await supabase
-    .from("discogs_tokens")
+  // Look up user_id from user_profiles by display_name
+  const { data: profileRows } = await supabase
+    .from("user_profiles")
     .select("user_id")
-    .eq("discogs_username", username)
+    .eq("display_name", username)
     .limit(1);
 
-  const tokenRow = tokenRows?.[0];
+  const tokenRow = profileRows?.[0];
   if (!tokenRow) notFound();
 
   const { data: records } = await supabase
