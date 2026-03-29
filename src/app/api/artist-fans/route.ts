@@ -39,11 +39,11 @@ export async function GET(request: Request) {
   const allUserIds = [...new Set([...Object.keys(byOwned), ...Object.keys(byPlays)])];
   const { data: profiles } = await supabase
     .from("user_profiles")
-    .select("user_id, username")
+    .select("user_id, display_name")
     .in("user_id", allUserIds);
   const usernameMap: Record<string, string> = {};
   for (const p of profiles || []) {
-    if (p.user_id && p.username) usernameMap[p.user_id] = p.username;
+    if (p.user_id && p.display_name) usernameMap[p.user_id] = p.display_name;
   }
 
   const byOwnedList = Object.entries(byOwned)
