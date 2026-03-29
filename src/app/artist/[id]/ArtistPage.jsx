@@ -234,18 +234,12 @@ export default function ArtistPage({ releaseId }) {
               <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
                 <div className="text-amber-400 font-semibold text-lg">#{myOwnedRank}</div>
                 <div className="text-stone-500 text-xs">by records owned</div>
-                {myOwnedRank > 1 && fanRank?.byOwned?.[0]?.username && (
-                  <div className="text-stone-700 text-[10px] mt-1">#{1} {fanRank.byOwned[0].username}</div>
-                )}
               </div>
             )}
             {myPlaysRank > 0 && (
               <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
                 <div className="text-amber-400 font-semibold text-lg">#{myPlaysRank}</div>
                 <div className="text-stone-500 text-xs">by plays</div>
-                {myPlaysRank > 1 && fanRank?.byPlays?.[0]?.username && (
-                  <div className="text-stone-700 text-[10px] mt-1">#{1} {fanRank.byPlays[0].username}</div>
-                )}
               </div>
             )}
           </div>
