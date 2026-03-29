@@ -12043,11 +12043,6 @@ export default function CrateMate() {
                   )}
                 </div>
               )}
-              {todayWeather && userLocation?.city_name && !citySearch.open && (
-                <div className="mt-1.5 text-stone-600 text-xs">
-                  Now: {todayWeather.label} · {todayWeather.temperature_c}°C
-                </div>
-              )}
             </div>
 
             {/* Export data */}
