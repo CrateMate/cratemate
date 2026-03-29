@@ -3180,9 +3180,13 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
           record: pick,
           fact: years
             ? deceased
-              ? `${pick.artist} would have turned ${years} today (${when}). They passed in ${pick.artist_death_year}.`
-              : `${pick.artist} turns ${years} today — their birthday is ${when}.`
-            : `${pick.artist}'s birthday is ${when}.`,
+              ? `${pick.artist} would have turned ${years} ${when}. They passed in ${pick.artist_death_year}.`
+              : when === "yesterday"
+                ? `${pick.artist} turned ${years} yesterday.`
+                : when === "today"
+                  ? `Happy birthday to ${pick.artist} — ${years} today.`
+                  : `${pick.artist} turns ${years} tomorrow.`
+            : `${pick.artist}'s birthday ${when === "yesterday" ? "was" : "is"} ${when}.`,
         });
       } else {
         const member = (artistMembers[pick.artist] || []).find(
@@ -3196,9 +3200,13 @@ function buildTodayHook(myRecords, lastPlayedDates, playCounts, spotifyFeatures 
           record: pick,
           fact: years
             ? deceased
-              ? `${member.name} of ${pick.artist} would have turned ${years} today (${when}). They passed in ${member.death_year}.`
-              : `${member.name} of ${pick.artist} turns ${years} today — their birthday is ${when}.`
-            : `${member.name} of ${pick.artist}'s birthday is ${when}.`,
+              ? `${member.name} of ${pick.artist} would have turned ${years} ${when}. They passed in ${member.death_year}.`
+              : when === "yesterday"
+                ? `${member.name} of ${pick.artist} turned ${years} yesterday.`
+                : when === "today"
+                  ? `Happy birthday to ${member.name} of ${pick.artist} — ${years} today.`
+                  : `${member.name} of ${pick.artist} turns ${years} tomorrow.`
+            : `${member.name} of ${pick.artist}'s birthday ${when === "yesterday" ? "was" : "is"} ${when}.`,
         });
       }
     }
@@ -7861,7 +7869,8 @@ export default function CrateMate() {
             const cachedIds = new Set(cached.map(p => p.recordId));
             // Prefer a hook we haven't cached yet
             let hook = hooks.find(h => !cachedIds.has(h.record.id)) || hooks[Math.floor(Math.random() * hooks.length)];
-            const reason = await generateHookReason(hook);
+            const useAI = effectiveIsPro && getClaudeDailyCount() < CLAUDE_DAILY_LIMIT;
+            const reason = useAI ? await generateHookReason(hook) : hook.fact;
             const newPick = { recordId: hook.record.id, reason, hookType: hook.type };
             cached.push(newPick);
             try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks: cached })); } catch {}
@@ -7888,19 +7897,18 @@ export default function CrateMate() {
           const scored = (pool.length ? pool : deduped).map(r => ({ r, s: scoreRecord(r, context) })).sort((a, b) => b.s - a.s);
           const picked = scored[0]?.r || myRecords[Math.floor(Math.random() * myRecords.length)];
           let reason;
-          try {
-            const text = await callClaude([{ role: "user", content: `The record: ${describeRecord(picked)}.\n\nIt was chosen because it hasn't been played recently and fits the collection's sound. Write 1-2 warm casual sentences about why to put it on now — mention the genre or era if it helps.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 100, SYSTEM);
-            const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
-            let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
-            if (Array.isArray(parsed)) parsed = parsed[0];
-            if (parsed?.reason) reason = parsed.reason;
-          } catch {}
+          const useHeuristicAI = effectiveIsPro && getClaudeDailyCount() < CLAUDE_DAILY_LIMIT;
+          if (useHeuristicAI) {
+            try {
+              const text = await callClaude([{ role: "user", content: `The record: ${describeRecord(picked)}.\n\nIt was chosen because it hasn't been played recently and fits the collection's sound. Write 1-2 warm casual sentences about why to put it on now — mention the genre or era if it helps.\n\nRespond ONLY with JSON: {"reason":"..."}` }], 100, SYSTEM);
+              const stripped = text.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+              let parsed; try { parsed = JSON.parse(stripped); } catch { const m = stripped.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+              if (Array.isArray(parsed)) parsed = parsed[0];
+              if (parsed?.reason) reason = parsed.reason;
+            } catch {}
+          }
           if (!reason) {
-            const genres = (picked.styles || picked.genres || picked.genre || "").split(",").map(g => g.trim()).filter(Boolean);
-            const year = picked.year_original || picked.year_pressed;
-            reason = genres.length && year
-              ? `A ${genres[0].toLowerCase()} gem from ${year} that deserves another spin.`
-              : `Haven't played this one in a while — time to revisit.`;
+            reason = templateReason(picked, playCounts);
           }
           try { localStorage.setItem(DAILY_CACHE_KEY, JSON.stringify({ date: todayStr, picks: [{ recordId: picked.id, reason, hookType: "heuristic" }] })); } catch {}
           setReco({ record: picked, reason, label: "Today's Pick" });
