@@ -12122,6 +12122,10 @@ export default function CrateMate() {
                     try { localStorage.removeItem("cratemate_free_trail_date"); } catch {}
                     try { localStorage.removeItem("cratemate_notfound_retry"); } catch {}
                     try { localStorage.removeItem("cratemate_trial_reminder_dismissed"); } catch {}
+                    try { localStorage.removeItem("cratemate_daily_picks"); } catch {}
+                    try { localStorage.removeItem("cratemate_daily_toast_dismissed"); } catch {}
+                    try { localStorage.removeItem("cratemate_claude_usage"); } catch {}
+                    setReco(null);
                   }}
                   className="w-full mt-3 py-2 rounded-lg border border-stone-700 text-stone-500 text-xs hover:text-amber-400 hover:border-amber-800/40 transition-colors"
                 >
