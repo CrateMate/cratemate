@@ -35,12 +35,23 @@ export async function GET(request: Request) {
     }
   }
 
+  // Fetch usernames for all users in the ranking
+  const allUserIds = [...new Set([...Object.keys(byOwned), ...Object.keys(byPlays)])];
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, username")
+    .in("user_id", allUserIds);
+  const usernameMap: Record<string, string> = {};
+  for (const p of profiles || []) {
+    if (p.user_id && p.username) usernameMap[p.user_id] = p.username;
+  }
+
   const byOwnedList = Object.entries(byOwned)
-    .map(([user_id, count]) => ({ user_id, count }))
+    .map(([user_id, count]) => ({ user_id, count, username: usernameMap[user_id] || null }))
     .sort((a, b) => b.count - a.count);
 
   const byPlaysList = Object.entries(byPlays)
-    .map(([user_id, total_plays]) => ({ user_id, total_plays }))
+    .map(([user_id, total_plays]) => ({ user_id, total_plays, username: usernameMap[user_id] || null }))
     .sort((a, b) => b.total_plays - a.total_plays);
 
   return NextResponse.json({ byOwned: byOwnedList, byPlays: byPlaysList, currentUserId: userId });

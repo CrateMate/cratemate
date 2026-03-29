@@ -7,6 +7,7 @@ function categorize(releases) {
   const studioAlbums = [];
   const epsSingles = [];
   const live = [];
+  const compilations = [];
 
   for (const r of releases) {
     if (r.type !== "master") continue;
@@ -17,12 +18,16 @@ function categorize(releases) {
     const title = (r.title || "").toLowerCase();
     const rawTitle = r.title || "";
 
-    // Hard format exclusions
+    // Hard format exclusions (no section for these)
     if (/acetate|unofficial|video|karaoke|tribute|flexi|promo/i.test(fmt)) continue;
-    if (/compilation|dj.?mix|box.?set|soundtrack|score|interview|spoken/i.test(fmt)) continue;
+    if (/dj.?mix|soundtrack|score|interview|spoken/i.test(fmt)) continue;
 
     // Live — format or title
     if (/live/i.test(fmt) || /\blive\b/.test(title)) { live.push(r); continue; }
+
+    // Compilations — format or title
+    if (/compilation|box.?set/i.test(fmt)) { compilations.push(r); continue; }
+    if (/best of|greatest hits|\bcollection\b|history of|vintage years|golden era|blues jam|originals|radio spot/i.test(title)) { compilations.push(r); continue; }
 
     // Clear EP/Single/Maxi format signals
     if (/ep|single|maxi/i.test(fmt)) { epsSingles.push(r); continue; }
@@ -39,8 +44,6 @@ function categorize(releases) {
     if (/\(single\)|\bthe single\b|\bep\b|\bmaxi\b/i.test(title)) { epsSingles.push(r); continue; }
     // Remix collections
     if (/\bremixes\b|\bremixed\b/i.test(title)) { epsSingles.push(r); continue; }
-    // Compilation / anthology patterns
-    if (/best of|greatest hits|\bcollection\b|history of|vintage years|golden era|blues jam|originals|radio spot/i.test(title)) continue;
 
     // If format is present and doesn't indicate album/LP, exclude
     if (fmt && !/album|lp/i.test(fmt)) continue;
@@ -48,7 +51,7 @@ function categorize(releases) {
     studioAlbums.push(r);
   }
 
-  return { studioAlbums, epsSingles, live };
+  return { studioAlbums, epsSingles, live, compilations };
 }
 
 function ProgressBar({ pct }) {
@@ -177,9 +180,9 @@ export default function ArtistPage({ releaseId }) {
   const isOwned = (album) => ownedTitles.has((album.title || "").toLowerCase().trim());
 
   // Discography (phase 2)
-  const { studioAlbums, epsSingles, live } = artistData
+  const { studioAlbums, epsSingles, live, compilations } = artistData
     ? categorize(artistData.releases || [])
-    : { studioAlbums: [], epsSingles: [], live: [] };
+    : { studioAlbums: [], epsSingles: [], live: [], compilations: [] };
 
   const ownedCount = studioAlbums.filter(isOwned).length;
   const totalCount = studioAlbums.length;
@@ -231,12 +234,18 @@ export default function ArtistPage({ releaseId }) {
               <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
                 <div className="text-amber-400 font-semibold text-lg">#{myOwnedRank}</div>
                 <div className="text-stone-500 text-xs">by records owned</div>
+                {myOwnedRank > 1 && fanRank?.byOwned?.[0]?.username && (
+                  <div className="text-stone-700 text-[10px] mt-1">#{1} {fanRank.byOwned[0].username}</div>
+                )}
               </div>
             )}
             {myPlaysRank > 0 && (
               <div className="flex-1 bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
                 <div className="text-amber-400 font-semibold text-lg">#{myPlaysRank}</div>
                 <div className="text-stone-500 text-xs">by plays</div>
+                {myPlaysRank > 1 && fanRank?.byPlays?.[0]?.username && (
+                  <div className="text-stone-700 text-[10px] mt-1">#{1} {fanRank.byPlays[0].username}</div>
+                )}
               </div>
             )}
           </div>
@@ -303,6 +312,16 @@ export default function ArtistPage({ releaseId }) {
             label="Live"
             count={live.length}
             items={live}
+            isOwned={isOwned}
+          />
+        )}
+
+        {/* Compilations */}
+        {artistData && compilations.length > 0 && (
+          <CollapsibleSection
+            label="Compilations"
+            count={compilations.length}
+            items={compilations}
             isOwned={isOwned}
           />
         )}
