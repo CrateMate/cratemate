@@ -2016,7 +2016,7 @@ function DetailSheet({ record, hasNowPlaying, onClose, onSeedNext, onGenreClick,
   );
 }
 
-export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onDoubleTap, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb", onInteract }) {
+export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPlay, onLongPress, screensaverEnabled = true, onToggleScreensaver, shape = "honeycomb", onInteract }) {
   const containerRef = useRef(null);
   const worldRef = useRef(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -2341,8 +2341,8 @@ export function HoneycombView({ records, playCounts, onSelect, zoom = 1, onLogPl
                 transition: "transform 150ms ease-out",
                 zIndex,
               }}
-              onMouseDown={() => { hexLongPressFired.current = false; hexLongPressTimer.current = setTimeout(() => { hexLongPressFired.current = true; onDoubleTap?.(record); }, 500); }}
-              onTouchStart={() => { hexLongPressFired.current = false; hexLongPressTimer.current = setTimeout(() => { hexLongPressFired.current = true; onDoubleTap?.(record); }, 500); }}
+              onMouseDown={() => { hexLongPressFired.current = false; hexLongPressTimer.current = setTimeout(() => { hexLongPressFired.current = true; onLongPress?.(record); }, 500); }}
+              onTouchStart={() => { hexLongPressFired.current = false; hexLongPressTimer.current = setTimeout(() => { hexLongPressFired.current = true; onLongPress?.(record); }, 500); }}
               onMouseUp={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
               onTouchEnd={(e) => { e.stopPropagation(); onPointerUp(e, record); }}
             >
@@ -2432,7 +2432,7 @@ function packTileRows(tiles, totalUnits) {
   return rows;
 }
 
-function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStartY }) {
+function TileItem({ record, units, UNIT, GAP, onSelect, onLongPress, pointerStartY }) {
   const tileLongPressTimer = useRef(null);
   const tileLongPressFired = useRef(false);
   const tileSize = units * UNIT + (units - 1) * GAP;
@@ -2461,7 +2461,7 @@ function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStar
     <div
       onPointerDown={() => {
         tileLongPressFired.current = false;
-        tileLongPressTimer.current = setTimeout(() => { tileLongPressFired.current = true; onDoubleTap?.(record); }, 500);
+        tileLongPressTimer.current = setTimeout(() => { tileLongPressFired.current = true; onLongPress?.(record); }, 500);
       }}
       onPointerUp={(e) => {
         clearTimeout(tileLongPressTimer.current);
@@ -2496,7 +2496,7 @@ function TileItem({ record, units, UNIT, GAP, onSelect, onDoubleTap, pointerStar
   );
 }
 
-export function TileView({ records, playCounts, onSelect, onDoubleTap, screensaverEnabled = true, onInteract }) {
+export function TileView({ records, playCounts, onSelect, onLongPress, screensaverEnabled = true, onInteract }) {
   const containerRef = useRef(null); // outer scroll container
   const innerRef = useRef(null);     // inner grid (for width measurement)
   const [containerWidth, setContainerWidth] = useState(0);
@@ -2611,7 +2611,7 @@ export function TileView({ records, playCounts, onSelect, onDoubleTap, screensav
           UNIT={UNIT}
           GAP={GAP}
           onSelect={onSelect}
-          onDoubleTap={onDoubleTap}
+          onLongPress={onLongPress}
           pointerStartY={pointerStartY}
         />
       ))}
@@ -6994,7 +6994,7 @@ export default function CrateMate() {
     return `Last played · ${years} year${years > 1 ? "s" : ""} ago`;
   }
 
-  async function handleDoubleTap(record) {
+  async function handleLongPress(record) {
     try {
       const sessionId = await logPlay(record.id);
       clearTimeout(undoTimerRef.current);
@@ -9216,7 +9216,7 @@ export default function CrateMate() {
                   records={honeycombRecords}
                   playCounts={playCounts}
                   onSelect={(rec) => { setSelected(rec); if (!rec.for_sale) setLastPlayed(rec); }}
-                  onDoubleTap={handleDoubleTap}
+                  onLongPress={handleLongPress}
                   screensaverEnabled={screensaverEnabled}
                   onInteract={driftHideOnInteract}
                 />
@@ -9233,7 +9233,7 @@ export default function CrateMate() {
                 }}
                 onLogPlay={handleLogPlay}
                 onInteract={driftHideOnInteract}
-                onDoubleTap={handleDoubleTap}
+                onLongPress={handleLongPress}
                 screensaverEnabled={screensaverEnabled}
                 onToggleScreensaver={() => {
                   const next = !screensaverEnabled;
@@ -9507,7 +9507,7 @@ export default function CrateMate() {
                   playCount={playCounts[r.id] || 0}
                   bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
                   onLogPlay={handleLogPlay}
-                  onDoubleTap={handleDoubleTap}
+                  onLongPress={handleLongPress}
                 />
               ))}
               {filtered.length === 0 && <div className="text-center text-stone-700 py-16">No records found</div>}
@@ -9545,7 +9545,7 @@ export default function CrateMate() {
                       playCount={playCounts[r.id] || 0}
                       bpm={spotifyFeatures?.[r.id]?.tempo ?? null}
                       onLogPlay={handleLogPlay}
-                      onDoubleTap={handleDoubleTap}
+                      onLongPress={handleLongPress}
                     />
                   ))}
                 </>
