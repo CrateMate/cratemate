@@ -5,6 +5,72 @@ import { UserButton, useUser } from "@clerk/nextjs";
 import { useTheme } from "./ThemeProvider";
 import StoryPreviewModal from "./StoryPreviewModal";
 
+// ─── Barcode Scanner Overlay ─────────────────────────────────────────────────
+function BarcodeScanner({ onDetected, onClose }) {
+  const videoRef = useRef(null);
+  const [hint, setHint] = useState("Point at a record's barcode");
+  const readerRef = useRef(null);
+
+  useEffect(() => {
+    let stopped = false;
+    async function start() {
+      try {
+        const { BrowserMultiFormatReader } = await import("@zxing/library");
+        const reader = new BrowserMultiFormatReader();
+        readerRef.current = reader;
+        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        // Prefer rear camera
+        const device = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+        const deviceId = device?.deviceId;
+        await reader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
+          if (stopped) return;
+          if (result) {
+            stopped = true;
+            reader.reset();
+            onDetected(result.getText());
+          }
+          if (err && err.name !== "NotFoundException") {
+            setHint("Having trouble — try better lighting");
+          }
+        });
+      } catch {
+        setHint("Camera not available");
+      }
+    }
+    start();
+    return () => {
+      stopped = true;
+      readerRef.current?.reset();
+    };
+  }, [onDetected]);
+
+  return (
+    <div className="fixed inset-0 z-[300] bg-black flex flex-col">
+      <div className="flex items-center justify-between px-5 pt-10 pb-4">
+        <span className="text-amber-50 text-sm font-medium">Scan Barcode</span>
+        <button onClick={onClose} className="text-stone-400 hover:text-white text-2xl leading-none">×</button>
+      </div>
+      <div className="flex-1 relative overflow-hidden">
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
+        {/* Viewfinder box */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-72 h-36 relative">
+            <div className="absolute inset-0 border-2 border-amber-400/60 rounded-lg" />
+            <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-amber-400 rounded-tl-lg" />
+            <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-amber-400 rounded-tr-lg" />
+            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-amber-400 rounded-bl-lg" />
+            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-amber-400 rounded-br-lg" />
+            {/* Scanning line */}
+            <div className="absolute inset-x-2 top-1/2 h-px bg-amber-400/50" style={{ animation: "cm-scan 2s ease-in-out infinite" }} />
+          </div>
+        </div>
+      </div>
+      <div className="px-5 py-6 text-center text-stone-500 text-sm">{hint}</div>
+      <style>{`@keyframes cm-scan { 0%,100% { transform: translateY(-24px); opacity:0.3; } 50% { transform: translateY(24px); opacity:1; } }`}</style>
+    </div>
+  );
+}
+
 function HintBanner({ children, onDismiss }) {
   return (
     <div className="mx-4 mt-3 mb-1 px-4 py-3 rounded-xl bg-amber-950/40 border border-amber-800/25 flex items-start gap-3">
@@ -46,6 +112,7 @@ function AddRecordModal({ onClose, onAdd }) {
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(null);
   const [searchError, setSearchError] = useState("");
+  const [scanning, setScanning] = useState(false);
   const debounce = useRef(null);
 
   useEffect(() => {
@@ -91,6 +158,10 @@ function AddRecordModal({ onClose, onAdd }) {
     }
   }
 
+  if (scanning) {
+    return <BarcodeScanner onDetected={(code) => { setQ(code); setScanning(false); }} onClose={() => setScanning(false)} />;
+  }
+
   return (
     <div
       className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-end justify-center"
@@ -111,13 +182,25 @@ function AddRecordModal({ onClose, onAdd }) {
             ×
           </button>
         </div>
-        <input
-          autoFocus
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search Discogs — artist, title..."
-          className="w-full bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60 mb-3"
-        />
+        <div className="flex gap-2 mb-3">
+          <input
+            autoFocus={!scanning}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search Discogs — artist, title..."
+            className="flex-1 bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
+          />
+          <button
+            onClick={() => setScanning(true)}
+            className="px-3 py-2.5 rounded-xl bg-stone-900/70 border border-stone-800/80 text-stone-500 hover:text-amber-400 hover:border-amber-900/50 transition-colors"
+            title="Scan barcode"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
+            </svg>
+          </button>
+        </div>
         {loading && <div className="text-stone-600 text-sm text-center py-4">Searching...</div>}
         {searchError && <div className="text-red-400/80 text-xs text-center py-2">{searchError}</div>}
         <div className="space-y-1 max-h-72 overflow-y-auto">
@@ -170,6 +253,7 @@ function AddToWantlistModal({ onClose, onAdd }) {
   const [expandedMaster, setExpandedMaster] = useState(null); // master_id being expanded
   const [pressings, setPressings] = useState([]); // individual releases for expanded master
   const [pressingsLoading, setPressingsLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const debounce = useRef(null);
 
   // Search masters (albums)
@@ -259,6 +343,10 @@ function AddToWantlistModal({ onClose, onAdd }) {
     setAdding(null);
   }
 
+  if (scanning) {
+    return <BarcodeScanner onDetected={(code) => { setQ(code); setScanning(false); }} onClose={() => setScanning(false)} />;
+  }
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-end justify-center" onClick={onClose}>
       <div className="bg-stone-950 border border-stone-800/80 rounded-t-3xl w-full max-w-md p-5 pb-10" onClick={(e) => e.stopPropagation()}>
@@ -266,13 +354,25 @@ function AddToWantlistModal({ onClose, onAdd }) {
           <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 20 }} className="text-amber-50">Add to Wantlist</h2>
           <button onClick={onClose} className="text-stone-600 hover:text-stone-400 text-xl">×</button>
         </div>
-        <input
-          autoFocus
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search Discogs — artist, album..."
-          className="w-full bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60 mb-3"
-        />
+        <div className="flex gap-2 mb-3">
+          <input
+            autoFocus={!scanning}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search Discogs — artist, album..."
+            className="flex-1 bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
+          />
+          <button
+            onClick={() => setScanning(true)}
+            className="px-3 py-2.5 rounded-xl bg-stone-900/70 border border-stone-800/80 text-stone-500 hover:text-amber-400 hover:border-amber-900/50 transition-colors"
+            title="Scan barcode"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
+            </svg>
+          </button>
+        </div>
         {loading && <div className="text-stone-600 text-sm text-center py-4">Searching...</div>}
         <div className="space-y-1 max-h-80 overflow-y-auto">
           {masters.map((m) => (
