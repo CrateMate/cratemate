@@ -77,7 +77,8 @@ export async function POST(request: Request) {
   const { data: existing, error: existingError } = await supabase
     .from("records")
     .select("id, discogs_id, discogs_instance_id, artist, title, thumb, condition, genres, styles, year_pressed, year_original")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .limit(10000);
   if (existingError) {
     console.error("Supabase select records error:", JSON.stringify(existingError));
     return NextResponse.json({ error: "Failed to load existing records" }, { status: 500 });

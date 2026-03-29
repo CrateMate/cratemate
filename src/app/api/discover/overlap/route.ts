@@ -96,8 +96,8 @@ export async function GET(request: Request) {
 
   // Fetch both collections + their recent plays
   const [{ data: myRaw }, { data: theirRaw }, { data: theirPlaysRaw }] = await Promise.all([
-    supabase.from("records").select("*").eq("user_id", userId).eq("for_sale", false),
-    supabase.from("records").select("*").eq("user_id", profileRow.user_id).eq("for_sale", false),
+    supabase.from("records").select("*").eq("user_id", userId).eq("for_sale", false).limit(10000),
+    supabase.from("records").select("*").eq("user_id", profileRow.user_id).eq("for_sale", false).limit(10000),
     supabase.from("play_sessions").select("record_id, played_at").eq("user_id", profileRow.user_id).order("played_at", { ascending: false }).limit(10),
   ]);
 

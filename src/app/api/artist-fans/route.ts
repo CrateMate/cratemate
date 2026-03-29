@@ -14,7 +14,8 @@ export async function GET(request: Request) {
   const { data: recordData } = await supabase
     .from("records")
     .select("user_id, id")
-    .ilike("artist", `%${artist}%`);
+    .ilike("artist", `%${artist}%`)
+    .limit(10000);
 
   const byOwned: Record<string, number> = {};
   const recordIds: string[] = [];
