@@ -14,21 +14,36 @@ function categorize(releases) {
     if (r.role && r.role !== "Main") continue;
 
     const fmt = (r.format || "").toLowerCase();
-    const title = r.title || "";
+    const title = (r.title || "").toLowerCase();
+    const rawTitle = r.title || "";
 
-    // Format-based exclusions (only present on type:"release", rarely on masters)
-    if (/acetate|unofficial|video|karaoke|tribute/i.test(fmt)) continue;
-    if (/live/i.test(fmt)) { live.push(r); continue; }
-    if (/ep|single/i.test(fmt)) { epsSingles.push(r); continue; }
+    // Hard format exclusions
+    if (/acetate|unofficial|video|karaoke|tribute|flexi|promo/i.test(fmt)) continue;
     if (/compilation|dj.?mix|box.?set|soundtrack|score|interview|spoken/i.test(fmt)) continue;
-    if (fmt && !/album/i.test(fmt)) continue;
 
-    // Title-based heuristics — Discogs masters rarely carry a format field,
-    // so these catch singles and compilations that slip through above.
-    // "X / Y" = A-side / B-side single
-    if (/\//.test(title)) { epsSingles.push(r); continue; }
+    // Live — format or title
+    if (/live/i.test(fmt) || /\blive\b/.test(title)) { live.push(r); continue; }
+
+    // Clear EP/Single/Maxi format signals
+    if (/ep|single|maxi/i.test(fmt)) { epsSingles.push(r); continue; }
+
+    // Vinyl size — 7" and 10" are almost always singles
+    if (/\b(7|10)["""′″]\b/.test(fmt)) { epsSingles.push(r); continue; }
+
+    // Title-based heuristics
+    // "A / B" = A-side / B-side single (only slash surrounded by spaces)
+    if (/\s\/\s/.test(rawTitle)) { epsSingles.push(r); continue; }
+    // b/w notation (B-side)
+    if (/\bb\s*[/\\]\s*w\b/i.test(title)) { epsSingles.push(r); continue; }
+    // Explicit single/EP/maxi in title
+    if (/\(single\)|\bthe single\b|\bep\b|\bmaxi\b/i.test(title)) { epsSingles.push(r); continue; }
+    // Remix collections
+    if (/\bremixes\b|\bremixed\b/i.test(title)) { epsSingles.push(r); continue; }
     // Compilation / anthology patterns
     if (/best of|greatest hits|\bcollection\b|history of|vintage years|golden era|blues jam|originals|radio spot/i.test(title)) continue;
+
+    // If format is present and doesn't indicate album/LP, exclude
+    if (fmt && !/album|lp/i.test(fmt)) continue;
 
     studioAlbums.push(r);
   }
