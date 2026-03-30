@@ -15,19 +15,8 @@ function BarcodeScanner({ onDetected, onClose }) {
     let stopped = false;
     async function start() {
       try {
-        // Trigger the OS permission prompt before listing devices.
-        // Without this, listVideoInputDevices() returns empty/label-less
-        // results on first visit and the scanner silently fails.
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-          stream.getTracks().forEach(t => t.stop());
-        } catch (permErr) {
-          if (permErr.name === "NotAllowedError" || permErr.name === "PermissionDeniedError") {
-            setHint("Camera permission denied — allow access in your browser settings");
-            return;
-          }
-          // NotFoundError etc — fall through and let zxing try anyway
-        }
+        // Permission was already granted in the button onClick (must be within
+        // the user gesture). Here we just list devices and start decoding.
         const { BrowserMultiFormatReader } = await import("@zxing/library");
         const reader = new BrowserMultiFormatReader();
         readerRef.current = reader;
@@ -126,6 +115,7 @@ function AddRecordModal({ onClose, onAdd }) {
   const [adding, setAdding] = useState(null);
   const [searchError, setSearchError] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [cameraError, setCameraError] = useState("");
   const debounce = useRef(null);
 
   useEffect(() => {
@@ -204,7 +194,20 @@ function AddRecordModal({ onClose, onAdd }) {
             className="flex-1 bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
           />
           <button
-            onClick={() => setScanning(true)}
+            onClick={async () => {
+              setCameraError("");
+              try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                stream.getTracks().forEach(t => t.stop());
+                setScanning(true);
+              } catch (err) {
+                if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+                  setCameraError("Camera access denied — allow it in your browser settings");
+                } else {
+                  setScanning(true);
+                }
+              }
+            }}
             className="px-3 py-2.5 rounded-xl bg-stone-900/70 border border-stone-800/80 text-stone-500 hover:text-amber-400 hover:border-amber-900/50 transition-colors"
             title="Scan barcode"
           >
@@ -214,6 +217,7 @@ function AddRecordModal({ onClose, onAdd }) {
             </svg>
           </button>
         </div>
+        {cameraError && <div className="text-red-400/80 text-xs text-center py-2">{cameraError}</div>}
         {loading && <div className="text-stone-600 text-sm text-center py-4">Searching...</div>}
         {searchError && <div className="text-red-400/80 text-xs text-center py-2">{searchError}</div>}
         <div className="space-y-1 max-h-72 overflow-y-auto">
@@ -267,6 +271,7 @@ function AddToWantlistModal({ onClose, onAdd }) {
   const [pressings, setPressings] = useState([]); // individual releases for expanded master
   const [pressingsLoading, setPressingsLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [cameraError, setCameraError] = useState("");
   const debounce = useRef(null);
 
   // Search masters (albums)
@@ -376,7 +381,20 @@ function AddToWantlistModal({ onClose, onAdd }) {
             className="flex-1 bg-stone-900/70 border border-stone-800/80 rounded-xl px-4 py-2.5 text-sm text-amber-50 placeholder-stone-700 focus:outline-none focus:border-amber-900/60"
           />
           <button
-            onClick={() => setScanning(true)}
+            onClick={async () => {
+              setCameraError("");
+              try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                stream.getTracks().forEach(t => t.stop());
+                setScanning(true);
+              } catch (err) {
+                if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+                  setCameraError("Camera access denied — allow it in your browser settings");
+                } else {
+                  setScanning(true);
+                }
+              }
+            }}
             className="px-3 py-2.5 rounded-xl bg-stone-900/70 border border-stone-800/80 text-stone-500 hover:text-amber-400 hover:border-amber-900/50 transition-colors"
             title="Scan barcode"
           >
@@ -386,6 +404,7 @@ function AddToWantlistModal({ onClose, onAdd }) {
             </svg>
           </button>
         </div>
+        {cameraError && <div className="text-red-400/80 text-xs text-center py-2">{cameraError}</div>}
         {loading && <div className="text-stone-600 text-sm text-center py-4">Searching...</div>}
         <div className="space-y-1 max-h-80 overflow-y-auto">
           {masters.map((m) => (
