@@ -15,6 +15,19 @@ function BarcodeScanner({ onDetected, onClose }) {
     let stopped = false;
     async function start() {
       try {
+        // Trigger the OS permission prompt before listing devices.
+        // Without this, listVideoInputDevices() returns empty/label-less
+        // results on first visit and the scanner silently fails.
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+          stream.getTracks().forEach(t => t.stop());
+        } catch (permErr) {
+          if (permErr.name === "NotAllowedError" || permErr.name === "PermissionDeniedError") {
+            setHint("Camera permission denied — allow access in your browser settings");
+            return;
+          }
+          // NotFoundError etc — fall through and let zxing try anyway
+        }
         const { BrowserMultiFormatReader } = await import("@zxing/library");
         const reader = new BrowserMultiFormatReader();
         readerRef.current = reader;
@@ -6345,6 +6358,7 @@ export default function CrateMate() {
     try { return localStorage.getItem("cratemate_dev_simulate_pro") === "1"; } catch { return false; }
   });
   const isDevUser = user?.id === process.env.NEXT_PUBLIC_DEV_USER_ID;
+  const [devExpanded, setDevExpanded] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [compareBase, setCompareBase] = useState(null);   // record A
   const [compareTarget, setCompareTarget] = useState(null); // record B (null = picker mode)
@@ -9077,6 +9091,23 @@ export default function CrateMate() {
               className="text-stone-600 hover:text-stone-400 text-sm transition-colors leading-none"
               title="Settings"
             >⚙</button>
+            {effectiveIsPro && (
+              <button
+                onClick={handleManageBilling}
+                disabled={portalLoading}
+                title="Manage subscription"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-900/30 border border-amber-800/40 text-amber-400 hover:bg-amber-900/50 transition-colors disabled:opacity-50"
+              >
+                <span className="text-[9px] leading-none">✦</span>
+                {trialEnd && (() => {
+                  const d = Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000);
+                  return d > 0 && d <= 14 ? <span className="text-[9px] font-medium leading-none">{d}d</span> : null;
+                })()}
+                {(!trialEnd || Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000) <= 0) && (
+                  <span className="text-[9px] font-medium leading-none">Pro</span>
+                )}
+              </button>
+            )}
             <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-7 h-7" } }} />
           </div>
         </div>
@@ -12099,33 +12130,6 @@ export default function CrateMate() {
               <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 22 }} className="text-amber-50">Settings</h2>
               <button onClick={() => setShowSettings(false)} className="text-stone-600 hover:text-stone-400 text-xl leading-none">×</button>
             </div>
-            {/* Subscription */}
-            <div className="flex items-center justify-between py-3.5 border-b border-stone-800/40">
-              <div>
-                <div className="text-stone-200 text-sm">Subscription</div>
-                <div className="text-stone-600 text-xs mt-0.5">
-                  {effectiveIsPro ? (
-                    trialEnd && (() => {
-                      const daysLeft = Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000);
-                      return daysLeft > 0 ? `Pro · ${daysLeft} day${daysLeft !== 1 ? "s" : ""} left in trial` : "Pro";
-                    })() || "Pro"
-                  ) : "Free"}
-                </div>
-              </div>
-              {effectiveIsPro ? (
-                <button
-                  onClick={handleManageBilling}
-                  disabled={portalLoading}
-                  className="text-amber-500 text-xs hover:text-amber-400 transition-colors shrink-0 ml-4 disabled:opacity-50"
-                >{portalLoading ? "Opening…" : "Manage"}</button>
-              ) : (
-                <button
-                  onClick={() => { setShowSettings(false); openUpgradeModal(); }}
-                  className="text-amber-500 text-xs hover:text-amber-400 transition-colors shrink-0 ml-4"
-                >✦ Upgrade</button>
-              )}
-            </div>
-
             <div className="flex items-center justify-between py-3.5 border-b border-stone-800/40">
               <div>
                 <div className="text-stone-200 text-sm">Hide for-sale records</div>
@@ -12229,44 +12233,54 @@ export default function CrateMate() {
             {/* Developer tools — only visible to dev user */}
             {isDevUser && (
               <div className="mt-6 pt-4 border-t border-stone-800/40">
-                <div className="text-stone-700 text-[10px] uppercase tracking-widest mb-3">Developer</div>
-                {[
-                  { label: "Simulate free user", desc: "Forces free experience regardless of subscription", key: "cratemate_dev_simulate_free", value: devSimulateFree, set: setDevSimulateFree },
-                  { label: "Simulate Pro user",  desc: "Forces Pro experience regardless of subscription", key: "cratemate_dev_simulate_pro",  value: devSimulatePro,  set: setDevSimulatePro  },
-                ].map(({ label, desc, key, value, set }) => (
-                  <div key={key} className="flex items-center justify-between py-2">
-                    <div>
-                      <div className="text-stone-400 text-sm">{label}</div>
-                      <div className="text-stone-600 text-xs mt-0.5">{desc}</div>
-                    </div>
+                <button
+                  onClick={() => setDevExpanded(v => !v)}
+                  className="flex items-center justify-between w-full text-stone-700 text-[10px] uppercase tracking-widest mb-3 hover:text-stone-500 transition-colors"
+                >
+                  <span>Developer</span>
+                  <span>{devExpanded ? "▴" : "▾"}</span>
+                </button>
+                {devExpanded && (
+                  <>
+                    {[
+                      { label: "Simulate free user", desc: "Forces free experience regardless of subscription", key: "cratemate_dev_simulate_free", value: devSimulateFree, set: setDevSimulateFree },
+                      { label: "Simulate Pro user",  desc: "Forces Pro experience regardless of subscription", key: "cratemate_dev_simulate_pro",  value: devSimulatePro,  set: setDevSimulatePro  },
+                    ].map(({ label, desc, key, value, set }) => (
+                      <div key={key} className="flex items-center justify-between py-2">
+                        <div>
+                          <div className="text-stone-400 text-sm">{label}</div>
+                          <div className="text-stone-600 text-xs mt-0.5">{desc}</div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const next = !value;
+                            set(next);
+                            try { localStorage.setItem(key, next ? "1" : "0"); } catch {}
+                          }}
+                          className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ml-4 ${value ? "bg-amber-600" : "bg-stone-700"}`}
+                        >
+                          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? "translate-x-5" : "translate-x-0.5"}`} />
+                        </button>
+                      </div>
+                    ))}
                     <button
                       onClick={() => {
-                        const next = !value;
-                        set(next);
-                        try { localStorage.setItem(key, next ? "1" : "0"); } catch {}
+                        setSeenHints({});
+                        try { localStorage.removeItem("cratemate_hints"); } catch {}
+                        try { localStorage.removeItem("cratemate_free_trail_date"); } catch {}
+                        try { localStorage.removeItem("cratemate_notfound_retry"); } catch {}
+                        try { localStorage.removeItem("cratemate_trial_reminder_dismissed"); } catch {}
+                        try { localStorage.removeItem("cratemate_daily_picks"); } catch {}
+                        try { localStorage.removeItem("cratemate_daily_toast_dismissed"); } catch {}
+                        try { localStorage.removeItem("cratemate_claude_usage"); } catch {}
+                        setReco(null);
                       }}
-                      className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ml-4 ${value ? "bg-amber-600" : "bg-stone-700"}`}
+                      className="w-full mt-3 py-2 rounded-lg border border-stone-700 text-stone-500 text-xs hover:text-amber-400 hover:border-amber-800/40 transition-colors"
                     >
-                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? "translate-x-5" : "translate-x-0.5"}`} />
+                      Reset all tooltips & daily flags
                     </button>
-                  </div>
-                ))}
-                <button
-                  onClick={() => {
-                    setSeenHints({});
-                    try { localStorage.removeItem("cratemate_hints"); } catch {}
-                    try { localStorage.removeItem("cratemate_free_trail_date"); } catch {}
-                    try { localStorage.removeItem("cratemate_notfound_retry"); } catch {}
-                    try { localStorage.removeItem("cratemate_trial_reminder_dismissed"); } catch {}
-                    try { localStorage.removeItem("cratemate_daily_picks"); } catch {}
-                    try { localStorage.removeItem("cratemate_daily_toast_dismissed"); } catch {}
-                    try { localStorage.removeItem("cratemate_claude_usage"); } catch {}
-                    setReco(null);
-                  }}
-                  className="w-full mt-3 py-2 rounded-lg border border-stone-700 text-stone-500 text-xs hover:text-amber-400 hover:border-amber-800/40 transition-colors"
-                >
-                  Reset all tooltips & daily flags
-                </button>
+                  </>
+                )}
               </div>
             )}
           </div>
