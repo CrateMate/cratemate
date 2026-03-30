@@ -60,7 +60,8 @@ export async function GET() {
     .from("records")
     .select("artist, genre, genres, styles, year_original, year_pressed")
     .eq("user_id", userId)
-    .eq("for_sale", false);
+    .eq("for_sale", false)
+    .limit(10000);
 
   const myList = (myRecords || []) as RecordSlim[];
   const myArtists = new Set(myList.map((r) => (r.artist || "").toLowerCase().trim()).filter(Boolean));

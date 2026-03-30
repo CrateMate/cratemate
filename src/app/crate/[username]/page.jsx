@@ -58,7 +58,8 @@ export default async function PublicCratePage({ params }) {
     .select("id, title, artist, genre, year_original, year_pressed, thumb, discogs_id, for_sale")
     .eq("user_id", tokenRow.user_id)
     .eq("for_sale", false)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(10000);
 
   const allRecords = records || [];
 
