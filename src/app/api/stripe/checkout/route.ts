@@ -50,6 +50,7 @@ export async function POST(request: Request) {
     allow_promotion_codes: true,
     automatic_tax: { enabled: true },
     customer_update: { address: "auto" },
+    payment_method_collection: "if_required",
     subscription_data: {
       trial_period_days: trialDays,
     },
