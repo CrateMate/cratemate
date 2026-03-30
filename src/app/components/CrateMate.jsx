@@ -12404,7 +12404,7 @@ export default function CrateMate() {
               {upgradeLoading ? "Redirecting…" : `Start free trial`}
             </button>
             <div className="text-center mt-3 text-stone-500 text-xs leading-relaxed">
-              No commitment. Cancel anytime.
+              No credit card required · Cancel anytime.
               <br />
               {upgradeInterval === "year"
                 ? "14-day free trial · We'll remind you 2 days before it ends."
