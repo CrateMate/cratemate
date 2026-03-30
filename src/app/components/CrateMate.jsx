@@ -6385,7 +6385,21 @@ export default function CrateMate() {
   const [upgradeSource, setUpgradeSource] = useState(null); // "compare" | "soundProfile" | "trail" | "refresh" | "moodMatch" | "discover" | null
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [upgradeInterval, setUpgradeInterval] = useState("month");
+  const [portalLoading, setPortalLoading] = useState(false);
   function openUpgradeModal(source = null) { setUpgradeSource(source); setShowUpgradeModal(true); }
+  async function handleManageBilling() {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: window.location.href }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch {}
+    setPortalLoading(false);
+  }
   const [wantsSubTab, setWantsSubTab] = useState("wantlist");
   const [lastfmRecs, setLastfmRecs] = useState(null);
   const [lastfmRecsLoading, setLastfmRecsLoading] = useState(false);
@@ -11570,6 +11584,39 @@ export default function CrateMate() {
                     {myRecords.length === 0 && (
                       <div className="text-stone-600 text-sm text-center py-16">Add records to see stats.</div>
                     )}
+
+                    {/* Account / subscription */}
+                    <div className="border-t border-stone-800/40 pt-4 mt-2">
+                      {effectiveIsPro ? (
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-1.5 text-amber-400 text-xs font-medium mb-0.5">
+                              <span>✦</span><span>CrateMate Pro</span>
+                            </div>
+                            {trialEnd && (() => {
+                              const msLeft = new Date(trialEnd).getTime() - Date.now();
+                              const daysLeft = Math.ceil(msLeft / 86400000);
+                              return daysLeft > 0
+                                ? <div className="text-stone-600 text-xs">{daysLeft} day{daysLeft !== 1 ? "s" : ""} left in trial</div>
+                                : null;
+                            })()}
+                          </div>
+                          <button
+                            onClick={handleManageBilling}
+                            disabled={portalLoading}
+                            className="text-xs text-stone-500 hover:text-stone-300 border border-stone-800 hover:border-stone-700 px-3 py-1.5 rounded-full transition-colors disabled:opacity-40"
+                          >{portalLoading ? "Opening…" : "Manage plan"}</button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="text-stone-600 text-xs">Free plan</div>
+                          <button
+                            onClick={() => openUpgradeModal()}
+                            className="text-xs text-amber-500 hover:text-amber-400 border border-amber-800/40 hover:border-amber-700/60 px-3 py-1.5 rounded-full transition-colors"
+                          >✦ Upgrade to Pro</button>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -12372,6 +12419,11 @@ export default function CrateMate() {
               <span className="text-stone-300 text-sm flex-1">
                 {daysLeft <= 0 ? "Your trial ends today." : daysLeft === 1 ? "Your free trial ends tomorrow." : "Your free trial ends in 2 days."} No action needed to continue.
               </span>
+              <button
+                onClick={handleManageBilling}
+                disabled={portalLoading}
+                className="text-amber-500 hover:text-amber-400 text-xs shrink-0 transition-colors disabled:opacity-50"
+              >{portalLoading ? "…" : "Manage"}</button>
               <button
                 onClick={() => { setTrialReminderDismissed(true); try { localStorage.setItem("cratemate_trial_reminder_dismissed", localDateStr()); } catch {} }}
                 className="text-stone-600 hover:text-stone-400 text-xs shrink-0 transition-colors"
